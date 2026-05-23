@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
 import { useNotificationsStore } from '@/store/notifications.store'
@@ -9,7 +9,7 @@ interface Props {
   role: 'patient' | 'sp'
 }
 
-type IconFC = () => JSX.Element
+type IconFC = () => React.ReactElement
 
 const TYPE_ICON: Record<NotificationType, IconFC> = {
   payment:     () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3.5" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M1 6.5h14" stroke="currentColor" strokeWidth="1.2"/><circle cx="11.5" cy="9.5" r="1.3" fill="currentColor"/></svg>,
