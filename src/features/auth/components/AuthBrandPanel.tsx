@@ -94,12 +94,21 @@ export function AuthBrandPanel({ tab }: AuthBrandPanelProps) {
             <div key={i} style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
               <div style={{
                 width: 28, height: 28, borderRadius: '8px',
-                background: `${c.accent}22`,
-                border: `1px solid ${c.accent}44`,
+                background: `${c.accent}18`,
+                border: `1px solid ${c.accent}33`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 flexShrink: 0, marginTop: '2px',
+                color: c.accent,
               }}>
-                <div style={{ width: 8, height: 8, borderRadius: '50%', background: c.accent }} />
+                {tab === 'patient' ? (
+                  i === 0 ? <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="1" y="3.5" width="14" height="9" rx="1.5"/><path d="M1 6.5h14"/></svg> :
+                  i === 1 ? <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8 1L2 3v4.5C2 11.5 8 15 8 15s6-3.5 6-7.5V3l-6-2z"/><path d="M5 8l2 2 4-4" strokeLinecap="round" strokeLinejoin="round"/></svg> :
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="3" y="6" width="10" height="8" rx="2"/><path d="M5 6V4a3 3 0 016 0v2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                ) : (
+                  i === 0 ? <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><path d="M8.5 1.5L2 9h5v5.5L14 7H9z" strokeLinejoin="round"/></svg> :
+                  i === 1 ? <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><circle cx="8" cy="8" r="6.5"/><path d="M5.5 8l1.5 1.5 3.5-3.5" strokeLinecap="round" strokeLinejoin="round"/></svg> :
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6"><rect x="1.5" y="1.5" width="5" height="5" rx="1"/><rect x="9.5" y="1.5" width="5" height="5" rx="1"/><rect x="1.5" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/></svg>
+                )}
               </div>
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', fontFamily: font.family, marginBottom: '3px' }}>{b.title}</div>

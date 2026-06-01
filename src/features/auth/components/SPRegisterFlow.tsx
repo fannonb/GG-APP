@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGInput, GGButton, GGSelect } from '@/design-system'
+import { GGInput, GGButton } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { PasswordStrength } from './PasswordStrength'
+import { CountryPhoneInput } from './CountryPhoneInput'
+import type { CountryCode } from './CountryPhoneInput'
 
 const STEPS = ['Practice Details', 'Services & Hours', 'Documents & Payment']
 const SERVICE_TYPES = ['Hospital', 'Pharmacy', 'Laboratory', 'Clinic', 'General Practitioner', 'Specialist']
@@ -13,7 +15,7 @@ type Day = typeof DAYS[number]
 interface DayHours { open: boolean; from: string; to: string }
 interface Form {
   practiceName: string; email: string; emailSecondary: string; phone: string
-  password: string; country: string; serviceTypes: string[]; licenseNumber: string
+  password: string; country: CountryCode | ''; serviceTypes: string[]; licenseNumber: string
   hours: Record<Day, DayHours>
   paymentMethod: 'mpesa' | 'bank'
   mpesaPaybill: string; bankName: string; bankAccount: string; bankBranch: string
@@ -67,7 +69,6 @@ export function SPRegisterFlow() {
   const setHour = (day: Day, field: 'from' | 'to', val: string) =>
     set('hours', { ...form.hours, [day]: { ...form.hours[day], [field]: val } })
 
-  const countryOptions = ['Zimbabwe', 'South Africa', 'Zambia', 'Botswana', 'Kenya', 'Tanzania', 'Uganda'].map(c => ({ value: c, label: c }))
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -79,10 +80,15 @@ export function SPRegisterFlow() {
           <GGInput label="Practice / Organisation Name" placeholder="City Medical Centre" value={form.practiceName} onChange={e => set('practiceName', e.target.value)} required />
           <GGInput label="Primary Email" type="email" placeholder="admin@practice.com" value={form.email} onChange={e => set('email', e.target.value)} required hint="Main login and notification email" />
           <GGInput label="Secondary Email" type="email" placeholder="billing@practice.com (optional)" value={form.emailSecondary} onChange={e => set('emailSecondary', e.target.value)} />
-          <GGInput label="Service Phone Number" type="tel" placeholder="+263 4 123 4567" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+          <CountryPhoneInput
+            required
+            countryCode={form.country}
+            onCountryChange={code => setForm(f => ({ ...f, country: code, phone: '' }))}
+            digits={form.phone}
+            onDigitsChange={d => set('phone', d)}
+          />
           <GGInput label="Password" type="password" placeholder="Minimum 8 characters" value={form.password} onChange={e => set('password', e.target.value)} required />
           <PasswordStrength password={form.password} />
-          <GGSelect label="Country of Operation" value={form.country} onChange={e => set('country', e.target.value)} options={countryOptions} placeholder="Select country" required />
           <GGButton variant="success" size="md" fullWidth onClick={() => setStep(1)}>Continue →</GGButton>
         </>
       )}

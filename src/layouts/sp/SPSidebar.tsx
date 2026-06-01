@@ -44,7 +44,7 @@ export function SPSidebar() {
 
   return (
     <div style={{
-      width: 280,
+      width: 210,
       minHeight: '100vh',
       background: C.navy800,
       display: 'flex',
@@ -70,7 +70,7 @@ export function SPSidebar() {
                 padding: '11px 14px',
                 borderRadius: radius.sm,
                 marginBottom: '2px',
-                background: active ? 'rgba(74,173,223,0.15)' : 'transparent',
+                background: active ? 'rgba(56, 182, 255, 0.15)' : 'transparent',
                 color: active ? C.blue500 : 'rgba(255,255,255,0.90)',
                 fontSize: '14px',
                 fontWeight: active ? 700 : 500,
@@ -116,7 +116,7 @@ export function SPSidebar() {
         {/* Provider profile */}
         <div style={{ padding: '8px 10px 16px' }}>
           <NavLink to={ROUTES.SP_SETTINGS} style={{ textDecoration: 'none' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: radius.sm, background: 'rgba(74,173,223,0.08)', cursor: 'pointer', transition: 'background 0.14s' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: radius.sm, background: 'rgba(56, 182, 255, 0.08)', cursor: 'pointer', transition: 'background 0.14s' }}>
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.blue500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff', fontFamily: font.family }}>{MOCK_SP.name.split(' ').map(n => n[0]).join('')}</span>
               </div>

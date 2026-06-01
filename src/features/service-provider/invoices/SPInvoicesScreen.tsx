@@ -7,14 +7,12 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { MOCK_SP_INVOICES } from '@/mock/sp.mock'
 
-type SPInvStatus = 'paid' | 'pending_admin' | 'pending_patient' | 'disputed' | 'rejected'
+type SPInvStatus = 'paid' | 'cancelled' | 'pending'
 
 const STATUS: Record<SPInvStatus, { label: string; color: string; bg: string; border: string; text: string }> = {
-  paid:            { label: 'Paid',              color: C.success, bg: C.successBg, border: 'rgba(34,201,138,0.2)',  text: '#0D6B47' },
-  pending_admin:   { label: 'Pending Review',    color: C.warning, bg: C.warningBg, border: 'rgba(245,166,35,0.2)', text: '#7C4A00' },
-  pending_patient: { label: 'Awaiting Payment',  color: C.blue500, bg: C.blue100,   border: 'rgba(74,173,223,0.2)', text: '#1A5D8A' },
-  disputed:        { label: 'Disputed',           color: C.error,   bg: C.errorBg,   border: 'rgba(229,71,77,0.25)', text: C.error   },
-  rejected:        { label: 'Rejected',           color: '#C0392B', bg: '#FBE9E9',   border: 'rgba(192,57,43,0.2)',  text: '#8B1A1A' },
+  paid:      { label: 'Paid',      color: C.success, bg: C.successBg, border: 'rgba(34,201,138,0.2)',  text: '#0D6B47' },
+  cancelled: { label: 'Cancelled', color: C.error,   bg: C.errorBg,   border: 'rgba(229,71,77,0.25)', text: C.error   },
+  pending:   { label: 'Pending Auth', color: '#D97706', bg: '#FEF3C7', border: 'rgba(217,119,6,0.2)', text: '#B45309' },
 }
 
 const COL = '150px 1fr 1.4fr 96px 100px 170px 68px'
@@ -26,31 +24,33 @@ export function SPInvoicesScreen() {
   const [filter, setFilter] = useState('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
 
-  const totalInvoiced = MOCK_SP_INVOICES.reduce((s, i) => s + i.amount, 0)
-  const totalPaid     = MOCK_SP_INVOICES.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
-  const totalPending  = MOCK_SP_INVOICES.filter(i => ['pending_admin','pending_patient'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
-  const totalDisputed = MOCK_SP_INVOICES.filter(i => ['disputed','rejected'].includes(i.status)).reduce((s, i) => s + i.amount, 0)
+  const totalInvoiced  = MOCK_SP_INVOICES.reduce((s, i) => s + i.amount, 0)
+  const totalPaid      = MOCK_SP_INVOICES.filter(i => i.status === 'paid').reduce((s, i) => s + i.amount, 0)
+  const totalPending   = MOCK_SP_INVOICES.filter(i => i.status === 'pending').reduce((s, i) => s + i.amount, 0)
+  const totalCancelled = MOCK_SP_INVOICES.filter(i => i.status === 'cancelled').reduce((s, i) => s + i.amount, 0)
 
   const FILTERS = [
-    { id: 'all',      label: 'All',      count: MOCK_SP_INVOICES.length },
-    { id: 'paid',     label: 'Paid',     count: MOCK_SP_INVOICES.filter(i => i.status === 'paid').length },
-    { id: 'pending',  label: 'Pending',  count: MOCK_SP_INVOICES.filter(i => ['pending_admin','pending_patient'].includes(i.status)).length },
-    { id: 'disputed', label: 'Disputed', count: MOCK_SP_INVOICES.filter(i => ['disputed','rejected'].includes(i.status)).length },
+    { id: 'all',       label: 'All',       count: MOCK_SP_INVOICES.length },
+    { id: 'pending',   label: 'Pending',   count: MOCK_SP_INVOICES.filter(i => i.status === 'pending').length },
+    { id: 'paid',      label: 'Paid',      count: MOCK_SP_INVOICES.filter(i => i.status === 'paid').length },
+    { id: 'cancelled', label: 'Cancelled', count: MOCK_SP_INVOICES.filter(i => i.status === 'cancelled').length },
   ]
 
   const filtered = MOCK_SP_INVOICES.filter(inv => {
-    if (filter === 'paid')     return inv.status === 'paid'
-    if (filter === 'pending')  return ['pending_admin','pending_patient'].includes(inv.status)
-    if (filter === 'disputed') return ['disputed','rejected'].includes(inv.status)
+    if (filter === 'paid')      return inv.status === 'paid'
+    if (filter === 'cancelled') return inv.status === 'cancelled'
+    if (filter === 'pending')   return inv.status === 'pending'
     return true
   })
 
   const stats = [
-    { label: 'Total Billed',  value: formatCurrency(totalInvoiced), sub: `${MOCK_SP_INVOICES.length} invoices`, color: C.text    },
-    { label: 'Collected',     value: formatCurrency(totalPaid),     sub: `${MOCK_SP_INVOICES.filter(i => i.status === 'paid').length} paid`, color: C.success },
-    { label: 'Outstanding',   value: formatCurrency(totalPending),  sub: 'awaiting payment', color: C.warning },
-    { label: 'Disputed',      value: formatCurrency(totalDisputed), sub: 'under review',     color: C.error   },
+    { label: 'Total Billed',  value: formatCurrency(totalInvoiced),  sub: `${MOCK_SP_INVOICES.length} invoices`, color: C.text    },
+    { label: 'Collected',     value: formatCurrency(totalPaid),      sub: `${MOCK_SP_INVOICES.filter(i => i.status === 'paid').length} paid`, color: C.success },
+    { label: 'Pending Auth',  value: formatCurrency(totalPending),   sub: `${MOCK_SP_INVOICES.filter(i => i.status === 'pending').length} pending`, color: '#B45309' },
+    { label: 'Cancelled',     value: formatCurrency(totalCancelled), sub: `${MOCK_SP_INVOICES.filter(i => i.status === 'cancelled').length} cancelled`, color: C.error   },
   ]
+
+  const pendingInvoices = MOCK_SP_INVOICES.filter(i => i.status === 'pending')
 
   return (
     <SPLayout title="Invoices" subtitle="Billing history & payment status">
@@ -59,13 +59,105 @@ export function SPInvoicesScreen() {
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '12px' }}>
           {stats.map(s => (
-            <GGCard key={s.label} padding={isMobile ? '14px' : '18px'} style={{ background: '#fff', borderTop: `3px solid ${s.color}` }}>
+            <GGCard key={s.label} padding={isMobile ? '14px' : '18px'} style={{ background: '#fff' }}>
               <div style={{ fontSize: isMobile ? '19px' : '23px', fontWeight: 800, color: s.color, letterSpacing: '-0.03em', lineHeight: 1 }}>{s.value}</div>
               <div style={{ fontSize: '12px', fontWeight: 600, color: s.color, marginTop: '4px', opacity: 0.85 }}>{s.label}</div>
               <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>{s.sub}</div>
             </GGCard>
           ))}
         </div>
+
+        {/* Pending Alert banner */}
+        {pendingInvoices.length > 0 && (
+          <div style={{
+            padding: '16px 20px',
+            background: `linear-gradient(90deg, ${C.warningBg}, #FFF8E0)`,
+            borderRadius: radius.sm,
+            border: `1px solid rgba(245,166,35,0.25)`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path d="M8 3l6 10H2z" stroke="#fff" strokeWidth="1.5" fill="none" strokeLinejoin="round"/>
+                  <line x1="8" y1="7.5" x2="8" y2="10" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/>
+                  <circle cx="8" cy="11.5" r="0.9" fill="#fff"/>
+                </svg>
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: '14px', fontWeight: 700, color: '#8A4D00', fontFamily: font.family }}>
+                  {pendingInvoices.length} {pendingInvoices.length === 1 ? 'invoice is' : 'invoices are'} awaiting patient authorization
+                </div>
+                <div style={{ fontSize: '12px', color: '#A06000', marginTop: '2.5px', fontFamily: font.family }}>
+                  These invoices are awaiting authorization and payment from patients before funds are disbursed.
+                </div>
+              </div>
+            </div>
+            
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '8px',
+              marginTop: '6px'
+            }}>
+              {pendingInvoices.map((inv, idx) => (
+                <div key={inv.id} 
+                     onClick={() => navigate('/sp/invoices/' + inv.id, { state: { invoice: inv } })}
+                     style={{
+                       background: '#ffffff',
+                       border: '1px solid rgba(245,166,35,0.25)',
+                       borderRadius: '10px',
+                       padding: '12px 18px',
+                       display: 'flex',
+                       justifyContent: 'space-between',
+                       alignItems: 'center',
+                       cursor: 'pointer',
+                       transition: 'all 0.15s ease',
+                       boxShadow: '0 2px 6px rgba(217,119,6,0.03)'
+                     }}
+                     onMouseEnter={e => {
+                       e.currentTarget.style.borderColor = '#D97706';
+                       e.currentTarget.style.transform = 'translateX(4px)';
+                       e.currentTarget.style.boxShadow = '0 4px 12px rgba(217,119,6,0.07)';
+                     }}
+                     onMouseLeave={e => {
+                       e.currentTarget.style.borderColor = 'rgba(245,166,35,0.25)';
+                       e.currentTarget.style.transform = 'none';
+                       e.currentTarget.style.boxShadow = '0 2px 6px rgba(217,119,6,0.03)';
+                     }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                    <div style={{
+                      fontSize: '10px',
+                      fontWeight: 800,
+                      color: '#B45309',
+                      background: '#FEF3C7',
+                      padding: '3px 8px',
+                      borderRadius: radius.sm,
+                      fontFamily: font.family,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      Pending #{idx + 1}
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '13.5px', fontWeight: 700, color: C.navy800, fontFamily: font.family }}>{inv.id}</div>
+                      <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>{inv.patient}</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: '15px', fontWeight: 800, color: C.text, fontFamily: font.family }}>{formatCurrency(inv.amount)}</span>
+                      <div style={{ fontSize: '11px', color: '#B45309', fontWeight: 600, marginTop: '1px', fontFamily: font.family }}>Awaiting Patient Auth</div>
+                    </div>
+                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#D97706" strokeWidth="2"><path d="M6 3l5 5-5 5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* CTA + Filter row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
@@ -114,7 +206,7 @@ export function SPInvoicesScreen() {
 
             {/* Rows */}
             {filtered.map((inv, idx) => {
-              const st = STATUS[inv.status as SPInvStatus] ?? STATUS.pending_admin
+              const st = STATUS[inv.status as SPInvStatus] ?? STATUS.cancelled
               const isHov = hoveredId === inv.id
               const isLast = idx === filtered.length - 1
               const goDetail = () => navigate('/sp/invoices/' + inv.id, { state: { invoice: inv } })
@@ -186,8 +278,8 @@ export function SPInvoicesScreen() {
 
         {/* Invoice flow explainer */}
         <div style={{ padding: '12px 16px', background: C.blue100, borderRadius: radius.sm, border: '1px solid rgba(74,173,223,0.2)', fontSize: '12px', color: '#1A5D8A', lineHeight: 1.7, fontFamily: font.family }}>
-          <strong>Invoice flow:</strong> You submit → Admin reviews → Patient authorises payment → Funds released to your account.
-          Disputes are managed by the GG'APP mediation team. Contact <strong>support@ggapp.zw</strong> for assistance.
+          <strong>Real-Time Payments:</strong> Patient pays in real-time immediately upon invoice submission.
+          Funds are released to your account instantly. Cancelled invoices can be edited and resubmitted to the patient at any time.
         </div>
       </div>
     </SPLayout>

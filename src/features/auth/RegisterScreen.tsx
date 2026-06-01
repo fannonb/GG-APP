@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
-import { C, font } from '@/design-system/tokens'
+import { C, font, radius } from '@/design-system/tokens'
 import { LOGO, ROUTES } from '@/router/routes'
 import { useResponsive } from '@/hooks/useResponsive'
 import { AuthBrandPanel } from './components/AuthBrandPanel'
@@ -24,6 +24,7 @@ export function RegisterScreen() {
       minHeight: '100vh',
       overflow: isMobile ? 'visible' : 'hidden',
       fontFamily: font.family,
+      background: C.bg,
     }}>
       <AuthBrandPanel tab={tab} />
 
@@ -73,35 +74,44 @@ export function RegisterScreen() {
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: 'auto', background: '#fff' }}>
+      <div style={{ flex: 1, overflowY: 'auto', background: C.bg }}>
         <div style={{
           minHeight: isMobile ? 'auto' : '100%',
           display: 'flex',
-          alignItems: isMobile ? 'flex-start' : 'center',
+          alignItems: 'center',
           justifyContent: 'center',
-          padding: isMobile ? '28px 20px 40px' : '32px 40px',
+          padding: isMobile ? '28px 16px 36px' : '36px 40px',
+          boxSizing: 'border-box',
         }}>
-        <div style={{ width: '100%', maxWidth: 480 }}>
-          <EntityTabBar tab={tab} setTab={setTab} />
+          <div style={{
+            width: '100%',
+            maxWidth: 520,
+            background: '#ffffff',
+            border: `1px solid ${C.border}`,
+            borderRadius: radius.lg,
+            padding: isMobile ? '28px 20px' : '40px 36px',
+            boxShadow: '0 12px 40px rgba(9, 28, 68, 0.04)',
+          }}>
+            <EntityTabBar tab={tab} setTab={setTab} />
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '6px' }}>
-              {tab === 'patient' ? 'Create Patient Account' : 'Register Your Practice'}
+            <div style={{ marginBottom: '24px', marginTop: '4px' }}>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '6px' }}>
+                {tab === 'patient' ? 'Create Patient Account 👋' : 'Register Your Practice 🏥'}
+              </div>
+              <div style={{ fontSize: '14px', color: C.textSub }}>
+                {tab === 'patient'
+                  ? 'Get access to verified healthcare providers near you.'
+                  : "Join GG'APP and start receiving verified patient bookings."}
+              </div>
             </div>
-            <div style={{ fontSize: '14px', color: C.textSub }}>
-              {tab === 'patient'
-                ? 'Get access to verified healthcare providers near you.'
-                : "Join GG'APP and start receiving verified patient bookings."}
+
+            {tab === 'patient' ? <PatientRegisterFlow /> : <SPRegisterFlow />}
+
+            <div style={{ textAlign: 'center', fontSize: '13px', color: C.textSub, marginTop: '20px', borderTop: `1px solid ${C.border}`, paddingTop: '16px' }}>
+              Already have an account?{' '}
+              <Link to={ROUTES.LOGIN} style={{ color: C.blue500, fontWeight: 700, textDecoration: 'none' }}>Sign In</Link>
             </div>
           </div>
-
-          {tab === 'patient' ? <PatientRegisterFlow /> : <SPRegisterFlow />}
-
-          <div style={{ textAlign: 'center', fontSize: '13px', color: C.textSub, marginTop: '20px' }}>
-            Already have an account?{' '}
-            <Link to={ROUTES.LOGIN} style={{ color: C.blue500, fontWeight: 700, textDecoration: 'none' }}>Sign In</Link>
-          </div>
-        </div>
         </div>
       </div>
     </div>

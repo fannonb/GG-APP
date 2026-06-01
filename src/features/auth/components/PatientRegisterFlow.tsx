@@ -4,9 +4,12 @@ import { GGInput, GGButton } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { PasswordStrength } from './PasswordStrength'
+import { CountryPhoneInput } from './CountryPhoneInput'
+import type { CountryCode } from './CountryPhoneInput'
 
 interface Form {
-  firstName: string; lastName: string; email: string; phone: string
+  firstName: string; lastName: string; email: string
+  country: CountryCode | ''; phone: string
   dob: string; nationalId: string; password: string
 }
 
@@ -36,7 +39,11 @@ export function PatientRegisterFlow() {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
   const [step, setStep] = useState(0)
-  const [form, setForm] = useState<Form>({ firstName: '', lastName: '', email: '', phone: '', dob: '', nationalId: '', password: '' })
+  const [form, setForm] = useState<Form>({
+    firstName: '', lastName: '', email: '',
+    country: '', phone: '',
+    dob: '', nationalId: '', password: '',
+  })
   const set = (k: keyof Form, v: string) => setForm(f => ({ ...f, [k]: v }))
 
   return (
@@ -50,7 +57,13 @@ export function PatientRegisterFlow() {
             <GGInput label="Last Name" placeholder="Johnson" value={form.lastName} onChange={e => set('lastName', e.target.value)} required />
           </div>
           <GGInput label="Email Address" type="email" placeholder="you@example.com" value={form.email} onChange={e => set('email', e.target.value)} required />
-          <GGInput label="Phone Number" type="tel" placeholder="+263 77 123 4567" value={form.phone} onChange={e => set('phone', e.target.value)} required />
+          <CountryPhoneInput
+            required
+            countryCode={form.country}
+            onCountryChange={code => setForm(f => ({ ...f, country: code, phone: '' }))}
+            digits={form.phone}
+            onDigitsChange={d => set('phone', d)}
+          />
           <GGButton variant="primary" size="md" fullWidth onClick={() => setStep(1)}>Continue →</GGButton>
         </>
       )}

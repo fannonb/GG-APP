@@ -53,7 +53,7 @@ export function AdminInvoicesScreen() {
             { label: 'Approved', count: invoices.filter(i => i.status === 'approved').length, color: C.blue500 },
             { label: 'Rejected', count: invoices.filter(i => i.status === 'rejected').length, color: C.error },
           ].map(s => (
-            <GGCard key={s.label} padding="16px" style={{ borderTop: `3px solid ${s.color}`, background: '#fff' }}>
+            <GGCard key={s.label} padding="16px" style={{ background: '#fff' }}>
               <div style={{ fontSize: '10px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px' }}>{s.label}</div>
               <div style={{ fontSize: '24px', fontWeight: 800, color: s.color }}>{s.count}</div>
             </GGCard>

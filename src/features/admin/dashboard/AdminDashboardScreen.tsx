@@ -49,7 +49,7 @@ export function AdminDashboardScreen() {
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : isTablet ? 'repeat(3,1fr)' : 'repeat(6,1fr)', gap: '14px' }}>
           {kpis.map(k => (
             <GGCard key={k.label} padding={isMobile ? '14px' : '18px'}
-              style={{ background: '#fff', borderTop: `3px solid ${k.color}`, cursor: k.action ? 'pointer' : 'default', transition: 'box-shadow 0.13s' }}
+              style={{ background: '#fff', cursor: k.action ? 'pointer' : 'default', transition: 'box-shadow 0.13s' }}
               onClick={k.action}>
               <div style={{ fontSize: '10px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px', lineHeight: 1.4 }}>{k.label}</div>
               <div style={{ fontSize: '26px', fontWeight: 800, color: k.color, letterSpacing: '-0.04em', lineHeight: 1 }}>{k.val}</div>

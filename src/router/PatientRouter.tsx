@@ -8,11 +8,13 @@ import { BookingConfirmScreen }   from '@/features/patient/BookingConfirmScreen'
 import { CreditWalletScreen }     from '@/features/patient/credit/CreditWalletScreen'
 import { CreditDisclaimerScreen } from '@/features/patient/credit/CreditDisclaimerScreen'
 import { CreditApplyScreen }      from '@/features/patient/credit/CreditApplyScreen'
+import { CreditIncreaseScreen }   from '@/features/patient/credit/CreditIncreaseScreen'
 import { CreditStatusScreen }     from '@/features/patient/credit/CreditStatusScreen'
 import { InvoiceListScreen }      from '@/features/patient/invoices/InvoiceListScreen'
 import { InvoiceReviewScreen }    from '@/features/patient/invoices/InvoiceReviewScreen'
 import { PINAuthScreen }          from '@/features/patient/invoices/PINAuthScreen'
 import { PaymentSuccessScreen }   from '@/features/patient/invoices/PaymentSuccessScreen'
+import { AppointmentsScreen }       from '@/features/patient/AppointmentsScreen'
 import { TransactionHistoryScreen } from '@/features/patient/TransactionHistoryScreen'
 import { ProfileScreen }          from '@/features/patient/ProfileScreen'
 import { NotificationsScreen }    from '@/features/patient/NotificationsScreen'
@@ -30,11 +32,13 @@ export function PatientRouter() {
       <Route path="credit"                 element={<CreditWalletScreen />} />
       <Route path="credit/disclaimer"      element={<CreditDisclaimerScreen />} />
       <Route path="credit/apply"           element={<CreditApplyScreen />} />
+      <Route path="credit/increase"        element={<CreditIncreaseScreen />} />
       <Route path="credit/status"          element={<CreditStatusScreen />} />
       <Route path="invoices"               element={<InvoiceListScreen />} />
       <Route path="invoices/:id"           element={<InvoiceReviewScreen />} />
       <Route path="invoices/:id/pay"       element={<PINAuthScreen />} />
       <Route path="invoices/:id/success"   element={<PaymentSuccessScreen />} />
+      <Route path="appointments"            element={<AppointmentsScreen />} />
       <Route path="transactions"           element={<TransactionHistoryScreen />} />
       <Route path="profile"               element={<ProfileScreen />} />
       <Route path="notifications"          element={<NotificationsScreen />} />

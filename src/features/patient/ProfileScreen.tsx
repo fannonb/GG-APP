@@ -5,6 +5,8 @@ import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { MOCK_USER, MOCK_BENEFICIARIES } from '@/mock/patient.mock'
 import type { Beneficiary } from '@/types/user.types'
+import { FlagImg } from '@/components/FlagImg'
+import { getCountryByCode } from '@/config/countries'
 
 const RELATIONS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other']
 
@@ -24,6 +26,7 @@ const stats = [
 export function ProfileScreen() {
   const { isMobile } = useResponsive()
   const u = MOCK_USER
+  const country = getCountryByCode(u.countryCode)
 
   const [tab, setTab] = useState('profile')
   const [editing, setEditing] = useState(false)
@@ -60,42 +63,74 @@ export function ProfileScreen() {
           </div>
         )}
 
-        {/* Profile hero — vibrant gradient */}
-        <div style={{ background: 'linear-gradient(135deg, #091F40 0%, #0D3270 45%, #1059B0 80%, #1A7BD4 100%)', borderRadius: '16px', padding: isMobile ? '24px 20px' : '32px', position: 'relative', overflow: 'hidden' }}>
-          {/* Decorative circles */}
-          <div style={{ position: 'absolute', right: -80, top: -80, width: 340, height: 340, borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', right: -20, top: -20, width: 200, height: 200, borderRadius: '50%', background: 'rgba(255,255,255,0.05)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: -40, bottom: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(74,173,223,0.08)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: '40%', top: -30, width: 120, height: 120, borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
-          {/* Shine strip */}
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,255,255,0.04) 0%, transparent 60%)', pointerEvents: 'none' }} />
+        {/* Profile hero — professional dark brand gradient card matching theme colors */}
+        <div style={{ 
+          background: `linear-gradient(135deg, ${C.navy800} 0%, #152B55 60%, ${C.blue500} 100%)`, 
+          borderRadius: '16px', 
+          padding: isMobile ? '24px 20px' : '32px', 
+          position: 'relative', 
+          overflow: 'hidden', 
+          boxShadow: '0 8px 32px rgba(9, 28, 68, 0.15)' 
+        }}>
+          {/* Decorative circular design lines */}
+          <div style={{ position: 'absolute', right: -60, top: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)', pointerEvents: 'none' }} />
+          <div style={{ position: 'absolute', left: -40, bottom: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(56, 182, 255, 0.04)', pointerEvents: 'none' }} />
 
           <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '24px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
             {/* Avatar */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.15)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2.5px solid rgba(255,255,255,0.3)', boxShadow: '0 4px 20px rgba(0,0,0,0.25)' }}>
-                <span style={{ fontSize: '28px', fontWeight: 800, color: '#fff', fontFamily: font.family }}>{u.name.split(' ').map(n => n[0]).join('')}</span>
+              <div style={{ 
+                width: 80, 
+                height: 80, 
+                borderRadius: '50%', 
+                background: '#ffffff', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                boxShadow: '0 4px 14px rgba(9, 28, 68, 0.25)',
+                border: `2px solid ${C.blue300}`
+              }}>
+                <span style={{ fontSize: '28px', fontWeight: 800, color: C.navy800, fontFamily: font.family }}>{u.name.split(' ').map(n => n[0]).join('')}</span>
               </div>
-              <div style={{ position: 'absolute', bottom: -2, right: -2, width: 26, height: 26, borderRadius: '50%', background: '#22C98A', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2.5px solid rgba(255,255,255,0.9)', boxShadow: '0 2px 8px rgba(34,201,138,0.5)', cursor: 'pointer' }}>
+              <div style={{ 
+                position: 'absolute', 
+                bottom: -2, 
+                right: -2, 
+                width: 26, 
+                height: 26, 
+                borderRadius: '50%', 
+                background: '#10B981', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center', 
+                border: `2.5px solid ${C.navy800}`, 
+                boxShadow: '0 2px 8px rgba(16,185,129,0.4)', 
+                cursor: 'pointer' 
+              }}>
                 <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 7l2-2 1.5 1.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
               </div>
             </div>
 
             {/* Info */}
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', marginBottom: '4px', textShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>{u.name}</div>
-              <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: font.family }}>
-                <img src="https://flagcdn.com/w20/zw.png" srcSet="https://flagcdn.com/w40/zw.png 2x" alt="Zimbabwe" style={{ height: '13px', width: 'auto', borderRadius: '2px' }} />
+              <div style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.04em', marginBottom: '4px' }}>{u.name}</div>
+              <div style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.75)', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: font.family }}>
+                <FlagImg code={u.countryCode} size={18} />
                 {u.nationalId} · {u.country}
+                {country && (
+                  <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.45)', fontFamily: font.family }}>
+                    · {country.currencyCode}
+                  </span>
+                )}
               </div>
               <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '2px' }}>
-                {/* Frosted-glass badges */}
+                {/* Modern glassmorphic theme-aligned badges */}
                 {[
-                  { label: 'Verified Patient', color: '#22C98A' },
-                  { label: 'Credit Active',    color: C.blue500 },
-                  { label: `${bens.length} Beneficiar${bens.length === 1 ? 'y' : 'ies'}`, color: 'rgba(255,255,255,0.7)' },
+                  { label: 'Verified Patient', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', color: '#34D399' },
+                  { label: 'Balance Active',   bg: 'rgba(56, 182, 255, 0.15)', border: 'rgba(56, 182, 255, 0.35)', color: '#8ADCFF' },
+                  { label: `${bens.length} Beneficiar${bens.length === 1 ? 'y' : 'ies'}`, bg: 'rgba(255, 255, 255, 0.08)', border: 'rgba(255, 255, 255, 0.18)', color: 'rgba(255, 255, 255, 0.9)' },
                 ].map(b => (
-                  <div key={b.label} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', borderRadius: '20px', background: 'rgba(255,255,255,0.12)', border: `1px solid rgba(255,255,255,0.2)`, backdropFilter: 'blur(4px)', flexShrink: 0 }}>
+                  <div key={b.label} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', borderRadius: '20px', background: b.bg, border: `1px solid ${b.border}`, flexShrink: 0 }}>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: b.color, fontFamily: font.family, whiteSpace: 'nowrap' }}>{b.label}</span>
                   </div>
                 ))}
@@ -105,9 +140,29 @@ export function ProfileScreen() {
             {/* Edit button */}
             <button
               onClick={() => setTab('profile')}
-              style={{ padding: '9px 18px', borderRadius: '10px', border: '1.5px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(4px)', color: '#fff', fontSize: '13px', fontWeight: 600, fontFamily: font.family, cursor: 'pointer', flexShrink: 0, transition: 'all 0.14s' }}
-              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
-              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+              style={{ 
+                padding: '9px 18px', 
+                borderRadius: '10px', 
+                border: '1.5px solid rgba(255, 255, 255, 0.35)', 
+                background: 'rgba(255, 255, 255, 0.05)', 
+                color: '#ffffff', 
+                fontSize: '13px', 
+                fontWeight: 600, 
+                fontFamily: font.family, 
+                cursor: 'pointer', 
+                flexShrink: 0, 
+                transition: 'all 0.18s ease' 
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = '#ffffff'
+                e.currentTarget.style.color = C.navy800
+                e.currentTarget.style.borderColor = '#ffffff'
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
+                e.currentTarget.style.color = '#ffffff'
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)'
+              }}
             >
               Edit Profile
             </button>
@@ -188,7 +243,7 @@ export function ProfileScreen() {
             </div>
 
             <div style={{ padding: '12px 16px', background: C.blue100, borderRadius: radius.sm, border: `1px solid rgba(74,173,223,0.2)`, fontSize: '12px', color: '#1A5D8A', lineHeight: 1.6 }}>
-              Beneficiaries are funded from your credit account. All appointments and invoices remain tied to your account.
+              Beneficiaries are funded from your balance. All appointments and invoices remain tied to your account.
             </div>
 
             {showAddBen && (

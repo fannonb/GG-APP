@@ -1,5 +1,5 @@
-export function formatCurrency(amount: number): string {
-  return 'Z$' + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+export function formatCurrency(amount: number, currencySymbol = 'Z$'): string {
+  return currencySymbol + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
 
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
@@ -33,4 +33,11 @@ export function formatDateShort(date: string | Date): string {
 
 export function truncate(str: string, max: number): string {
   return str.length > max ? str.slice(0, max - 1) + '…' : str
+}
+
+export function formatTime12h(time: string): string {
+  const [h, m] = time.split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour = h % 12 || 12
+  return `${hour}:${m.toString().padStart(2, '0')} ${period}`
 }

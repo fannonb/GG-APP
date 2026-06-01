@@ -1,4 +1,4 @@
-import type { Patient, Beneficiary, NewsItem, Transaction, Notification } from '@/types/user.types'
+import type { Patient, Beneficiary, NewsItem, Transaction, Notification, Appointment } from '@/types/user.types'
 import type { Provider } from '@/types/provider.types'
 import type { PatientInvoice } from '@/types/invoice.types'
 
@@ -8,11 +8,14 @@ export const MOCK_USER: Patient = {
   phone: '+263 77 123 4567',
   nationalId: 'ZW-04821756-A',
   country: 'Zimbabwe',
+  countryCode: 'ZW',
   creditLimit: 5000,
   creditUsed: 2550,
   creditAvailable: 2450,
   creditStatus: 'approved',
   memberSince: '2025-08-01',
+  financePartnerId: 'moneymart',
+  creditAccountRef: 'GGA-847291',
 }
 
 export const MOCK_PROVIDERS: Provider[] = [
@@ -79,6 +82,20 @@ export const MOCK_NEWS: NewsItem[] = [
   },
 ]
 
+export const MOCK_APPOINTMENTS: Appointment[] = [
+  { id: 'APT-2026-001', provider: 'City Medical Centre', category: 'doctor',     date: '2026-06-05', time: '10:30', status: 'confirmed', for: 'Emma Johnson',  service: 'General Consultation' },
+  { id: 'APT-2026-002', provider: 'MedPlus Clinic',      category: 'clinic',     date: '2026-06-12', time: '14:00', status: 'confirmed', for: 'Sarah Johnson', service: 'Wellness Check' },
+  { id: 'APT-2026-003', provider: 'Premier Diagnostics', category: 'laboratory', date: '2026-06-18', time: '09:00', status: 'pending',   for: 'Sarah Johnson', service: 'Blood Panel' },
+]
+
+export const MOCK_PAST_APPOINTMENTS: Appointment[] = [
+  { id: 'APT-2026-P001', provider: 'City Medical Centre', category: 'doctor',     date: '2026-05-15', time: '10:30', status: 'completed', for: 'Emma Johnson',  service: 'General Consultation' },
+  { id: 'APT-2026-P002', provider: 'LifeCare Pharmacy',   category: 'pharmacy',   date: '2026-05-10', time: '14:00', status: 'completed', for: 'Sarah Johnson', service: 'Prescription Fill' },
+  { id: 'APT-2026-P003', provider: 'Premier Diagnostics', category: 'laboratory', date: '2026-05-03', time: '09:00', status: 'completed', for: 'Sarah Johnson', service: 'Blood Panel' },
+  { id: 'APT-2026-P004', provider: 'MedPlus Clinic',      category: 'clinic',     date: '2026-04-28', time: '11:30', status: 'completed', for: 'Sarah Johnson', service: 'Follow-up Consultation' },
+  { id: 'APT-2026-P005', provider: 'Apex Radiology',      category: 'radiology',  date: '2026-04-20', time: '14:30', status: 'cancelled', for: 'David Johnson', service: 'Chest X-Ray & Report' },
+]
+
 export const MOCK_BENEFICIARIES: Beneficiary[] = [
   { id: 'BEN-001', name: 'David Johnson', relation: 'Spouse', dob: '1985-03-12', nationalId: 'ZW-08421756-B', age: 41 },
   { id: 'BEN-002', name: 'Emma Johnson',  relation: 'Child',  dob: '2012-07-24', nationalId: 'ZW-12345678-C', age: 13 },
@@ -88,8 +105,8 @@ export const MOCK_BENEFICIARIES: Beneficiary[] = [
 export const MOCK_NOTIFICATIONS: Notification[] = [
   { id: 'N001', type: 'payment',     title: 'Payment Received',               body: 'City Medical Centre received Z$450.00 for your consultation on 15 May 2026.',                                   time: '2026-05-15T10:32:00', read: true,  screen: 'transaction-history' },
   { id: 'N002', type: 'invoice',     title: 'Invoice Pending Authorization',  body: 'City Medical Centre has raised invoice INV-2026-0842 for Z$450.00. Please review and authorize.',             time: '2026-05-19T09:15:00', read: false, screen: 'invoice-review' },
-  { id: 'N003', type: 'appointment', title: 'Appointment Confirmed',          body: 'City Medical Centre confirmed your appointment for Emma Johnson on 21 May 2026 at 10:30.',                    time: '2026-05-20T14:05:00', read: false, screen: 'find-service' },
-  { id: 'N004', type: 'credit',      title: 'Credit Limit Updated',           body: 'Your healthcare credit limit has been reviewed and updated to Z$5,000.00.',                                   time: '2026-05-10T08:00:00', read: true,  screen: 'credit-wallet' },
+  { id: 'N003', type: 'appointment', title: 'Appointment Confirmed',          body: 'City Medical Centre confirmed your appointment for Emma Johnson on 5 June 2026 at 10:30 AM.',                  time: '2026-05-31T09:20:00', read: false, screen: 'find-service' },
+  { id: 'N004', type: 'credit',      title: 'Balance Updated',                body: 'Your healthcare balance has been reviewed and updated to Z$5,000.00.',                                     time: '2026-05-10T08:00:00', read: true,  screen: 'credit-wallet' },
   { id: 'N005', type: 'appointment', title: 'Appointment Request Sent',       body: 'Your engagement request has been sent to MedPlus Clinic. Awaiting confirmation.',                           time: '2026-05-18T11:20:00', read: true,  screen: 'find-service' },
   { id: 'N006', type: 'appointment', title: 'New Provider Near You',          body: "MedFirst Diagnostics Lab has joined GG'APP and is now available 0.6 km from you.",                          time: '2026-05-21T07:00:00', read: false, screen: 'find-service' },
   { id: 'N007', type: 'system',      title: 'Profile Verification Complete',  body: 'Your identity has been successfully verified. Your account is fully active.',                               time: '2026-05-01T10:00:00', read: true,  screen: 'profile' },

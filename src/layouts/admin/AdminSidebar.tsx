@@ -26,7 +26,7 @@ function AdminNavIcon({ id, active }: { id: string; active: boolean }) {
 export function AdminSidebar() {
   return (
     <div style={{
-      width: 240,
+      width: 210,
       minHeight: '100vh',
       background: '#0A1628',
       display: 'flex',

@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { GGCard, GGButton, GGBadge } from '@/design-system'
 import { C, font, radius, shadow } from '@/design-system/tokens'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate } from '@/utils/format'
-import { MOCK_SP_APPOINTMENTS } from '@/mock/sp.mock'
+import { MOCK_SP_APPOINTMENTS, MOCK_SP_INVOICES } from '@/mock/sp.mock'
 
 const SP_SERVICES = [
   'General Consultation', 'Blood Pressure Monitoring', 'ECG', 'Wound Dressing',
@@ -26,22 +26,87 @@ interface FormState {
 
 export function SPInvoiceUploadScreen() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const editInvoice = location.state?.editInvoice as any
   const { isMobile } = useResponsive()
-  const [form, setForm] = useState<FormState>({
-    patient: '', services: [], amount: '', notes: '', diagnosis: '',
-    followUp: '', internalNote: '', invoiceNumber: '', uploadedFile: null,
+  const [form, setForm] = useState<FormState>(() => {
+    if (editInvoice) {
+      return {
+        patient: editInvoice.patient || '',
+        services: editInvoice.services || [],
+        amount: editInvoice.amount?.toString() || '',
+        notes: editInvoice.treatment || '',
+        diagnosis: editInvoice.diagnosis || '',
+        followUp: editInvoice.followUp || '',
+        internalNote: editInvoice.internalNote || '',
+        invoiceNumber: editInvoice.id || '',
+        uploadedFile: editInvoice.attachment ? new File([], editInvoice.attachment) : null,
+      }
+    }
+    return {
+      patient: '', services: [], amount: '', notes: '', diagnosis: '',
+      followUp: '', internalNote: '', invoiceNumber: '', uploadedFile: null,
+    }
   })
   const [step, setStep] = useState(1)
   const [fileNameError, setFileNameError] = useState('')
-  const [invoiceRef] = useState(() => 'INV-SP-' + Date.now().toString().slice(-6))
+  const [invoiceRef] = useState(() => editInvoice?.id || 'INV-SP-' + Date.now().toString().slice(-6))
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const [pinStep, setPinStep] = useState(1)
+  const [pin, setPin] = useState('')
+  const [error, setError] = useState('')
+  const [processing, setProcessing] = useState(false)
+  const [paid, setPaid] = useState(false)
+
+  const handleKey = (key: string) => {
+    if (processing || paid) return
+    if (key === 'del') {
+      setPin(p => p.slice(0, -1))
+      setError('')
+      return
+    }
+    if (key === 'ok') {
+      if (pin.length !== 4) return
+    }
+    if (pin.length >= 4) return
+    const next = pin + (key === 'ok' ? '' : key)
+    setPin(next)
+    setError('')
+
+    if (next.length === 4) {
+      if (next === '1234') {
+        if (pinStep < 3) {
+          setTimeout(() => {
+            setPinStep(s => s + 1)
+            setPin('')
+          }, 500)
+        } else {
+          setProcessing(true)
+          setTimeout(() => {
+            setProcessing(false)
+            setPaid(true)
+            const found = MOCK_SP_INVOICES.find(x => x.id === invoiceRef)
+            if (found) {
+              found.status = 'paid'
+              found.paidAt = new Date().toISOString().split('T')[0]
+              found.paymentRef = 'PAY-SP-' + Date.now().toString().slice(-4)
+            }
+          }, 1500)
+        }
+      } else {
+        setTimeout(() => {
+          setError('Incorrect PIN. Try 1234')
+          setPin('')
+        }, 300)
+      }
+    }
+  }
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm(f => ({ ...f, [k]: v }))
 
   const toggleSvc = (s: string) =>
     set('services', form.services.includes(s) ? form.services.filter(x => x !== s) : [...form.services, s])
-
-  const totalAmt = form.services.length * 75
 
   const handleFileSelect = (file: File | null | undefined) => {
     if (!file) return
@@ -74,22 +139,34 @@ export function SPInvoiceUploadScreen() {
   const confirmedApts = MOCK_SP_APPOINTMENTS.filter(a => a.status === 'confirmed' || a.status === 'completed')
 
   if (step === 3) return (
-    <SPLayout title="Invoice Submitted" subtitle="Awaiting admin review">
-      <div style={{ maxWidth: 520, margin: '0 auto' }}>
-        <GGCard padding={isMobile ? '32px 20px' : '48px 40px'} style={{ textAlign: 'center' }}>
-          <div style={{ width: 80, height: 80, borderRadius: '50%', background: C.successBg, margin: '0 auto 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `3px solid rgba(34,201,138,0.25)` }}>
-            <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M8 18l7 7 13-13" stroke={C.success} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+    <SPLayout title={editInvoice ? "Invoice Resubmitted" : "Invoice Submitted"} subtitle="Awaiting patient payment authorization">
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 340px', gap: '20px', maxWidth: 880, margin: '0 auto', alignItems: 'start' }}>
+        
+        {/* Left Card: Invoice summary */}
+        <GGCard padding={isMobile ? '24px 16px' : '32px'}>
+          <div style={{ width: 64, height: 64, borderRadius: '50%', background: paid ? C.successBg : C.warningBg, margin: '0 auto 20px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `3px solid ${paid ? 'rgba(34,201,138,0.25)' : 'rgba(245,166,35,0.25)'}` }}>
+            {paid ? (
+              <svg width="28" height="28" viewBox="0 0 36 36" fill="none"><path d="M8 18l7 7 13-13" stroke={C.success} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            ) : (
+              <svg width="28" height="28" viewBox="0 0 32 32" fill="none"><rect x="7" y="15" width="18" height="14" rx="3" stroke={C.warning} strokeWidth="1.8"/><path d="M10 15v-4a6 6 0 0112 0v4" stroke={C.warning} strokeWidth="1.8" strokeLinecap="round"/></svg>
+            )}
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px' }}>Invoice Submitted!</div>
-          <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '24px' }}>
-            Your invoice has been sent to the GG'APP admin team for review. Once approved, it will be forwarded to the patient for payment authorization. You'll be notified at each stage.
+          <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px', textAlign: 'center' }}>
+            {editInvoice 
+              ? (paid ? 'Invoice Resubmitted & Paid!' : 'Invoice Resubmitted!') 
+              : (paid ? 'Invoice Submitted & Paid!' : 'Invoice Submitted!')}
           </div>
-          <div style={{ background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, padding: '16px', marginBottom: '24px', textAlign: 'left' }}>
+          <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '24px', textAlign: 'center' }}>
+            {paid 
+              ? 'The invoice has been settled in real-time by the patient.' 
+              : 'The invoice has been sent to the patient. They must authorize the payment via Triple-PIN security.'}
+          </div>
+          <div style={{ background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, padding: '16px', marginBottom: '24px' }}>
             {[
               { label: 'Invoice Ref', val: invoiceRef },
               { label: 'Patient',     val: form.patient || 'Sarah Johnson' },
-              { label: 'Amount',      val: formatCurrency(Number(form.amount) || totalAmt) },
-              { label: 'Status',      val: <GGBadge type="warning">Pending Admin Review</GGBadge> },
+              { label: 'Amount',      val: formatCurrency(Number(form.amount) || 0) },
+              { label: 'Status',      val: <GGBadge type={paid ? "success" : "warning"}>{paid ? "Paid (Real-time)" : "Awaiting Auth"}</GGBadge> },
             ].map(item => (
               <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: '13px', color: C.textSub }}>{item.label}</span>
@@ -102,12 +179,103 @@ export function SPInvoiceUploadScreen() {
             <GGButton variant="success"   size="md" onClick={() => navigate('/sp/dashboard')} style={{ flex: 1 }}>Dashboard</GGButton>
           </div>
         </GGCard>
+
+        {/* Right Card: Phone simulator for Patient PIN auth */}
+        <GGCard padding="20px" style={{ background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: '16px', boxShadow: shadow.md }}>
+          <div style={{ borderBottom: `1px solid ${C.border}`, paddingBottom: '10px', marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.05em' }}>📱 PATIENT PHONE (DEMO)</span>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: paid ? C.success : C.warning }} />
+          </div>
+
+          {processing ? (
+            <div style={{ textAlign: 'center', padding: '32px 0' }}>
+              <div style={{ width: 48, height: 48, border: `3px solid ${C.blue500}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'gg-spin 0.8s linear infinite', margin: '0 auto 16px' }} />
+              <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, marginBottom: '4px' }}>Processing Pay…</div>
+              <div style={{ fontSize: '11px', color: C.textSub }}>Authorizing Triple-PIN...</div>
+              <style>{`@keyframes gg-spin { to { transform: rotate(360deg) } }`}</style>
+            </div>
+          ) : paid ? (
+            <div style={{ textAlign: 'center', padding: '24px 0' }}>
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: C.successBg, border: `2px solid ${C.success}`, margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="24" height="24" viewBox="0 0 20 20" fill="none"><path d="M4 10l4 4 8-8" stroke={C.success} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </div>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: C.success, marginBottom: '4px' }}>Payment Confirmed!</div>
+              <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>
+                Triple-PIN validation succeeded. The funds have been released and settled.
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ background: C.bg, borderRadius: radius.sm, padding: '10px 12px', border: `1px solid ${C.border}`, marginBottom: '14px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.04em' }}>Pay to City Medical Centre</div>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: C.navy800, margin: '2px 0' }}>{formatCurrency(Number(form.amount) || 0)}</div>
+                <div style={{ fontSize: '11px', color: C.textSub }}>Secure Real-Time Payment</div>
+              </div>
+
+              {/* Progress Steps */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '6px', marginBottom: '16px' }}>
+                {['PIN 1', 'PIN 2', 'PIN 3'].map((stepName, index) => {
+                  const isActive = pinStep === index + 1
+                  const isDone = pinStep > index + 1
+                  return (
+                    <div key={stepName} style={{ flex: 1, textTransform: 'uppercase', fontSize: '9px', fontWeight: 700, padding: '4px', textAlign: 'center', borderRadius: '4px', background: isDone ? C.successBg : isActive ? C.blue100 : C.bg, border: `1px solid ${isDone ? 'rgba(34,201,138,0.2)' : isActive ? 'rgba(74,173,223,0.3)' : C.border}`, color: isDone ? '#0D6B47' : isActive ? C.blue500 : C.textSub }}>
+                      {isDone ? '✓ Done' : stepName}
+                    </div>
+                  )
+                })}
+              </div>
+
+              <div style={{ textAlign: 'center', marginBottom: '12px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>
+                  {pinStep === 1 && 'First PIN Auth'}
+                  {pinStep === 2 && 'Second PIN Auth'}
+                  {pinStep === 3 && 'Final PIN Auth'}
+                </div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>
+                  {pinStep === 1 && 'Enter medical aid code PIN'}
+                  {pinStep === 2 && 'Enter provider code PIN'}
+                  {pinStep === 3 && 'Enter patient security PIN'}
+                </div>
+              </div>
+
+              {/* Dot indicators */}
+              <div style={{ display: 'flex', justifyContent: 'center', gap: '10px', marginBottom: '10px' }}>
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div key={i} style={{ width: 12, height: 12, borderRadius: '50%', background: i < pin.length ? (error ? C.error : C.navy800) : C.border, transition: 'all 0.15s ease', transform: i < pin.length ? 'scale(1.1)' : 'scale(1)' }} />
+                ))}
+              </div>
+
+              {error && (
+                <div style={{ color: C.error, fontSize: '11px', fontWeight: 600, textAlign: 'center', marginBottom: '8px' }}>
+                  {error}
+                </div>
+              )}
+
+              <div style={{ textAlign: 'center', fontSize: '10px', color: C.textLight, marginBottom: '14px' }}>Demo PIN: 1234</div>
+
+              {/* Keypad */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '6px' }}>
+                {['1','2','3','4','5','6','7','8','9','⌫','0','ok'].map(k => {
+                  const isDel = k === '⌫'
+                  const isOk = k === 'ok'
+                  const val = isDel ? 'del' : isOk ? 'ok' : k
+                  return (
+                    <button key={k} onClick={() => handleKey(val)}
+                      style={{ height: 36, borderRadius: radius.sm, border: `1.5px solid ${C.border}`, background: isOk ? (pin.length === 4 ? C.success : C.border) : isDel ? C.bg : '#fff', color: isOk ? '#fff' : isDel ? C.textSub : C.text, fontSize: isOk || isDel ? '12px' : '15px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.family }}>
+                      {k}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </GGCard>
       </div>
     </SPLayout>
   )
 
   return (
-    <SPLayout title="Upload Invoice" subtitle="Post-appointment workflow">
+    <SPLayout title={editInvoice ? "Edit & Resubmit Invoice" : "Upload Invoice"} subtitle={editInvoice ? "Modify and resubmit invoice to patient" : "Post-appointment workflow"}>
       <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
         {/* Step tabs */}
@@ -211,15 +379,15 @@ export function SPInvoiceUploadScreen() {
               {/* Amount */}
               <div>
                 <div style={{ fontSize: '13px', fontWeight: 600, color: C.text, marginBottom: '8px', fontFamily: font.family }}>
-                  Invoice Amount ({form.services.length} service{form.services.length !== 1 ? 's' : ''}) <span style={{ color: C.error }}>*</span>
+                  Invoice Amount <span style={{ color: C.error }}>*</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ fontSize: '20px', fontWeight: 500, color: C.textSub, fontFamily: font.family }}>$</div>
-                  <input type="number" value={form.amount || totalAmt} onChange={e => set('amount', e.target.value)}
-                    placeholder={totalAmt.toString()}
+                  <input type="number" value={form.amount} onChange={e => set('amount', e.target.value)}
+                    placeholder="0.00"
                     style={{ flex: 1, padding: '10px 14px', fontSize: isMobile ? '16px' : '20px', fontFamily: font.family, fontWeight: 800, color: C.text, background: C.bg, border: `1.5px solid ${C.border}`, borderRadius: radius.sm, outline: 'none', minWidth: 0 }} />
                 </div>
-                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>Enter amount in Z$. Admin will review before sending to patient.</div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>Enter amount in Z$. Payment will be authorized and settled in real-time.</div>
               </div>
 
               {/* File upload */}
@@ -270,13 +438,13 @@ export function SPInvoiceUploadScreen() {
               </div>
 
               <div style={{ padding: '12px 14px', background: C.blue100, borderRadius: radius.sm, border: '1px solid rgba(74,173,223,0.2)', fontSize: '12px', color: '#1A5D8A', lineHeight: 1.6, fontFamily: font.family }}>
-                Your invoice will be sent directly to the patient for payment authorization. The GG'APP admin team is only involved in the event of a dispute.
+                Your invoice will be sent directly to the patient for real-time authorization and settlement. Payments are instantly deposited.
               </div>
 
               <div style={{ display: 'flex', gap: '10px' }}>
                 <GGButton variant="secondary" size="md" onClick={() => setStep(1)} style={{ flex: 1 }}>← Back</GGButton>
                 <GGButton variant="success" size="md"
-                  disabled={!form.invoiceNumber.trim() || !form.uploadedFile || !!fileNameError}
+                  disabled={!form.invoiceNumber.trim() || !form.uploadedFile || !!fileNameError || !form.amount.trim()}
                   onClick={() => setStep(3)} style={{ flex: 2 }}>
                   Submit Invoice →
                 </GGButton>

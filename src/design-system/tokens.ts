@@ -1,25 +1,25 @@
 export const C = {
-  navy900:    '#081528',
-  navy800:    '#0D1E42',
-  navy700:    '#152B55',
-  navy600:    '#1C3670',
-  blue500:    '#4AADDF',
-  blue400:    '#6BBFE8',
-  blue300:    '#9DD5F5',
-  blue100:    '#DCF1FC',
-  bg:         '#EEF4FB',
+  navy900:    '#050E22',
+  navy800:    '#091C44', // Core Brand Dark
+  navy700:    '#12244F',
+  navy600:    '#1A2F5E',
+  blue500:    '#38B6FF', // Core Brand Accent
+  blue400:    '#5EC3FF',
+  blue300:    '#8ADCFF',
+  blue100:    '#E6F5FF', // Subtle blue tint
+  bg:         '#FAF6F5', // Core Brand Background / Alabaster
   surface:    '#FFFFFF',
-  border:     '#E2EBF5',
-  borderDark: '#C8D8EE',
-  text:       '#0D1E42',
-  textSub:    '#55769A',
-  textLight:  '#A0B3CC',
-  success:    '#22C98A',
-  successBg:  '#E3F9F0',
-  warning:    '#F5A623',
-  warningBg:  '#FFF8E6',
-  error:      '#E5474D',
-  errorBg:    '#FDECEA',
+  border:     '#EAE6E5', // Warm light neutral border
+  borderDark: '#D5CFCF',
+  text:       '#091C44', // Text matching brand dark
+  textSub:    '#2E3E5C', // Darker, highly legible brand slate-navy
+  textLight:  '#999DAD',
+  success:    '#38B6FF', // Map success to brand accent
+  successBg:  '#E6F5FF',
+  warning:    '#091C44', // Map warning to brand dark (minimizing yellow)
+  warningBg:  '#FAF6F5',
+  error:      '#E5474D', // Vibrant high-contrast alert red
+  errorBg:    'rgba(229, 71, 77, 0.1)',
 } as const
 
 export const font = {

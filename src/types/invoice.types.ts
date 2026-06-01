@@ -2,12 +2,7 @@ import type { BeneficiaryRef } from './appointment.types'
 
 export type InvoiceStatus = 'pending_auth' | 'authorized' | 'paid' | 'disputed' | 'rejected'
 
-export type SPInvoiceStatus =
-  | 'pending_admin'
-  | 'pending_patient'
-  | 'paid'
-  | 'disputed'
-  | 'rejected'
+export type SPInvoiceStatus = 'paid' | 'cancelled' | 'pending'
 
 export interface InvoiceLineItem {
   name: string

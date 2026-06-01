@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGCard, GGButton, GGBadge, GGAvatar } from '@/design-system'
+import { GGCard, GGButton, GGAvatar } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -8,50 +8,82 @@ import { formatDate } from '@/utils/format'
 import { MOCK_SP_APPOINTMENTS } from '@/mock/sp.mock'
 import type { Appointment } from '@/types/appointment.types'
 
-const STATUS_MAP: Record<string, { bg: string; color: string; label: string; border: string }> = {
-  new:       { bg: C.blue100,   color: '#1A5D8A', label: 'New Request', border: C.blue500  },
-  confirmed: { bg: C.successBg, color: '#0D6B47', label: 'Confirmed',   border: C.success  },
-  completed: { bg: C.bg,        color: C.textSub, label: 'Completed',   border: C.border   },
-  cancelled: { bg: C.errorBg,   color: '#A83236', label: 'Cancelled',   border: C.error    },
+const STATUS_MAP: Record<string, { bg: string; color: string; border?: string; label: string; icon?: string; accentBorder: string }> = {
+  new:       { bg: 'transparent', color: C.navy800, border: `1px solid ${C.navy800}`, label: 'New Request', accentBorder: C.navy800 },
+  confirmed: { bg: C.navy800,   color: '#FFFFFF', label: 'Confirmed', accentBorder: C.navy800 },
+  completed: { bg: C.blue100,   color: C.navy800, label: 'Completed', accentBorder: C.blue500, icon: '✓' },
+  cancelled: { bg: C.errorBg,   color: C.textSub, label: 'Cancelled', accentBorder: C.textSub },
 }
 
 function SPStatusBadge({ status }: { status: string }) {
   const s = STATUS_MAP[status] ?? STATUS_MAP.new
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '3px 10px', borderRadius: radius.full, background: s.bg, fontSize: '11px', fontWeight: 700, color: s.color, fontFamily: font.family }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+    <span style={{ 
+      display: 'inline-flex', 
+      alignItems: 'center', 
+      gap: '5px', 
+      padding: '3px 10px', 
+      borderRadius: radius.full, 
+      background: s.bg, 
+      border: s.border ?? 'none',
+      fontSize: '11px', 
+      fontWeight: 700, 
+      color: s.color, 
+      fontFamily: font.family 
+    }}>
+      {s.icon ? (
+        <span style={{ marginRight: '2px', fontWeight: 900 }}>{s.icon}</span>
+      ) : (
+        <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
+      )}
       {s.label}
     </span>
   )
 }
-
 function AppointmentCard({ apt }: { apt: Appointment }) {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
-  const s = STATUS_MAP[apt.status] ?? STATUS_MAP.new
 
   return (
     <div style={{ background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, overflow: 'hidden', display: 'flex', flexDirection: isMobile ? 'column' : 'row' }}>
-      {/* Left border indicator */}
-      <div style={{ width: isMobile ? '100%' : 5, height: isMobile ? 5 : 'auto', background: s.border, flexShrink: 0 }} />
-
       {/* Main content */}
       <div style={{ flex: 1, padding: isMobile ? '16px' : '20px', display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
         <div style={{ cursor: 'pointer', flexShrink: 0 }} onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>
           <GGAvatar name={apt.patient} size={44} />
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '2px', cursor: 'pointer' }}
-            onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>
-            {apt.patient}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '4px' }}>
+            <span style={{ fontSize: '15px', fontWeight: 800, color: C.text, cursor: 'pointer' }}
+              onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>
+              {apt.patient}
+            </span>
+            {!apt.forSelf && (
+              <span style={{ fontSize: '9px', fontWeight: 700, color: C.blue500, background: C.blue100, padding: '2px 8px', borderRadius: radius.full, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Beneficiary
+              </span>
+            )}
           </div>
-          <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '8px' }}>{apt.phone}</div>
 
-          <div style={{ display: 'flex', gap: '14px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: C.text, fontWeight: 600 }}>{apt.service}</span>
-            <span style={{ fontSize: '12px', color: C.textSub }}>{formatDate(apt.date)} at {apt.time}</span>
+          {/* Details Row */}
+          <div style={{ display: 'flex', gap: '16px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <span style={{ fontSize: '13px', color: C.text, fontWeight: 700, background: C.bg, padding: '3px 8px', borderRadius: radius.sm }}>
+              {apt.service}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.text, fontWeight: 500 }}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={C.blue500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M14 4.5V14a1 1 0 01-1 1H3a1 1 0 01-1-1V4.5A1.5 1.5 0 013.5 3h9A1.5 1.5 0 0114 4.5z" />
+                <path d="M1 6h14M5 1v3M11 1v3" />
+              </svg>
+              {formatDate(apt.date)} at {apt.time}
+            </span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: C.text, fontWeight: 500 }}>
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke={C.blue500} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M1.333 2.667v10.666a1.333 1.333 0 001.334 1.334h10.666a1.333 1.333 0 001.334-1.334V2.667A1.333 1.333 0 0013.333 1.333H2.667A1.333 1.333 0 001.333 2.667z" />
+              </svg>
+              {apt.phone}
+            </span>
             {apt.attachments.length > 0 && (
-              <span style={{ fontSize: '12px', color: C.blue500, fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <span style={{ fontSize: '12px', color: C.blue500, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M10 6.5a3 3 0 01-3 3H3a2 2 0 010-4h5a1 1 0 010 2H3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
                 {apt.attachments.length} attachment{apt.attachments.length > 1 ? 's' : ''}
               </span>
@@ -59,23 +91,14 @@ function AppointmentCard({ apt }: { apt: Appointment }) {
           </div>
 
           {/* Beneficiary indicator */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '5px 12px', borderRadius: radius.full, background: apt.forSelf ? C.bg : C.blue100, border: `1px solid ${apt.forSelf ? C.border : 'rgba(74,173,223,0.3)'}`, marginBottom: '10px' }}>
-            <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
-              {apt.forSelf
-                ? <><circle cx="6.5" cy="4.5" r="2.5" stroke={C.textSub} strokeWidth="1.2"/><path d="M1.5 12c0-2.8 2.2-5 5-5s5 2.2 5 5" stroke={C.textSub} strokeWidth="1.2" strokeLinecap="round"/></>
-                : <><circle cx="4.5" cy="4" r="2" stroke={C.blue500} strokeWidth="1.2"/><path d="M1 11c0-2 1.6-3.5 3.5-3.5" stroke={C.blue500} strokeWidth="1.2" strokeLinecap="round"/><circle cx="9.5" cy="5" r="2" stroke={C.blue500} strokeWidth="1.2"/><path d="M6 12c0-2 1.6-3.5 3.5-3.5S13 10 13 12" stroke={C.blue500} strokeWidth="1.2" strokeLinecap="round"/></>
-              }
-            </svg>
-            <span style={{ fontSize: '12px', fontWeight: 600, color: apt.forSelf ? C.textSub : C.blue500, fontFamily: font.family }}>
-              {apt.forSelf
-                ? `Service for: ${apt.patient} (Self)`
-                : `Beneficiary: ${apt.beneficiary?.name} (${apt.beneficiary?.relation}, Age ${apt.beneficiary?.age})`
-              }
-            </span>
-            {!apt.forSelf && <GGBadge type="primary">Beneficiary</GGBadge>}
-          </div>
+          {!apt.forSelf && apt.beneficiary && (
+            <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px', background: C.bg, padding: '6px 12px', borderRadius: radius.sm, borderLeft: `2.5px solid ${C.blue500}` }}>
+              <span style={{ fontWeight: 600, color: C.text }}>For:</span>
+              <span>{apt.beneficiary.name} ({apt.beneficiary.relation}, Age {apt.beneficiary.age})</span>
+            </div>
+          )}
 
-          <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.5, background: C.bg, padding: '8px 12px', borderRadius: radius.sm, border: `1px solid ${C.border}`, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+          <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.5, background: '#fff', borderLeft: `3px solid ${C.border}`, padding: '4px 12px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
             {apt.description}
           </div>
         </div>
@@ -88,9 +111,11 @@ function AppointmentCard({ apt }: { apt: Appointment }) {
           <div style={{ fontSize: '11px', color: C.textSub, fontWeight: 600 }}>{apt.id}</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%', marginTop: '4px' }}>
             {apt.status === 'new' && <>
-              <GGButton variant="success" size="sm" fullWidth onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Accept</GGButton>
-              <GGButton variant="secondary" size="sm" fullWidth onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Details</GGButton>
-              <GGButton variant="danger" size="sm" fullWidth onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Decline</GGButton>
+              <GGButton variant="primary" size="sm" fullWidth onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Accept</GGButton>
+              <div style={{ display: 'flex', gap: '6px', width: '100%' }}>
+                <GGButton variant="secondary" size="sm" style={{ flex: 1 }} onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Details</GGButton>
+                <GGButton variant="ghost" size="sm" style={{ flex: 1 }} onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Decline</GGButton>
+              </div>
             </>}
             {apt.status === 'confirmed' && <>
               <GGButton variant="primary" size="sm" fullWidth onClick={() => navigate('/sp/invoices/upload')}>Upload Invoice</GGButton>
@@ -112,8 +137,8 @@ function AppointmentCard({ apt }: { apt: Appointment }) {
         <div style={{ padding: '12px 16px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
           <SPStatusBadge status={apt.status} />
           {apt.status === 'new' && <>
-            <GGButton variant="success" size="sm" onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Accept</GGButton>
-            <GGButton variant="danger" size="sm" onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Decline</GGButton>
+            <GGButton variant="primary" size="sm" onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Accept</GGButton>
+            <GGButton variant="ghost" size="sm" onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Decline</GGButton>
           </>}
           {apt.status === 'confirmed' && <GGButton variant="primary" size="sm" onClick={() => navigate('/sp/invoices/upload')}>Upload Invoice</GGButton>}
           <GGButton variant="secondary" size="sm" onClick={() => navigate('/sp/appointments/' + apt.id, { state: { apt } })}>Details</GGButton>
@@ -192,9 +217,9 @@ function CalendarView() {
 
             return (
               <div key={day} onClick={() => setSelectedDay(day)}
-                style={{ minHeight: 80, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: '6px', cursor: 'pointer', background: isSelected ? C.blue100 : isWeekend ? '#F7FAFD' : '#fff', transition: 'background 0.12s' }}
+                style={{ minHeight: 80, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, padding: '6px', cursor: 'pointer', background: isSelected ? C.blue100 : isWeekend ? C.bg : '#fff', transition: 'background 0.12s' }}
                 onMouseEnter={e => { if (!isSelected) e.currentTarget.style.background = C.bg }}
-                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isWeekend ? '#F7FAFD' : '#fff' }}>
+                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.background = isWeekend ? C.bg : '#fff' }}>
                 <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '4px' }}>
                   <span style={{ fontSize: '12px', fontWeight: isToday ? 800 : 500, color: isToday ? '#fff' : C.text, width: 22, height: 22, borderRadius: '50%', background: isToday ? C.blue500 : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: font.family }}>
                     {day}
@@ -203,8 +228,13 @@ function CalendarView() {
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                   {dayApts.slice(0, 2).map((a, ai) => {
                     const s = STATUS_MAP[a.status] ?? STATUS_MAP.new
+                    const isConfirmed = a.status === 'confirmed'
+                    const cellBg = isConfirmed ? C.blue100 : s.bg
+                    const cellColor = isConfirmed ? C.navy800 : s.color
+                    const cellBorder = isConfirmed ? `1px solid rgba(56, 182, 255, 0.25)` : (s.border ?? 'none')
                     return (
-                      <div key={ai} style={{ fontSize: '10px', fontWeight: 600, color: s.color, background: s.bg, borderRadius: '3px', padding: '1px 5px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <div key={ai} style={{ fontSize: '10px', fontWeight: 600, color: cellColor, background: cellBg, border: cellBorder, borderRadius: '3px', padding: '1px 5px', display: 'flex', alignItems: 'center', gap: '3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {isConfirmed && <span style={{ color: C.blue500, fontSize: '12px', lineHeight: 1 }}>•</span>}
                         {a.patient.split(' ')[0]} {a.time}
                       </div>
                     )
@@ -302,9 +332,9 @@ export function SPAppointmentsScreen() {
         {/* Stat tiles */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: '14px' }}>
           {[
-            { label: 'New Requests', val: counts.new,       color: C.blue500,  bg: C.blue100,   status: 'new'       },
-            { label: 'Confirmed',    val: counts.confirmed,  color: C.success,  bg: C.successBg, status: 'confirmed' },
-            { label: 'Completed',    val: counts.completed,  color: C.textSub,  bg: C.bg,        status: 'completed' },
+            { label: 'New Requests', val: counts.new,       color: C.blue500,  bg: C.blue100,                     status: 'new'       },
+            { label: 'Confirmed',    val: counts.confirmed,  color: C.navy800,  bg: 'rgba(9, 28, 68, 0.08)',       status: 'confirmed' },
+            { label: 'Completed',    val: counts.completed,  color: C.textSub,  bg: 'rgba(115, 124, 146, 0.08)',  status: 'completed' },
           ].map(tile => (
             <div key={tile.label} onClick={() => setFilter(tile.status)} style={{ padding: '18px 20px', background: filter === tile.status ? tile.bg : '#fff', borderRadius: radius.lg, border: `1.5px solid ${filter === tile.status ? tile.color + '44' : C.border}`, cursor: 'pointer', transition: 'all 0.14s' }}>
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '6px' }}>{tile.label}</div>
@@ -318,7 +348,7 @@ export function SPAppointmentsScreen() {
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
             {['all', 'new', 'confirmed', 'completed', 'cancelled'].map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                style={{ padding: '7px 16px', borderRadius: radius.full, border: `1.5px solid ${filter === f ? C.blue500 : C.border}`, background: filter === f ? C.blue100 : '#fff', color: filter === f ? '#1A5D8A' : C.textSub, fontSize: '13px', fontWeight: filter === f ? 700 : 500, cursor: 'pointer', fontFamily: font.family, transition: 'all 0.13s', textTransform: 'capitalize' }}>
+                style={{ padding: '7px 16px', borderRadius: radius.full, border: `1.5px solid ${filter === f ? C.blue500 : C.border}`, background: filter === f ? C.blue100 : '#fff', color: filter === f ? C.navy800 : C.textSub, fontSize: '13px', fontWeight: filter === f ? 700 : 500, cursor: 'pointer', fontFamily: font.family, transition: 'all 0.13s', textTransform: 'capitalize' }}>
                 {f === 'all' ? 'All' : f}
               </button>
             ))}

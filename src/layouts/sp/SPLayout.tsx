@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ROUTES } from '@/router/routes'
 import { C, font, shadow } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useNotificationsStore } from '@/store/notifications.store'
@@ -88,6 +89,31 @@ export function SPLayout({ children, title, subtitle, back = false }: SPLayoutPr
           </span>
         )}
       </div>
+
+      {/* Sign Out (Mobile only) */}
+      {!isDesktop && (
+        <button
+          onClick={() => navigate(ROUTES.LOGIN)}
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '10px', width: 38, height: 38,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'rgba(255,255,255,0.8)',
+            transition: 'all 0.13s',
+            flexShrink: 0,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#fff' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; e.currentTarget.style.color = 'rgba(255,255,255,0.8)' }}
+        >
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M10 11l3-3-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M13 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
+        </button>
+      )}
     </div>
   )
 

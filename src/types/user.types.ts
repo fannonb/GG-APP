@@ -1,3 +1,5 @@
+import type { CountryCode } from '@/config/countries'
+
 export type UserRole = 'patient' | 'sp' | 'admin'
 
 export type CreditStatus = 'approved' | 'pending' | 'rejected' | 'not_applied'
@@ -8,11 +10,15 @@ export interface Patient {
   phone: string
   nationalId: string
   country: string
+  countryCode: CountryCode
   creditLimit: number
   creditUsed: number
   creditAvailable: number
   creditStatus: CreditStatus
   memberSince: string
+  /** Finance partner that issued the patient's active credit line */
+  financePartnerId?: 'moneymart' | 'equity'
+  creditAccountRef?: string
 }
 
 export interface Beneficiary {
@@ -52,5 +58,18 @@ export interface Transaction {
   amount: number
   date: string
   status: 'completed' | 'pending' | 'failed'
+  service: string
+}
+
+export type AppointmentStatus = 'confirmed' | 'pending' | 'cancelled' | 'completed'
+
+export interface Appointment {
+  id: string
+  provider: string
+  category: string
+  date: string
+  time: string
+  status: AppointmentStatus
+  for: string
   service: string
 }

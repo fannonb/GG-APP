@@ -8,14 +8,12 @@ import { formatCurrency, formatDate } from '@/utils/format'
 import { MOCK_SP_INVOICES } from '@/mock/sp.mock'
 import type { SPInvoice } from '@/types/invoice.types'
 
-type SPInvStatus = 'paid' | 'pending_admin' | 'pending_patient' | 'disputed' | 'rejected'
+type SPInvStatus = 'paid' | 'cancelled' | 'pending'
 
 const STATUS: Record<SPInvStatus, { label: string; color: string; bg: string; border: string; text: string }> = {
-  paid:            { label: 'Paid',                    color: C.success, bg: C.successBg, border: 'rgba(34,201,138,0.2)',  text: '#0D6B47' },
-  pending_admin:   { label: 'Pending Admin Review',    color: C.warning, bg: C.warningBg, border: 'rgba(245,166,35,0.2)', text: '#7C4A00' },
-  pending_patient: { label: 'Awaiting Patient Payment',color: C.blue500, bg: C.blue100,   border: 'rgba(74,173,223,0.2)', text: '#1A5D8A' },
-  disputed:        { label: 'Disputed',                 color: C.error,   bg: C.errorBg,   border: 'rgba(229,71,77,0.25)', text: C.error   },
-  rejected:        { label: 'Rejected',                 color: '#C0392B', bg: '#FBE9E9',   border: 'rgba(192,57,43,0.2)',  text: '#8B1A1A' },
+  paid:      { label: 'Paid',      color: C.success, bg: C.successBg, border: 'rgba(34,201,138,0.2)',  text: '#0D6B47' },
+  cancelled: { label: 'Cancelled', color: C.error,   bg: C.errorBg,   border: 'rgba(229,71,77,0.25)', text: C.error   },
+  pending:   { label: 'Pending Auth', color: '#D97706', bg: '#FEF3C7', border: 'rgba(217,119,6,0.2)', text: '#B45309' },
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -101,38 +99,25 @@ export function SPInvoiceDetailScreen() {
   const inv: SPInvoice = (location.state as { invoice: SPInvoice } | null)?.invoice ?? MOCK_SP_INVOICES[0]
   const [showAttachment, setShowAttachment] = useState(false)
 
-  const s = STATUS[inv.status as SPInvStatus] ?? STATUS.pending_admin
-  const isPdfMismatch = inv.status === 'rejected'
+  const s = STATUS[inv.status as SPInvStatus] ?? STATUS.cancelled
+  const isPdfMismatch = false
   const pdfName = inv.attachment || `${inv.id}.pdf`
 
   let timeline: { label: string; date: string | null; done: boolean; color: string }[] = []
-  if (inv.status === 'rejected') {
+  if (inv.status === 'cancelled') {
     timeline = [
-      { label: 'Submitted',         date: inv.submittedAt, done: true,  color: C.success },
-      { label: 'Rejected',          date: inv.submittedAt, done: true,  color: '#C0392B' },
-      { label: 'Resubmit Required', date: null,             done: false, color: C.border },
-    ]
-  } else if (inv.status === 'disputed') {
-    timeline = [
-      { label: 'Submitted',           date: inv.submittedAt, done: true,  color: C.success },
-      { label: 'Disputed by Patient', date: inv.disputedAt ?? null,   done: true,  color: C.error },
-      { label: 'Admin Review',        date: null,             done: false, color: C.warning },
-      { label: 'Under Mediation',     date: null,             done: false, color: C.border },
-    ]
-  } else if (inv.status === 'pending_admin') {
-    timeline = [
-      { label: 'Submitted', date: inv.submittedAt, done: true,  color: C.success },
-      { label: 'Pending',   date: null,             done: false, color: C.warning },
-    ]
-  } else if (inv.status === 'pending_patient') {
-    timeline = [
-      { label: 'Submitted',        date: inv.submittedAt, done: true,  color: C.success },
-      { label: 'Awaiting Payment', date: null,             done: false, color: C.warning },
+      { label: 'Submitted', date: inv.submittedAt, done: true, color: C.success },
+      { label: 'Cancelled', date: inv.submittedAt, done: true, color: C.error },
     ]
   } else if (inv.status === 'paid') {
     timeline = [
       { label: 'Submitted', date: inv.submittedAt, done: true, color: C.success },
       { label: 'Paid',      date: inv.paidAt ?? null,      done: true, color: C.success },
+    ]
+  } else if (inv.status === 'pending') {
+    timeline = [
+      { label: 'Submitted', date: inv.submittedAt, done: true, color: C.success },
+      { label: 'Awaiting Auth', date: null, done: false, color: '#D97706' },
     ]
   }
 
@@ -209,23 +194,34 @@ export function SPInvoiceDetailScreen() {
         </div>
       </GGCard>
 
-      {/* Dispute / rejection on mobile */}
-      {isNarrow && (inv.status === 'disputed' || inv.status === 'rejected') && (
-        <GGCard padding="18px" style={{ borderLeft: `4px solid ${s.color}`, background: s.bg }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
-            {inv.status === 'disputed' ? '⚠ Dispute Raised by Patient' : '✕ Invoice Rejected by Admin'}
+      {/* Cancelled invoice banner on mobile */}
+      {isNarrow && inv.status === 'cancelled' && (
+        <GGCard padding="18px" style={{ background: s.bg }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
+            ✕ Invoice Cancelled
           </div>
-          <div style={{ fontSize: '13px', color: C.text, lineHeight: 1.65, fontFamily: font.family }}>
-            {inv.status === 'disputed' ? inv.disputeReason : inv.rejectionReason}
+          <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family, marginBottom: '14px' }}>
+            This invoice has been cancelled. You can choose to leave it cancelled or edit its details and resubmit it to the patient.
           </div>
-          {inv.adminNote && (
-            <div style={{ padding: '10px 12px', background: 'rgba(255,255,255,0.7)', borderRadius: radius.sm, border: `1px solid ${s.border}`, fontSize: '12px', color: C.textSub, lineHeight: 1.6, fontFamily: font.family, marginTop: '10px' }}>
-              <strong style={{ color: C.text }}>Admin note:</strong> {inv.adminNote}
-            </div>
-          )}
-          <div style={{ marginTop: '14px' }}>
-            {inv.status === 'rejected' && <GGButton variant="primary" size="sm" onClick={() => navigate('/sp/invoices/upload')}>Resubmit Invoice</GGButton>}
-            {inv.status === 'disputed' && <div style={{ fontSize: '12px', color: s.text, fontFamily: font.family }}>Contact <strong>support@ggapp.zw</strong> to respond.</div>}
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <GGButton variant="primary" size="sm" onClick={() => navigate('/sp/invoices/upload', { state: { editInvoice: inv } })}>
+              Edit & Resubmit
+            </GGButton>
+            <GGButton variant="secondary" size="sm" onClick={() => navigate('/sp/invoices')}>
+              Keep Cancelled
+            </GGButton>
+          </div>
+        </GGCard>
+      )}
+
+      {/* Pending invoice banner on mobile */}
+      {isNarrow && inv.status === 'pending' && (
+        <GGCard padding="18px" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
+            Awaiting Patient Authorization
+          </div>
+          <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family }}>
+            This invoice has been submitted and is awaiting approval and authorization from the patient.
           </div>
         </GGCard>
       )}
@@ -296,24 +292,34 @@ export function SPInvoiceDetailScreen() {
         </div>
       </GGCard>
 
-      {/* Dispute / rejection on desktop */}
-      {!isNarrow && (inv.status === 'disputed' || inv.status === 'rejected') && (
-        <GGCard padding="20px" style={{ borderLeft: `4px solid ${s.color}`, background: s.bg }}>
-          <div style={{ fontSize: '12px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
-            {inv.status === 'disputed' ? '⚠ Dispute Raised by Patient' : '✕ Invoice Rejected by Admin'}
-            {inv.disputedAt && <span style={{ fontWeight: 400, color: C.textSub, marginLeft: 6 }}>· {formatDate(inv.disputedAt)}</span>}
+      {/* Cancelled invoice banner on desktop */}
+      {!isNarrow && inv.status === 'cancelled' && (
+        <GGCard padding="20px" style={{ background: s.bg }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
+            ✕ Invoice Cancelled
           </div>
-          <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.65, fontFamily: font.family }}>
-            {inv.status === 'disputed' ? inv.disputeReason : inv.rejectionReason}
+          <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family, marginBottom: '14px' }}>
+            This invoice has been cancelled. You can choose to leave it cancelled or edit its details and resubmit it to the patient.
           </div>
-          {inv.adminNote && (
-            <div style={{ marginTop: '10px', padding: '10px 12px', background: 'rgba(255,255,255,0.7)', borderRadius: radius.sm, border: `1px solid ${s.border}`, fontSize: '12px', color: C.textSub, lineHeight: 1.6, fontFamily: font.family }}>
-              <strong style={{ color: C.text }}>Admin note:</strong> {inv.adminNote}
-            </div>
-          )}
-          <div style={{ marginTop: '14px' }}>
-            {inv.status === 'rejected' && <GGButton variant="primary" size="sm" onClick={() => navigate('/sp/invoices/upload')}>Resubmit Invoice</GGButton>}
-            {inv.status === 'disputed' && <div style={{ fontSize: '12px', color: s.text, fontFamily: font.family }}>Contact <strong>support@ggapp.zw</strong> to respond.</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <GGButton variant="primary" size="sm" fullWidth onClick={() => navigate('/sp/invoices/upload', { state: { editInvoice: inv } })}>
+              Edit & Resubmit
+            </GGButton>
+            <GGButton variant="secondary" size="sm" fullWidth onClick={() => navigate('/sp/invoices')}>
+              Keep Cancelled
+            </GGButton>
+          </div>
+        </GGCard>
+      )}
+
+      {/* Pending invoice banner on desktop */}
+      {!isNarrow && inv.status === 'pending' && (
+        <GGCard padding="20px" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: s.text, marginBottom: '8px', fontFamily: font.family }}>
+            Awaiting Patient Authorization
+          </div>
+          <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family }}>
+            This invoice has been submitted and is awaiting approval and authorization from the patient.
           </div>
         </GGCard>
       )}
