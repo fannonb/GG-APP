@@ -45,7 +45,7 @@ export const useSPPaymentsStore = create<SPPaymentsStore>(set => ({
   }),
   removeAccount: id => set(s => {
     const toRemove = s.accounts.find(a => a.id === id)
-    let accounts = s.accounts.filter(a => a.id !== id)
+    const accounts = s.accounts.filter(a => a.id !== id)
     // If we removed the default one and have accounts left, make the first one default
     if (toRemove?.isDefault && accounts.length > 0) {
       accounts[0].isDefault = true

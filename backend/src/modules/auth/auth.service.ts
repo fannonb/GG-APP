@@ -706,8 +706,9 @@ export class AuthService {
   }
 
   private buildPasswordResetUrl(token: string) {
+    const appBaseUrl = this.configService.get<string>('app.appBaseUrl')
     const origins = this.configService.get<string[]>('app.corsOrigins') ?? ['http://localhost:5173']
-    const baseUrl = origins[0] ?? 'http://localhost:5173'
+    const baseUrl = appBaseUrl?.trim() || origins[0] || 'http://localhost:5173'
     return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`
   }
 

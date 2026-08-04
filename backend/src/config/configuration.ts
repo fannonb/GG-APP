@@ -12,6 +12,9 @@ export function configuration() {
       port: Number(process.env.PORT ?? 3000),
       apiPrefix: process.env.API_PREFIX ?? 'api/v1',
       corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
+      // Canonical public app origin for password-reset/deep links. Falls back
+      // to the first CORS origin only when unset (local development).
+      appBaseUrl: process.env.APP_BASE_URL ?? '',
     },
     database: {
       url: process.env.DATABASE_URL ?? '',

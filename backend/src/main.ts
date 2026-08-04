@@ -6,11 +6,23 @@ import helmet from 'helmet'
 import { AppModule } from './app.module'
 import { validateEnv } from './config/env.validation'
 import { configuration } from './config/configuration'
+import { RedisService } from './redis/redis.service'
 
 async function bootstrap() {
   validateEnv(process.env)
   const app = await NestFactory.create(AppModule)
   const config = configuration()
+
+  // Fail fast in production instead of silently falling back to the
+  // in-memory store (which breaks refresh tokens, reset tokens, and
+  // ledger locks). The in-memory fallback remains for local dev only.
+  if (config.app.nodeEnv === 'production') {
+    const redisService = app.get(RedisService)
+    const pong = await redisService.ping()
+    if (!pong || pong.includes('memory')) {
+      throw new Error('Redis is unreachable in production; refusing to start.')
+    }
+  }
 
   // CORP:same-origin blocks Expo web / some clients from reading API responses.
   // Keep other helmet defaults; loosen only resource policy for local API use.

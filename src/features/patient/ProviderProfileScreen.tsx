@@ -146,6 +146,7 @@ export function ProviderProfileScreen() {
   const mockReviewedInvoiceIds = useReviewsStore(s => s.reviewedInvoiceIds)
   const [reviewFormDismissed, setReviewFormDismissed] = useState(false)
   const [reviewError, setReviewError] = useState<string | null>(null)
+  const [logoPopupOpen, setLogoPopupOpen] = useState(false)
 
   const latestProviderInvoice = useMemo(() => {
     if (!provider) return null
@@ -248,8 +249,6 @@ export function ProviderProfileScreen() {
       setReviewError(error instanceof Error ? error.message : 'Unable to submit review. Please try again.')
     }
   }
-
-  const [logoPopupOpen, setLogoPopupOpen] = useState(false)
 
   return (
     <AppLayout title={provider.name} subtitle={displayAddress} back notifCount={1}>

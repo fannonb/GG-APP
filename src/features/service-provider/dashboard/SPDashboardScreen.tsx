@@ -107,10 +107,6 @@ export function SPDashboardScreen() {
   const [btnHover1, setBtnHover1] = useState(false)
   const [btnHover2, setBtnHover2] = useState(false)
 
-  if (spMode === 'new') {
-    return <SPNewDashboardScreen />
-  }
-
   const upcomingAppointments = useMemo(
     () =>
       (data?.appointments ?? [])
@@ -153,6 +149,10 @@ export function SPDashboardScreen() {
     () => (data?.notifications ?? []).filter(notification => !notification.read).length,
     [data],
   )
+
+  if (spMode === 'new') {
+    return <SPNewDashboardScreen />
+  }
 
   if (isLoading || !data) {
     return (

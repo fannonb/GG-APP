@@ -25,7 +25,6 @@ import {
 import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { LedgerService } from '../ledger/ledger.service'
-import { getInvoiceAttachmentDataUrl } from '../../common/utils/invoice-attachment.util'
 import type { CreateNewsArticleDto, UpdateNewsArticleDto } from './dto/news-article.dto'
 
 const ADMIN_PROVIDER_DETAIL_INCLUDE = {
@@ -50,6 +49,7 @@ type AdminProviderRecord = Prisma.ProviderGetPayload<{
   include: typeof ADMIN_PROVIDER_DETAIL_INCLUDE
 }>
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Prisma's GetPayload requires the empty args shape
 type AdminNewsArticleRecord = Prisma.NewsArticleGetPayload<{}>
 
 type ResolvedProviderApplication = {
