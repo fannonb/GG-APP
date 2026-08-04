@@ -13,6 +13,7 @@ import { ForgotPasswordScreen } from '@/features/auth/ForgotPasswordScreen'
 import { ResetPasswordScreen } from '@/features/auth/ResetPasswordScreen'
 import { TermsScreen } from '@/features/legal/TermsScreen'
 import { PrivacyPolicyScreen } from '@/features/legal/PrivacyPolicyScreen'
+import { DownloadScreen } from '@/features/marketing/DownloadScreen'
 import { NotFoundPage } from '@/components/errors/NotFoundPage'
 import { ROUTES } from './routes'
 import type { UserRole } from '@/types/user.types'
@@ -47,6 +48,7 @@ export function AppRouter() {
       <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordScreen />} />
       <Route path={ROUTES.TERMS} element={<TermsScreen />} />
       <Route path={ROUTES.PRIVACY_POLICY} element={<PrivacyPolicyScreen />} />
+      <Route path={ROUTES.DOWNLOAD} element={<DownloadScreen />} />
 
       <Route
         path="/app/*"

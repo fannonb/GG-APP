@@ -11,6 +11,7 @@ export const ROUTES = {
   RESET_PASSWORD:  '/reset-password',
   TERMS:           '/terms',
   PRIVACY_POLICY:  '/privacy',
+  DOWNLOAD:        '/download',
 
   // Patient portal
   DASHBOARD:    '/app/dashboard',
