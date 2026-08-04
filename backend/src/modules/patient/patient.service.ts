@@ -27,10 +27,11 @@ import * as bcrypt from 'bcryptjs'
 import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { ReferenceService } from '../../common/services/reference.service'
-import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
+import { parseInvoiceAttachmentMetadata, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { RedisService } from '../../redis/redis.service'
 import { ProvidersService } from '../providers/providers.service'
+import { StorageService } from '../../common/services/storage.service'
 import type { AuthorizeInvoiceDto } from './dto/authorize-invoice.dto'
 import type { CancelAppointmentDto } from './dto/cancel-appointment.dto'
 import type { CreateAppointmentDto } from './dto/create-appointment.dto'
@@ -61,6 +62,7 @@ export class PatientService {
   private readonly redis: RedisService
   private readonly providersService: ProvidersService
   private readonly referenceService: ReferenceService
+  private readonly storage: StorageService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -68,12 +70,30 @@ export class PatientService {
     @Inject(RedisService) redis: RedisService,
     @Inject(ProvidersService) providersService: ProvidersService,
     @Inject(ReferenceService) referenceService: ReferenceService,
+    @Inject(StorageService) storage: StorageService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
     this.redis = redis
     this.providersService = providersService
     this.referenceService = referenceService
+    this.storage = storage
+  }
+
+  private async resolvePrescriptionAttachment(raw: Prisma.JsonValue | null | undefined) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+      return raw
+    }
+    const metadata = raw as { storageKey?: string; dataUrl?: string; originalName?: string }
+    if (!metadata.storageKey && !metadata.dataUrl) {
+      return raw
+    }
+    const resolved = await this.storage.resolveAttachmentUrl(
+      metadata,
+      metadata.originalName ?? 'prescription.pdf',
+    )
+    if (!resolved) return raw
+    return { ...metadata, url: resolved.url }
   }
 
   async getProfile(userId: string) {
@@ -1210,7 +1230,10 @@ export class PatientService {
       throw new NotFoundException('Invoice not found')
     }
 
-    const attachment = getInvoiceAttachmentDataUrl(invoice.attachment, invoice.attachmentMetadata)
+    const attachment = await this.storage.resolveAttachmentUrl(
+      parseInvoiceAttachmentMetadata(invoice.attachmentMetadata),
+      invoice.attachment ?? 'invoice.pdf',
+    )
     if (!attachment) {
       throw new NotFoundException('Invoice document is not available')
     }
@@ -2296,7 +2319,19 @@ export class PatientService {
           fulfillmentMode,
           deliveryAddress: dto.deliveryAddress?.trim() || null,
           patientNotes: dto.patientNotes?.trim() || null,
-          prescriptionAttachment: dto.attachment as unknown as Prisma.InputJsonValue,
+          prescriptionAttachment: (this.storage.isEnabled
+            ? {
+                ...(await this.storage.storeAttachment({
+                  dataUrl: dto.attachment.dataUrl,
+                  originalName: dto.attachment.name,
+                  mimeType: dto.attachment.mimeType,
+                  sizeBytes: dto.attachment.sizeBytes,
+                  displaySize: dto.attachment.size,
+                  prefix: 'prescriptions',
+                })),
+                type: dto.attachment.type,
+              }
+            : dto.attachment) as unknown as Prisma.InputJsonValue,
           forSelf: dto.forSelf,
         },
         include: {
@@ -2355,7 +2390,7 @@ export class PatientService {
       orderBy: { createdAt: 'desc' },
     })
 
-    return requests.map(request => this.mapPrescriptionRequest(request))
+    return Promise.all(requests.map(request => this.mapPrescriptionRequest(request)))
   }
 
   async markPrescriptionQuoteReviewed(userId: string, requestReference: string) {
@@ -2499,7 +2534,7 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
-  private mapPrescriptionRequest(
+  private async mapPrescriptionRequest(
     request: {
       id: string
       reference: string
@@ -2536,7 +2571,7 @@ export class PatientService {
       deliveryAddress: request.deliveryAddress ?? undefined,
       patientNotes: request.patientNotes ?? undefined,
       pharmacyNotes: request.pharmacyNotes ?? undefined,
-      attachment: request.prescriptionAttachment,
+      attachment: await this.resolvePrescriptionAttachment(request.prescriptionAttachment),
       quotedItems: request.quotedItems ?? undefined,
       quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
       deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,

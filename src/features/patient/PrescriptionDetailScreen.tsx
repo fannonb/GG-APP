@@ -103,7 +103,7 @@ export function PrescriptionDetailScreen() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [quoteAccepted, setQuoteAccepted] = useState(false)
 
-  const previewUrl = useAttachmentPreviewUrl(request?.attachment.dataUrl ?? '')
+  const previewUrl = useAttachmentPreviewUrl(request?.attachment.url ?? request?.attachment.dataUrl ?? '')
 
   useEffect(() => {
     if (!request?.id) return

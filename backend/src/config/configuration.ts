@@ -31,6 +31,17 @@ export function configuration() {
     security: {
       fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY ?? '',
     },
+    storage: {
+      // S3-compatible object storage (Railway Buckets / R2 / AWS S3 / B2).
+      // Leave STORAGE_ENDPOINT empty to keep legacy data-URL embedding (dev only).
+      endpoint: process.env.STORAGE_ENDPOINT ?? '',
+      region: process.env.STORAGE_REGION ?? 'us-east-1',
+      accessKeyId: process.env.STORAGE_ACCESS_KEY_ID ?? '',
+      secretAccessKey: process.env.STORAGE_SECRET_ACCESS_KEY ?? '',
+      bucket: process.env.STORAGE_BUCKET ?? '',
+      publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
+      presignExpiresSeconds: process.env.STORAGE_PRESIGN_EXPIRES ?? '900',
+    },
     oauth: {
       googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
