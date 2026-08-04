@@ -13,6 +13,7 @@ export class RedisService implements OnModuleDestroy {
   private client: Redis | null = null
   private readonly memoryStore = new Map<string, MemoryEntry>()
   private mode: 'redis' | 'memory' = 'memory'
+  private connectPromise: Promise<void> | null = null
 
   constructor(@Inject(ConfigService) configService: ConfigService) {
     const url = configService.get<string>('redis.url')
@@ -34,7 +35,9 @@ export class RedisService implements OnModuleDestroy {
     })
 
     this.client = client
-    void this.ensureRedisConnection()
+    // Track the in-flight connection so callers (e.g. the production
+    // fail-fast in main.ts) can await it instead of racing it.
+    this.connectPromise = this.ensureRedisConnection()
   }
 
   get raw() {
@@ -98,7 +101,7 @@ export class RedisService implements OnModuleDestroy {
   }
 
   private async ensureRedisConnection() {
-    if (!this.client || this.mode === 'redis') {
+    if (!this.client) {
       return
     }
 
@@ -106,8 +109,10 @@ export class RedisService implements OnModuleDestroy {
       await this.client.connect()
       this.mode = 'redis'
       this.logger.log('Connected to Redis.')
-    } catch {
-      this.logger.warn('Redis unavailable; using in-memory fallback for local development.')
+    } catch (error) {
+      this.logger.warn(
+        `Redis connection failed (${(error as Error).message}); using in-memory fallback for local development.`,
+      )
       this.client.disconnect()
       this.client = null
       this.mode = 'memory'
@@ -115,6 +120,17 @@ export class RedisService implements OnModuleDestroy {
   }
 
   private async canUseRedis() {
+    if (!this.client && this.mode === 'memory') {
+      return false
+    }
+
+    // Await the initial connection attempt so a slow-but-successful connect
+    // is not mistaken for an outage (previous behavior raced the fail-fast).
+    if (this.connectPromise) {
+      await this.connectPromise
+      this.connectPromise = null
+    }
+
     if (!this.client || this.mode === 'memory') {
       return false
     }
@@ -127,8 +143,8 @@ export class RedisService implements OnModuleDestroy {
       await this.client.connect()
       this.mode = 'redis'
       return true
-    } catch {
-      this.logger.warn('Redis unavailable; continuing with in-memory fallback.')
+    } catch (error) {
+      this.logger.warn(`Redis unavailable (${(error as Error).message}); continuing with in-memory fallback.`)
       this.client.disconnect()
       this.client = null
       this.mode = 'memory'
