@@ -6,8 +6,7 @@ export class PushSubscribeDto {
   endpoint?: string
 
   @IsOptional()
-  @IsString()
-  expirationTime?: string | null
+  expirationTime?: number | null
 
   @IsOptional()
   @IsObject()

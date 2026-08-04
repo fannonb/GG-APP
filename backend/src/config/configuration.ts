@@ -54,6 +54,7 @@ export function configuration() {
       vapidSubject: process.env.VAPID_SUBJECT ?? '',
       emailFrom: process.env.EMAIL_FROM ?? '',
       brevoApiKey: process.env.BREVO_API_KEY ?? '',
+      expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? '',
     },
   }
 }

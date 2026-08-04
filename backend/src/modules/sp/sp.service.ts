@@ -44,6 +44,7 @@ import { computeSpOnboardingProgress } from '../../common/utils/sp-onboarding.ut
 import { parseInvoiceAttachmentMetadata, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
 import { ReferenceService } from '../../common/services/reference.service'
 import { StorageService } from '../../common/services/storage.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 
 @Injectable()
@@ -53,6 +54,7 @@ export class SpService {
   private readonly referenceService: ReferenceService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly storage: StorageService
+  private readonly notifications: NotificationsService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -60,12 +62,14 @@ export class SpService {
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(StorageService) storage: StorageService,
+    @Inject(NotificationsService) notifications: NotificationsService,
   ) {
     this.prisma = prisma
     this.redis = redis
     this.referenceService = referenceService
     this.fieldEncryption = fieldEncryption
     this.storage = storage
+    this.notifications = notifications
   }
 
   private async resolvePrescriptionAttachment(raw: Prisma.JsonValue | null | undefined) {
@@ -240,6 +244,12 @@ export class SpService {
         body: `${provider.name} sent pricing for your prescription. Review and accept or decline the quote to continue.`,
         screen: `/app/prescriptions/${updated.reference}`,
       },
+    })
+
+    await this.notifications.sendPushToUser(request.patientUserId, {
+      title: 'Quote Ready',
+      body: `${provider.name} sent pricing for your prescription. Review and accept or decline the quote to continue.`,
+      data: { screen: `/app/prescriptions/${updated.reference}` },
     })
 
     return this.mapPrescriptionRequest(updated)
@@ -1131,6 +1141,12 @@ export class SpService {
         },
       })
 
+      await this.notifications.sendPushToUser(appointment.patientUserId, {
+        title: 'New Invoice Available',
+        body: `A new invoice from ${provider.name} is awaiting your authorization.`,
+        data: { screen: `/app/invoices/${createdInvoice.reference}` },
+      })
+
       await tx.auditLog.create({
         data: {
           actorUserId: userId,
@@ -1294,6 +1310,12 @@ export class SpService {
           body: `Your medication invoice from ${provider.name} is ready. Review and ${request.fulfillmentMode === 'DELIVERY' ? 'approve delivery' : 'approve preparation'} to proceed.`,
           screen: `/app/invoices/${createdInvoice.reference}`,
         },
+      })
+
+      await this.notifications.sendPushToUser(request.patientUserId, {
+        title: 'Invoice Ready for Payment',
+        body: `Your medication invoice from ${provider.name} is ready. Review and ${request.fulfillmentMode === 'DELIVERY' ? 'approve delivery' : 'approve preparation'} to proceed.`,
+        data: { screen: `/app/invoices/${createdInvoice.reference}` },
       })
 
       await tx.auditLog.create({

@@ -32,6 +32,7 @@ import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { RedisService } from '../../redis/redis.service'
 import { ProvidersService } from '../providers/providers.service'
 import { StorageService } from '../../common/services/storage.service'
+import { NotificationsService } from '../notifications/notifications.service'
 import type { AuthorizeInvoiceDto } from './dto/authorize-invoice.dto'
 import type { CancelAppointmentDto } from './dto/cancel-appointment.dto'
 import type { CreateAppointmentDto } from './dto/create-appointment.dto'
@@ -63,6 +64,7 @@ export class PatientService {
   private readonly providersService: ProvidersService
   private readonly referenceService: ReferenceService
   private readonly storage: StorageService
+  private readonly notifications: NotificationsService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -71,6 +73,7 @@ export class PatientService {
     @Inject(ProvidersService) providersService: ProvidersService,
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(StorageService) storage: StorageService,
+    @Inject(NotificationsService) notifications: NotificationsService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
@@ -78,6 +81,7 @@ export class PatientService {
     this.providersService = providersService
     this.referenceService = referenceService
     this.storage = storage
+    this.notifications = notifications
   }
 
   private async resolvePrescriptionAttachment(raw: Prisma.JsonValue | null | undefined) {
@@ -858,6 +862,13 @@ export class PatientService {
             : `${patientName} sent a new appointment request.`,
           screen: '/sp/appointments',
         },
+      })
+      await this.notifications.sendPushToUser(provider.authUserId, {
+        title: 'New Appointment Request',
+        body: attachments.length > 0
+          ? `${patientName} sent a new appointment request with ${attachments.length} attachment${attachments.length === 1 ? '' : 's'}.`
+          : `${patientName} sent a new appointment request.`,
+        data: { screen: '/sp/appointments' },
       })
     }
 
