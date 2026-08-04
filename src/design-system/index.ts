@@ -1,6 +1,7 @@
 export * from './tokens'
 export * from './GGButton'
 export * from './GGInput'
+export * from './GGDatePicker'
 export * from './GGSelect'
 export * from './GGTextarea'
 export * from './GGCard'

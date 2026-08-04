@@ -1,12 +1,14 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
+import { isMockApi } from '@/api/config'
 import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
+import { usePatientTransactions } from '@/hooks/api'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate } from '@/utils/format'
-import { MOCK_TRANSACTIONS, MOCK_USER } from '@/mock/patient.mock'
 import { getCountryByCode } from '@/config/countries'
 import { useAuthStore } from '@/store/auth.store'
+import { useUserStore } from '@/store/user.store'
 
 const TABLE_COLUMNS = [
   { header: 'Reference', width: '14%' },
@@ -19,23 +21,50 @@ const TABLE_COLUMNS = [
 export function TransactionHistoryScreen() {
   const { isMobile } = useResponsive()
   const { userMode } = useAuthStore()
+  const user = useUserStore(s => s.user)
+  const { data: liveTransactions = [] } = usePatientTransactions()
   const [filter, setFilter] = useState('all')
-  const isNew = userMode === 'new'
-  const currency = getCountryByCode(MOCK_USER.countryCode)?.currencySymbol ?? 'Z$'
+  const isNew = isMockApi && userMode === 'new'
+  const currency = getCountryByCode(user.countryCode)?.currencySymbol ?? 'Z$'
 
-  const transactions = isNew ? [] : MOCK_TRANSACTIONS
-  const total = transactions.reduce((s, t) => s + t.amount, 0)
+  const transactions = isNew ? [] : liveTransactions
+  const spendableTransactions = transactions.filter(txn => txn.status !== 'failed')
+  const total = spendableTransactions.reduce((s, t) => s + t.amount, 0)
+  const now = new Date()
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const filteredTransactions = useMemo(() => {
+    if (filter === 'this-month') {
+      return transactions.filter(txn => {
+        const date = new Date(txn.date)
+        return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+      })
+    }
+
+    if (filter === 'last-month') {
+      return transactions.filter(txn => {
+        const date = new Date(txn.date)
+        return date.getFullYear() === lastMonth.getFullYear() && date.getMonth() === lastMonth.getMonth()
+      })
+    }
+
+    return transactions
+  }, [filter, lastMonth, now, transactions])
+  const thisMonthTotal = spendableTransactions
+    .filter(txn => {
+      const date = new Date(txn.date)
+      return date.getFullYear() === now.getFullYear() && date.getMonth() === now.getMonth()
+    })
+    .reduce((sum, txn) => sum + txn.amount, 0)
 
   return (
     <AppLayout title="Transaction History" subtitle="All balance-funded healthcare payments" notifCount={1}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {/* Summary cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
           {[
-            { label: 'Total Spent',   val: formatCurrency(total, currency),        color: C.text },
-            { label: 'Transactions',  val: String(transactions.length),            color: C.text },
-            { label: 'This Month',    val: formatCurrency(total * 0.6, currency),  color: C.blue500 },
+            { label: 'Total Spent', val: formatCurrency(total, currency), color: C.text },
+            { label: 'This Month', val: formatCurrency(thisMonthTotal, currency), color: C.blue500 },
           ].map(s => (
             <GGCard key={s.label} padding="18px 22px">
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>{s.label}</div>
@@ -82,14 +111,18 @@ export function TransactionHistoryScreen() {
                 </tr>
               </thead>
               <tbody>
-                {transactions.length === 0 ? (
+                {filteredTransactions.length === 0 ? (
                   <tr>
                     <td colSpan={TABLE_COLUMNS.length} style={{ padding: '48px 16px', textAlign: 'center' }}>
                       <div style={{ fontSize: '14px', fontWeight: 600, color: C.textSub, marginBottom: '6px' }}>No transactions yet</div>
-                      <div style={{ fontSize: '12px', color: C.textLight }}>Payments made through GG'APP will appear here.</div>
+                      <div style={{ fontSize: '12px', color: C.textLight }}>
+                        {transactions.length === 0
+                          ? 'Payments made through GG\'APP will appear here.'
+                          : 'No transactions found for this filter.'}
+                      </div>
                     </td>
                   </tr>
-                ) : transactions.map(txn => (
+                ) : filteredTransactions.map(txn => (
                   <tr key={txn.id} style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = C.bg)}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -98,7 +131,9 @@ export function TransactionHistoryScreen() {
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: C.text, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.provider}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: C.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{txn.service}</td>
                     <td style={{ padding: '12px 16px', fontSize: '13px', color: C.textSub, whiteSpace: 'nowrap' }}>{formatDate(txn.date)}</td>
-                    <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 800, color: C.text, whiteSpace: 'nowrap', textAlign: 'right' }}>-{formatCurrency(txn.amount, currency)}</td>
+                    <td style={{ padding: '12px 16px', fontSize: '14px', fontWeight: 800, color: C.text, whiteSpace: 'nowrap', textAlign: 'right' }}>
+                      -{formatCurrency(txn.amount, currency)}
+                    </td>
                   </tr>
                 ))}
               </tbody>

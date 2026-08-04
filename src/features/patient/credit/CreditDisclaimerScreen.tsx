@@ -8,7 +8,8 @@ const DISCLOSURES = [
   { title: 'Third-Party Finance Partner', body: "Credit is processed and held by our authorised finance partner. GG'APP acts as a facilitator and is not the lender." },
   { title: 'Credit Check Consent', body: 'By proceeding, you consent to a credit bureau enquiry. This may temporarily affect your credit score.' },
   { title: 'Healthcare Use Only', body: "Approved credit can only be used to pay GG'APP-verified service providers. Funds cannot be transferred to a personal bank account." },
-  { title: 'Credit Obligation', body: 'You are responsible for settling the full approved amount plus applicable interest as per the credit agreement issued by the finance partner upon approval.' },
+  { title: 'Platform Admin Fee', body: "A platform administration fee of 2.5% of the approved credit amount is deducted and remitted to GG'APP upon disbursement. This fee covers platform facilitation, provider verification, and transaction processing. The remaining balance is loaded to your wallet for healthcare use." },
+  { title: 'Credit Obligation', body: 'You are responsible for settling the full approved amount plus applicable interest as per the credit agreement issued by the finance partner upon approval. The admin fee is included in the amount you repay to the finance partner.' },
   { title: 'Eligibility', body: "Approval is subject to the finance partner's assessment criteria. GG'APP does not guarantee credit approval." },
 ]
 
@@ -42,7 +43,7 @@ export function CreditDisclaimerScreen() {
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer', marginBottom: '24px', padding: '14px 16px', background: agreed ? C.successBg : C.bg, borderRadius: radius.sm, border: `1.5px solid ${agreed ? C.success : C.border}`, transition: 'all 0.2s ease' }}>
             <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)} style={{ accentColor: C.success, width: 16, height: 16, marginTop: '1px', flexShrink: 0 }} />
             <span style={{ fontSize: '13px', color: C.text, lineHeight: 1.6, fontFamily: font.family }}>
-              I have read and understood the above disclosure. I consent to a credit bureau check and agree to the{' '}
+              I have read and understood the above disclosure, including the platform admin fee. I consent to a credit bureau check and agree to the{' '}
               <span style={{ color: C.blue500, fontWeight: 600 }}>Finance Partner Terms</span>.
             </span>
           </label>

@@ -38,7 +38,7 @@ const STEPS: Step[] = [
       { icon: '🏥', title: 'Verified Providers', desc: 'Browse hospitals, clinics, pharmacies, labs and specialists — all KYC-verified.' },
       { icon: '💳', title: 'Healthcare Credit', desc: 'Apply for a credit facility and get care today. Repay in monthly instalments.' },
       { icon: '👨‍👩‍👧', title: 'Beneficiaries', desc: 'Cover your family too — add dependants and pay for their care from your account.' },
-      { icon: '🔒', title: 'Triple-PIN Security', desc: 'Every payment needs 3 PINs — your money stays safe from unauthorised charges.' },
+      { icon: '🔒', title: 'Triple PIN Confirmation', desc: 'Every payment needs your PIN entered 3 times — your money stays safe from unauthorised charges.' },
     ],
   },
   {

@@ -34,7 +34,6 @@ Public routes: `/` (splash), `/login`, `/register`, `/verify`, `/onboarding`.
 
 - **Screen Options panel** — floating gear icon (bottom-right) switches between Patient / Provider / Admin portals and toggles new vs existing patient dashboard views.
 - **Auth is mocked** — `auth.store` defaults to logged-in patient; login forms simulate a delay then navigate.
-- **Demo PIN** — use `1234` on the triple-PIN payment authorization screen.
 
 ## Project structure
 
@@ -58,8 +57,26 @@ Route paths are centralized in `src/router/routes.ts`. Import `ROUTES`, `route`,
 - React 19 + TypeScript
 - Vite 8
 - React Router 7
-- Zustand (state)
+- TanStack Query v5 (API data fetching & caching)
+- Zustand (global UI / demo state)
+- Axios (HTTP client with JWT interceptors)
+- React Hook Form + Zod (form validation)
+- date-fns (date utilities)
+- PWA — web manifest + service worker (`public/sw.js`)
 - Inline styles with shared tokens (`src/design-system/tokens.ts`)
+
+### API integration
+
+By default the app runs in **mock API mode** (`VITE_USE_MOCK_API=true`). Set `VITE_USE_MOCK_API=false` and configure `VITE_API_BASE_URL` in `.env` when the NestJS backend is available. See `.env.example`.
+
+```
+src/
+├── api/            # Axios client, services, query keys, types
+├── hooks/api/      # TanStack Query hooks & auth mutations
+├── providers/      # QueryClientProvider + session bootstrap
+├── schemas/        # Zod validation schemas
+├── services/       # PWA registration, Web Push helpers
+```
 
 ## Assets
 
@@ -71,4 +88,4 @@ node scripts/extract-logo.mjs
 
 ## Status
 
-This is a **UI prototype**. There is no API layer, real authentication, or test suite yet. Data comes from files in `src/mock/`.
+This is a **UI prototype with production-ready frontend integration layers**. Mock data is used by default; flip `VITE_USE_MOCK_API=false` to connect to the real API. No automated test suite yet.

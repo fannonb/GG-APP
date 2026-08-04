@@ -1,156 +1,734 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { route } from '@/router/routes'
 import { GGCard, GGButton, GGBadge } from '@/design-system'
-import { C, font, radius, shadow } from '@/design-system/tokens'
+import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
-import { formatCurrency, formatDate, formatTime12h } from '@/utils/format'
-import { MOCK_USER, MOCK_TRANSACTIONS, MOCK_NEWS, MOCK_APPOINTMENTS } from '@/mock/patient.mock'
+import { formatCurrency, formatTime12h } from '@/utils/format'
+import { usePatientDashboard, usePatientInvoices, usePatientPrescriptionRequests, usePatientProfile, useCreditStatus, useHealthNews } from '@/hooks/api'
+import { useMarkPatientNotificationReadMutation } from '@/hooks/api/usePatientMutations'
+import { useNotificationsStore } from '@/store/notifications.store'
 import { useAuthStore } from '@/store/auth.store'
+import { useUserStore } from '@/store/user.store'
+import { isMockApi } from '@/api/config'
 import { getCountryByCode } from '@/config/countries'
 import { FlagImg } from '@/components/FlagImg'
 import { NewUserDashboardScreen } from './NewUserDashboardScreen'
-import type { NewsItem } from '@/types/user.types'
+import { DashboardAppointmentsCard } from '@/features/patient/components/DashboardAppointmentsCard'
+import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import { AdBannerStrip } from '@/components/AdBanner'
+import { HealthNewsSection } from '@/components/HealthNewsSection'
+import { useAdsStore } from '@/store/ads.store'
+import { EMPTY_APPOINTMENTS, EMPTY_NEWS, EMPTY_TRANSACTIONS, getPatientFirstName, isLivePatientAccountNew } from '@/features/patient/patientAccount'
+import { getFinancePartnerSummary } from '@/features/patient/credit/credit.constants'
+import { ROUTES } from '@/router/routes'
+import { CreditLowBalancePrompt } from '@/features/patient/credit/components/CreditLowBalancePrompt'
+import { isCreditRunningLow } from '@/utils/credit-threshold'
+import { CreditApprovedBanner } from '@/components/CreditApprovedBanner'
+import {
+  getUnreadCreditApprovalItems,
+  getUnreadConfirmedAppointmentItems,
+  getUnreadProviderCancelledAppointmentItems,
+} from '@/utils/credit-notifications'
+import { PrescriptionStatusBanner } from '@/components/PrescriptionStatusBanner'
+import { buildPrescriptionQuoteBannerItems, getUnreadPrescriptionReadyItems, getUnreadPrescriptionInvoiceItems, isSyntheticPrescriptionBannerId } from '@/utils/prescription-notifications'
+import { AppointmentCancelledBanner } from '@/components/AppointmentCancelledBanner'
+import { LedgerAccessBanner } from '@/components/LedgerAccessBanner'
+import { useLedgerStatus } from '@/hooks/api'
+
+const SEEN_CREDIT_APPROVALS_KEY = 'ggapp.seenCreditApprovalNotifications'
+const SEEN_APPT_CONFIRMED_KEY = 'ggapp.seenConfirmedAppointmentNotifications'
+const SEEN_PRESCRIPTION_QUOTE_KEY = 'ggapp.seenPrescriptionQuoteNotifications'
+const SEEN_PRESCRIPTION_READY_KEY = 'ggapp.seenPrescriptionReadyNotifications'
+const SEEN_PRESCRIPTION_INVOICE_KEY = 'ggapp.seenPrescriptionInvoiceNotifications'
+const SEEN_APPT_CANCELLED_KEY = 'ggapp.seenProviderCancelledAppointmentNotifications'
+const DISMISSED_LEDGER_ACCESS_KEY = 'ggapp.dismissedLedgerAccessBanner'
+
+function loadSeenIds(key: string): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed.filter((id: unknown) => typeof id === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenIds(key: string, ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(key, JSON.stringify(Array.from(ids)))
+}
+
+function loadSeenCreditApprovals(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(SEEN_CREDIT_APPROVALS_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed.filter(id => typeof id === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenCreditApprovals(ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SEEN_CREDIT_APPROVALS_KEY, JSON.stringify(Array.from(ids)))
+}
+
+function loadSeenApptConfirmed(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(SEEN_APPT_CONFIRMED_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed.filter((id: unknown) => typeof id === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenApptConfirmed(ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SEEN_APPT_CONFIRMED_KEY, JSON.stringify(Array.from(ids)))
+}
+
+function loadSeenPrescriptionQuotes(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(SEEN_PRESCRIPTION_QUOTE_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed.filter((id: unknown) => typeof id === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenPrescriptionQuotes(ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SEEN_PRESCRIPTION_QUOTE_KEY, JSON.stringify(Array.from(ids)))
+}
+
+function loadSeenPrescriptionReady(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = window.localStorage.getItem(SEEN_PRESCRIPTION_READY_KEY)
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? new Set(parsed.filter((id: unknown) => typeof id === 'string')) : new Set()
+  } catch {
+    return new Set()
+  }
+}
+
+function saveSeenPrescriptionReady(ids: Set<string>) {
+  if (typeof window === 'undefined') return
+  window.localStorage.setItem(SEEN_PRESCRIPTION_READY_KEY, JSON.stringify(Array.from(ids)))
+}
+
+function loadSeenPrescriptionInvoices(): Set<string> {
+  return loadSeenIds(SEEN_PRESCRIPTION_INVOICE_KEY)
+}
+
+function saveSeenPrescriptionInvoices(ids: Set<string>) {
+  saveSeenIds(SEEN_PRESCRIPTION_INVOICE_KEY, ids)
+}
 
 const categories = [
-  { id: 'pharmacy',   label: 'Pharmacy',   nearby: 8  },
-  { id: 'laboratory', label: 'Laboratory', nearby: 5  },
-  { id: 'doctor',     label: 'Doctor',     nearby: 12 },
-  { id: 'radiology',  label: 'Radiology',  nearby: 3  },
-  { id: 'hospital',   label: 'Hospital',   nearby: 4  },
-  { id: 'clinic',     label: 'Clinic',     nearby: 7  },
-  { id: 'global_specialists', label: 'Global Specialists', nearby: 0, isComingSoon: true },
+  { id: 'pharmacy',           label: 'Pharmacy'           },
+  { id: 'laboratory',         label: 'Laboratory'         },
+  { id: 'doctor',             label: 'Doctor'             },
+  { id: 'radiology',          label: 'Radiology'          },
+  { id: 'hospital',           label: 'Hospital'           },
+  { id: 'clinic',             label: 'Clinic'             },
+  { id: 'global_specialists', label: 'Global Specialists', isComingSoon: true },
 ]
 
 const catIcons: Record<string, React.ReactNode> = {
-  pharmacy:   <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="4" y="4" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="8" x2="13" y2="18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="8" y1="13" x2="18" y2="13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
-  laboratory: <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M10 4v9L5 20a2 2 0 001.8 2.9h12.4A2 2 0 0021 20l-5-7V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="10" y1="4" x2="16" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-  doctor:     <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="9" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M5 22c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="18" cy="18" r="3" fill="white" stroke="currentColor" strokeWidth="1.5"/><path d="M18 16.5v1.5h1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
-  radiology:  <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="8" stroke="currentColor" strokeWidth="1.5"/><path d="M13 8v5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="13" cy="13" r="1.5" fill="currentColor"/></svg>,
-  hospital:   <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><rect x="4" y="6" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M10 22V14h6v8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><line x1="13" y1="10" x2="13" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="11" y1="12" x2="15" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M4 12h18" stroke="currentColor" strokeWidth="1.5"/></svg>,
-  clinic:     <svg width="26" height="26" viewBox="0 0 26 26" fill="none"><path d="M13 4L5 9v13h5v-5h6v5h5V9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><line x1="13" y1="9" x2="13" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="10.5" y1="11.5" x2="15.5" y2="11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
-  global_specialists: <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="11" stroke="currentColor" strokeWidth="1.8"/><path d="M16 5a15 15 0 000 22M5 16h22M8 10a18 18 0 0016 0M8 22a18 18 0 0016 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
-}
-
-function NewsModal({ item, onClose }: { item: NewsItem; onClose: () => void }) {
-  const { isMobile } = useResponsive()
-  return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(8,21,40,0.6)', backdropFilter: 'blur(4px)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: isMobile ? '16px' : '32px' }}>
-      <div
-        onClick={e => e.stopPropagation()}
-        style={{ background: '#fff', borderRadius: '20px', width: '100%', maxWidth: 600, maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 24px 64px rgba(8,21,40,0.25)' }}>
-        {/* Modal header */}
-        <div style={{ background: C.navy800, padding: '24px 28px', position: 'relative', overflow: 'hidden' }}>
-          <div style={{ position: 'absolute', right: -30, top: -30, width: 160, height: 160, borderRadius: '50%', background: 'rgba(74,173,223,0.06)', pointerEvents: 'none' }} />
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px', position: 'relative' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: '20px', background: 'rgba(74,173,223,0.15)', border: '1px solid rgba(74,173,223,0.4)', marginBottom: '12px' }}>
-              <span style={{ fontSize: '10px', fontWeight: 700, color: C.blue500, letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: font.family }}>{item.tag}</span>
-            </div>
-            <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 2l10 10M12 2L2 12" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/></svg>
-            </button>
-          </div>
-          <div style={{ fontSize: isMobile ? '17px' : '20px', fontWeight: 800, color: '#fff', lineHeight: 1.35, letterSpacing: '-0.03em', fontFamily: font.family }}>{item.title}</div>
-        </div>
-
-        {/* Source bar */}
-        <div style={{ padding: '14px 28px', background: C.bg, borderBottom: `1px solid ${C.border}`, display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <div style={{ width: 32, height: 32, borderRadius: '8px', background: C.navy800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5.5" stroke={C.blue500} strokeWidth="1.3"/><path d="M7 4v3.5l2 1.5" stroke={C.blue500} strokeWidth="1.3" strokeLinecap="round"/></svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '11px', color: C.textSub, fontFamily: font.family, marginBottom: '2px' }}>Source</div>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, fontFamily: font.family }}>{item.source}</div>
-            <div style={{ fontSize: '11px', color: C.textSub, fontFamily: font.family, marginTop: '1px' }}>{formatDate(item.date, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
-          </div>
-          {item.url && (
-            <a
-              href={item.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '7px 14px', borderRadius: '8px', background: C.navy800, border: 'none', color: '#fff', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: font.family, textDecoration: 'none', flexShrink: 0, transition: 'opacity 0.14s' }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
-            >
-              Visit Source
-              <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M1.5 9.5L9.5 1.5M9.5 1.5H4M9.5 1.5V7" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
-          )}
-        </div>
-
-        {/* Body */}
-        <div style={{ padding: '24px 28px', overflowY: 'auto', flex: 1 }}>
-          {item.body.split('\n\n').map((para, i) => (
-            <p key={i} style={{ fontSize: '14px', color: C.text, lineHeight: 1.75, marginBottom: i < item.body.split('\n\n').length - 1 ? '16px' : 0, fontFamily: font.family }}>{para}</p>
-          ))}
-        </div>
-
-        {/* Footer */}
-        <div style={{ padding: '16px 28px', borderTop: `1px solid ${C.border}`, display: 'flex', justifyContent: 'flex-end' }}>
-          <button onClick={onClose} style={{ padding: '9px 20px', borderRadius: radius.sm, background: C.navy800, border: 'none', color: '#fff', fontSize: '13px', fontWeight: 600, cursor: 'pointer', fontFamily: font.family }}>Close</button>
-        </div>
-      </div>
-    </div>
-  )
+  pharmacy:   <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect x="4" y="4" width="18" height="18" rx="4" stroke="currentColor" strokeWidth="1.5"/><line x1="13" y1="8" x2="13" y2="18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/><line x1="8" y1="13" x2="18" y2="13" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
+  laboratory: <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><path d="M10 4v9L5 20a2 2 0 001.8 2.9h12.4A2 2 0 0021 20l-5-7V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="10" y1="4" x2="16" y2="4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  doctor:     <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="9" r="4" stroke="currentColor" strokeWidth="1.5"/><path d="M5 22c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><circle cx="18" cy="18" r="3" fill="white" stroke="currentColor" strokeWidth="1.5"/><path d="M18 16.5v1.5h1.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>,
+  radiology:  <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><circle cx="13" cy="13" r="8" stroke="currentColor" strokeWidth="1.5"/><path d="M13 8v5l3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/><circle cx="13" cy="13" r="1.5" fill="currentColor"/></svg>,
+  hospital:   <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><rect x="4" y="6" width="18" height="16" rx="2" stroke="currentColor" strokeWidth="1.5"/><path d="M10 22V14h6v8" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><line x1="13" y1="10" x2="13" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="11" y1="12" x2="15" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M4 12h18" stroke="currentColor" strokeWidth="1.5"/></svg>,
+  clinic:     <svg width="24" height="24" viewBox="0 0 26 26" fill="none"><path d="M13 4L5 9v13h5v-5h6v5h5V9z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round"/><line x1="13" y1="9" x2="13" y2="14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><line x1="10.5" y1="11.5" x2="15.5" y2="11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>,
+  global_specialists: <svg width="24" height="24" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="11" stroke="currentColor" strokeWidth="1.8"/><path d="M16 5a15 15 0 000 22M5 16h22M8 10a18 18 0 0016 0M8 22a18 18 0 0016 0" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round"/></svg>,
 }
 
 export function DashboardScreen() {
   const { userMode } = useAuthStore()
+  const storedUser = useUserStore(s => s.user)
   const navigate = useNavigate()
-  const { isMobile, isTablet } = useResponsive()
-  const [selectedNews, setSelectedNews] = useState<NewsItem | null>(null)
+  const { isMobile } = useResponsive()
+  const { data, isLoading, isPending } = usePatientDashboard()
+  const { data: profile } = usePatientProfile()
+  const { data: invoices = [], isLoading: invoicesLoading } = usePatientInvoices()
+  const { data: prescriptionRequests = [] } = usePatientPrescriptionRequests()
+  const { data: creditStatusData } = useCreditStatus()
+  const { data: healthNews } = useHealthNews()
+  const { data: ledgerStatus } = useLedgerStatus()
+  const patientNotifs = useNotificationsStore(s => s.patientNotifs)
+  const markNotificationRead = useMarkPatientNotificationReadMutation()
+  const [seenCreditApprovalIds, setSeenCreditApprovalIds] = useState<Set<string>>(
+    () => loadSeenCreditApprovals(),
+  )
+  const [seenApptConfirmedIds, setSeenApptConfirmedIds] = useState<Set<string>>(
+    () => loadSeenApptConfirmed(),
+  )
+  const [seenPrescriptionQuoteIds, setSeenPrescriptionQuoteIds] = useState<Set<string>>(
+    () => loadSeenPrescriptionQuotes(),
+  )
+  const [seenPrescriptionReadyIds, setSeenPrescriptionReadyIds] = useState<Set<string>>(
+    () => loadSeenPrescriptionReady(),
+  )
+  const [seenPrescriptionInvoiceIds, setSeenPrescriptionInvoiceIds] = useState<Set<string>>(
+    () => loadSeenPrescriptionInvoices(),
+  )
+  const [seenApptCancelledIds, setSeenApptCancelledIds] = useState<Set<string>>(
+    () => loadSeenIds(SEEN_APPT_CANCELLED_KEY),
+  )
+  const [dismissedLedgerFingerprint, setDismissedLedgerFingerprint] = useState<string>(() => {
+    if (typeof window === 'undefined') return ''
+    return window.sessionStorage.getItem(DISMISSED_LEDGER_ACCESS_KEY) ?? ''
+  })
+  const unreadNotifCount = patientNotifs.filter(n => !n.read).length
 
-  if (userMode === 'new') return <NewUserDashboardScreen />
+  // Remount the banner strip every time the admin saves — version increments on every updateBanner call.
+  const adVersion = useAdsStore(s => s.version)
 
-  const u = MOCK_USER
+  const dashboardLoading = (isLoading || isPending) && !data
+  const accountContextLoading = dashboardLoading || invoicesLoading
+
+  if (accountContextLoading) {
+    return (
+      <AppLayout title="Dashboard" subtitle="Your healthcare overview" notifCount={unreadNotifCount}>
+        <GGCard padding="24px">
+          <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
+            Loading dashboard...
+          </div>
+        </GGCard>
+      </AppLayout>
+    )
+  }
+
+  const dashboard = data ?? {
+    user: profile?.user ?? storedUser,
+    transactions: EMPTY_TRANSACTIONS,
+    appointments: EMPTY_APPOINTMENTS,
+    news: EMPTY_NEWS,
+  }
+  const u = dashboard.user
+  const transactions = dashboard.transactions
+  const appointments = dashboard.appointments.filter(
+    appointment => {
+      const status = getAppointmentDisplayStatus(appointment)
+      return status !== 'completed' && status !== 'cancelled'
+    },
+  )
   const country = getCountryByCode(u.countryCode)
+  const isNewAccount =
+    (isMockApi && userMode === 'new') ||
+    isLivePatientAccountNew({
+      user: u,
+      transactions,
+      appointments,
+      invoiceCount: invoices.length,
+    })
+
+  if (isNewAccount) {
+    return <NewUserDashboardScreen user={u} />
+  }
+
   const currency = country?.currencySymbol ?? 'Z$'
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  const spentThisMonth = MOCK_TRANSACTIONS
-    .filter(t => new Date(t.date).getMonth() === new Date().getMonth())
-    .reduce((s, t) => s + t.amount, 0)
+  const spentThisMonth = transactions
+    .filter(t => t.status !== 'failed' && new Date(t.date).getMonth() === new Date().getMonth())
+    .reduce((sum, t) => sum + t.amount, 0)
+  const spentThisMonthCount = transactions.filter(
+    t => t.status !== 'failed' && new Date(t.date).getMonth() === new Date().getMonth(),
+  ).length
+  const rescheduledAppointment = appointments.find(
+    a => getAppointmentDisplayStatus(a) === 'pending' && !!a.rescheduledAt,
+  )
+  const pendingAppointment = appointments.find(
+    a => getAppointmentDisplayStatus(a) === 'pending' && !a.rescheduledAt,
+  )
+  const pendingInvoices = invoices.filter(inv => {
+    if (inv.status !== 'pending_auth') return false
+    // Prescription invoices wait until the patient has reviewed the pharmacy quote.
+    if (inv.isPrescription && !inv.prescriptionQuoteReviewed) return false
+    return true
+  })
+  const pendingInvoice = pendingInvoices[0]
+  const pendingInvoiceCount = pendingInvoices.length
+  const pendingAppointmentDate = pendingAppointment
+    ? new Date(pendingAppointment.date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : null
+  const rescheduledAppointmentDate = rescheduledAppointment
+    ? new Date(rescheduledAppointment.date).toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      })
+    : null
+  const creditUnderReview = u.creditStatus === 'pending'
+  const pendingIncrease = creditUnderReview && creditStatusData?.application?.type === 'increase'
+  const creditPartnerName = getFinancePartnerSummary(u.financePartnerId ?? 'moneymart')?.name ?? 'your finance partner'
+  const showLowBalancePrompt = u.creditStatus === 'approved'
+    && !creditUnderReview
+    && isCreditRunningLow(u.creditAvailable, u.countryCode)
+  const creditApprovalItems = getUnreadCreditApprovalItems(patientNotifs)
+    .filter(item => !seenCreditApprovalIds.has(item.id))
+  const approvedAmountLabel = (creditStatusData?.creditLimit ?? u.creditLimit) > 0
+    ? formatCurrency(creditStatusData?.creditLimit ?? u.creditLimit, currency)
+    : undefined
+
+  const activeLedgerGrants = ledgerStatus?.activeGrants ?? []
+  const ledgerAccessFingerprint = activeLedgerGrants.map(g => g.id).sort().join('|')
+  const showLedgerAccessBanner =
+    activeLedgerGrants.length > 0 && ledgerAccessFingerprint !== dismissedLedgerFingerprint
+
+  const markCreditApprovalSeen = (id: string) => {
+    setSeenCreditApprovalIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenCreditApprovals(next)
+      return next
+    })
+  }
+
+  const handleCreditApprovalDismiss = (items: { id: string }[]) => {
+    items.forEach(item => {
+      markCreditApprovalSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+  }
+
+  const handleCreditApprovalAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => {
+      markCreditApprovalSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+    navigate(items[0]?.screen ?? ROUTES.CREDIT_WALLET)
+  }
+
+  const apptConfirmedItems = getUnreadConfirmedAppointmentItems(patientNotifs)
+    .filter(item => !seenApptConfirmedIds.has(item.id))
+
+  const handleApptConfirmedView = (item: { id: string; screen?: string }) => {
+    setSeenApptConfirmedIds(prev => {
+      if (prev.has(item.id)) return prev
+      const next = new Set(prev)
+      next.add(item.id)
+      saveSeenApptConfirmed(next)
+      return next
+    })
+    markNotificationRead.mutate(item.id)
+    if (item.screen) {
+      navigate(item.screen)
+    } else {
+      navigate(ROUTES.APPOINTMENTS ?? '/app/appointments')
+    }
+  }
+
+  const handleApptConfirmedDismiss = (item: { id: string }) => {
+    setSeenApptConfirmedIds(prev => {
+      if (prev.has(item.id)) return prev
+      const next = new Set(prev)
+      next.add(item.id)
+      saveSeenApptConfirmed(next)
+      return next
+    })
+    markNotificationRead.mutate(item.id)
+  }
+
+  const prescriptionQuoteItems = buildPrescriptionQuoteBannerItems(
+    patientNotifs,
+    prescriptionRequests,
+    seenPrescriptionQuoteIds,
+  )
+
+  const markPrescriptionQuoteSeen = (id: string) => {
+    setSeenPrescriptionQuoteIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenPrescriptionQuotes(next)
+      return next
+    })
+  }
+
+  const handlePrescriptionQuoteDismiss = (items: { id: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionQuoteSeen(item.id)
+      if (!isSyntheticPrescriptionBannerId(item.id)) {
+        markNotificationRead.mutate(item.id)
+      }
+    })
+  }
+
+  const handlePrescriptionQuoteAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionQuoteSeen(item.id)
+      if (!isSyntheticPrescriptionBannerId(item.id)) {
+        markNotificationRead.mutate(item.id)
+      }
+    })
+    navigate(items[0]?.screen ?? ROUTES.PRESCRIPTION_REQUESTS)
+  }
+
+  const prescriptionReadyItems = getUnreadPrescriptionReadyItems(patientNotifs)
+    .filter(item => !seenPrescriptionReadyIds.has(item.id))
+
+  const markPrescriptionReadySeen = (id: string) => {
+    setSeenPrescriptionReadyIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenPrescriptionReady(next)
+      return next
+    })
+  }
+
+  const handlePrescriptionReadyDismiss = (items: { id: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionReadySeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+  }
+
+  const handlePrescriptionReadyAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionReadySeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+    navigate(items[0]?.screen ?? ROUTES.PRESCRIPTION_REQUESTS)
+  }
+
+  const prescriptionInvoiceItems = getUnreadPrescriptionInvoiceItems(patientNotifs)
+    .filter(item => !seenPrescriptionInvoiceIds.has(item.id))
+
+  const markPrescriptionInvoiceSeen = (id: string) => {
+    setSeenPrescriptionInvoiceIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenPrescriptionInvoices(next)
+      return next
+    })
+  }
+
+  const handlePrescriptionInvoiceDismiss = (items: { id: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionInvoiceSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+  }
+
+  const handlePrescriptionInvoiceAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => {
+      markPrescriptionInvoiceSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+    const target = items[0]?.screen
+    if (target?.startsWith('/app/invoices/')) {
+      const invoiceId = target.replace('/app/invoices/', '')
+      navigate(route.patientInvoice(invoiceId))
+      return
+    }
+    navigate(target ?? ROUTES.INVOICE_LIST)
+  }
+
+  const apptCancelledItems = getUnreadProviderCancelledAppointmentItems(patientNotifs)
+    .filter(item => !seenApptCancelledIds.has(item.id))
+
+  const markApptCancelledSeen = (id: string) => {
+    setSeenApptCancelledIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenIds(SEEN_APPT_CANCELLED_KEY, next)
+      return next
+    })
+  }
+
+  const handleApptCancelledDismiss = (items: { id: string }[]) => {
+    items.forEach(item => {
+      markApptCancelledSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+  }
+
+  const handleApptCancelledAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => {
+      markApptCancelledSeen(item.id)
+      markNotificationRead.mutate(item.id)
+    })
+    navigate(items[0]?.screen ?? ROUTES.FIND_SERVICE)
+  }
 
   return (
-    <AppLayout title="Dashboard" subtitle="Your healthcare overview" notifCount={3}>
-      {selectedNews && <NewsModal item={selectedNews} onClose={() => setSelectedNews(null)} />}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
+    <AppLayout title="Dashboard" subtitle="Your healthcare overview" notifCount={unreadNotifCount}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
 
         {/* Greeting */}
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', fontFamily: font.family }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em' }}>
-                Good morning, {u.name.split(' ')[0]}
+              <div style={{ fontSize: isMobile ? '20px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
+                Good morning, {getPatientFirstName(u)}
               </div>
               {country && (
                 <FlagImg
                   code={country.code}
-                  size={isMobile ? 18 : 20}
-                  style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.12)', borderRadius: '3px' }}
+                  size={isMobile ? 16 : 20}
+                  style={{ borderRadius: '3px' }}
                 />
               )}
             </div>
-            <div style={{ fontSize: '14px', color: C.textSub, marginTop: '4px' }}>{today}</div>
+            <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>{today}</div>
           </div>
-          <GGBadge type="success">Balance Active</GGBadge>
+          {creditUnderReview && (
+            <GGBadge type="warning">
+              {pendingIncrease ? 'Increase Under Review' : 'Credit Under Review'}
+            </GGBadge>
+          )}
         </div>
+
+        {creditUnderReview && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.blue100}, #EAF6FD)`, borderRadius: radius.lg, border: `1.5px solid rgba(56,182,255,0.28)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.blue500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="7.5" stroke="#fff" strokeWidth="1.5"/><path d="M10 5.5v4.5l3 2" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: C.navy800, fontFamily: font.family }}>
+                {pendingIncrease ? 'Limit increase under review' : 'Credit application under review'}
+              </div>
+              <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px', lineHeight: 1.5, fontFamily: font.family }}>
+                Your {pendingIncrease ? 'increase request was' : 'application was'} sent to the {creditPartnerName} team. We&apos;ll notify you as soon as a decision is made.
+              </div>
+            </div>
+            <GGButton variant="primary" size="sm" onClick={() => navigate(`${ROUTES.CREDIT_STATUS}${pendingIncrease ? '?type=increase' : ''}`)} style={{ flexShrink: 0, width: isMobile ? '100%' : 'auto' }}>
+              View Status
+            </GGButton>
+          </div>
+        )}
+
+        {creditApprovalItems.length > 0 && (
+          <CreditApprovedBanner
+            items={creditApprovalItems}
+            approvedAmountLabel={approvedAmountLabel}
+            onAction={handleCreditApprovalAction}
+            onDismiss={handleCreditApprovalDismiss}
+          />
+        )}
+
+        {showLedgerAccessBanner && (
+          <LedgerAccessBanner
+            grants={activeLedgerGrants}
+            onManage={() => navigate(ROUTES.LEDGER_ACCESS)}
+            onDismiss={() => {
+              setDismissedLedgerFingerprint(ledgerAccessFingerprint)
+              if (typeof window !== 'undefined') {
+                window.sessionStorage.setItem(DISMISSED_LEDGER_ACCESS_KEY, ledgerAccessFingerprint)
+              }
+            }}
+          />
+        )}
+
+        {prescriptionQuoteItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="quote"
+            items={prescriptionQuoteItems}
+            onAction={handlePrescriptionQuoteAction}
+            onDismiss={handlePrescriptionQuoteDismiss}
+          />
+        )}
+
+        {prescriptionInvoiceItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="invoice"
+            items={prescriptionInvoiceItems}
+            onAction={handlePrescriptionInvoiceAction}
+            onDismiss={handlePrescriptionInvoiceDismiss}
+          />
+        )}
+
+        {prescriptionReadyItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="ready"
+            items={prescriptionReadyItems}
+            onAction={handlePrescriptionReadyAction}
+            onDismiss={handlePrescriptionReadyDismiss}
+          />
+        )}
+
+        {apptCancelledItems.length > 0 && (
+          <AppointmentCancelledBanner
+            items={apptCancelledItems}
+            onAction={handleApptCancelledAction}
+            onDismiss={handleApptCancelledDismiss}
+          />
+        )}
+
+        {apptConfirmedItems.map(item => (
+          <div
+            key={item.id}
+            style={{
+              padding: isMobile ? '14px 16px' : '18px 22px',
+              background: 'linear-gradient(90deg, rgba(34,197,94,0.08), rgba(34,197,94,0.03))',
+              borderRadius: radius.lg,
+              border: '1.5px solid rgba(34,197,94,0.30)',
+              display: 'flex',
+              gap: '14px',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              fontFamily: font.family,
+            }}
+          >
+            <div style={{
+              width: isMobile ? 38 : 46,
+              height: isMobile ? 38 : 46,
+              borderRadius: '12px',
+              background: C.success,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
+                <path d="M2 8.5h18M7 2v3M15 2v3" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M7 13l2.5 2.5 5.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '13px', fontWeight: 800, color: '#15803D', marginBottom: '3px', letterSpacing: '-0.01em', fontFamily: font.family }}>
+                {item.headline}
+              </div>
+              <div style={{ fontSize: '13px', color: '#166534', lineHeight: 1.5, fontFamily: font.family }}>
+                {item.detail}
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: '8px', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}>
+              <GGButton
+                variant="primary"
+                size="sm"
+                onClick={() => handleApptConfirmedView(item)}
+                style={{ background: C.success, border: 'none', flex: isMobile ? 1 : 'none' }}
+              >
+                View Appointment →
+              </GGButton>
+              <button
+                type="button"
+                onClick={() => handleApptConfirmedDismiss(item)}
+                style={{
+                  background: 'transparent',
+                  border: '1px solid rgba(34,197,94,0.35)',
+                  borderRadius: radius.sm,
+                  color: '#15803D',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  padding: '6px 12px',
+                  fontFamily: font.family,
+                }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        ))}
+
+        {pendingInvoice && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFF8E0)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3l6 10H2z" stroke="#fff" strokeWidth="1.3" fill="none" strokeLinejoin="round" /><line x1="8" y1="7.5" x2="8" y2="10" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" /><circle cx="8" cy="11.5" r="0.8" fill="#fff" /></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#8A4D00', fontFamily: font.family }}>
+                {pendingInvoiceCount} invoice{pendingInvoiceCount > 1 ? 's require' : ' requires'} your authorization
+              </div>
+              <div style={{ fontSize: '12px', color: '#A06000', marginTop: '2px', fontFamily: font.family }}>
+                {pendingInvoice.id} from {pendingInvoice.provider.name} — {formatCurrency(pendingInvoice.amount, currency)}
+              </div>
+            </div>
+            <GGButton
+              variant="warning"
+              size="sm"
+              onClick={() => navigate(route.patientInvoice(pendingInvoice.id))}
+              style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
+            >
+              Authorize Now
+            </GGButton>
+          </div>
+        )}
+
+        {rescheduledAppointment && rescheduledAppointmentDate && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: 'linear-gradient(90deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))', borderRadius: radius.lg, border: '1.5px solid rgba(124,58,237,0.28)', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><path d="M10 6v4l2.5 1.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#5B21B6', marginBottom: '2px', fontFamily: font.family }}>Reschedule proposal waiting</div>
+              <div style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.5, fontFamily: font.family }}>
+                <strong>{rescheduledAppointment.provider}</strong> proposed {rescheduledAppointmentDate} at {formatTime12h(rescheduledAppointment.time)} for {rescheduledAppointment.service}
+              </div>
+            </div>
+            <GGButton
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/app/appointments/${rescheduledAppointment.id}/reschedule`)}
+              style={{ background: '#7C3AED', border: 'none', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
+            >
+              Review Reschedule
+            </GGButton>
+          </div>
+        )}
+
+        {showLowBalancePrompt && (
+          <CreditLowBalancePrompt available={u.creditAvailable} countryCode={u.countryCode} />
+        )}
+
+        {/* Pending action banner */}
+        {pendingAppointment && pendingAppointmentDate && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFFAE8)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><line x1="10" y1="6" x2="10" y2="11" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="#fff"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8A4D00', marginBottom: '2px', fontFamily: font.family }}>Appointment Pending Confirmation</div>
+              <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5, fontFamily: font.family }}>
+                <strong>{pendingAppointment.provider}</strong> - {pendingAppointmentDate} at {formatTime12h(pendingAppointment.time)} for {pendingAppointment.service}
+              </div>
+            </div>
+            <GGButton variant="warning" size="sm" onClick={() => navigate('/app/appointments')} style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}>
+              View Appointments
+            </GGButton>
+          </div>
+        )}
 
         {/* 3 stat tiles */}
         {(() => {
-          const nextApt = MOCK_APPOINTMENTS.find(a => a.status !== 'cancelled')
+          const nextApt = appointments.find(a => getAppointmentDisplayStatus(a) !== 'cancelled')
+          const nextAptStatus = nextApt ? getAppointmentDisplayStatus(nextApt) : null
           const nextAptDate = nextApt ? new Date(nextApt.date) : null
           const nextAptLabel = nextAptDate
             ? nextAptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + formatTime12h(nextApt!.time)
             : 'No upcoming'
           const nextAptSub = nextApt ? nextApt.provider : 'Book via Find Service'
           return (
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '10px' : '12px', fontFamily: font.family }}>
               {/* Available Balance */}
-              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, boxShadow: shadow.sm, gridColumn: isMobile ? 'span 2' : 'auto' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Available Balance</div>
+              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, gridColumn: isMobile ? 'span 2' : 'auto', fontFamily: font.family }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
+                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>Available Balance</div>
                   {country && (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '1px 6px', borderRadius: '20px', background: C.bg, border: `1px solid ${C.border}`, flexShrink: 0 }}>
                       <FlagImg code={country.code} size={12} />
@@ -158,70 +736,115 @@ export function DashboardScreen() {
                     </div>
                   )}
                 </div>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: C.blue500, letterSpacing: '-0.04em', lineHeight: 1 }}>{formatCurrency(u.creditAvailable, currency)}</div>
-                <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub, marginTop: '6px' }}>of {formatCurrency(u.creditLimit, currency)} limit</div>
+                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: C.blue500, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font.family }}>{formatCurrency(u.creditAvailable, currency)}</div>
+                <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>of {formatCurrency(u.creditLimit, currency)} limit</div>
               </div>
 
               {/* Spent This Month */}
-              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, boxShadow: shadow.sm }}>
-                <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Spent This Month</div>
-                <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: C.success, letterSpacing: '-0.04em', lineHeight: 1 }}>{formatCurrency(spentThisMonth, currency)}</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '6px' }}>
-                  <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub }}>{MOCK_TRANSACTIONS.filter(t => new Date(t.date).getMonth() === new Date().getMonth()).length} transactions</div>
-                  <span onClick={() => navigate('/app/transactions')} style={{ fontSize: '11px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>History →</span>
+              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, fontFamily: font.family }}>
+                <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', fontFamily: font.family }}>Spent This Month</div>
+                <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font.family }}>{formatCurrency(spentThisMonth, currency)}</div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginTop: '8px', flexWrap: 'wrap', fontFamily: font.family }}>
+                  <div style={{ fontSize: '11px', color: C.textSub, fontFamily: font.family }}>
+                    {spentThisMonthCount} payment{spentThisMonthCount === 1 ? '' : 's'}
+                  </div>
+                  <span onClick={() => navigate('/app/transactions')} style={{ fontSize: '11px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: font.family }}>History →</span>
                 </div>
               </div>
 
               {/* Next Appointment */}
-              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, boxShadow: shadow.sm, cursor: 'pointer' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Next Appointment</div>
+              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, cursor: 'pointer', fontFamily: font.family }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>Next Appointment</div>
                   {nextApt && (
-                    <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 7px', borderRadius: '20px', color: nextApt.status === 'confirmed' ? C.success : C.warning, background: nextApt.status === 'confirmed' ? C.successBg : C.warningBg }}>
-                      {nextApt.status === 'confirmed' ? 'Confirmed' : 'Pending'}
+                    <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px', color: nextAptStatus === 'confirmed' ? C.success : C.warning, background: nextAptStatus === 'confirmed' ? C.successBg : C.warningBg, fontFamily: font.family }}>
+                      {nextAptStatus === 'confirmed' ? 'Confirmed' : 'Pending'}
                     </span>
                   )}
                 </div>
-                <div style={{ fontSize: isMobile ? '18px' : '20px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.03em', lineHeight: 1.1 }}>{nextAptLabel}</div>
-                <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub, marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{nextAptSub}</div>
+                <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.03em', lineHeight: 1.1, fontFamily: font.family }}>{nextAptLabel}</div>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: font.family }}>{nextAptSub}</div>
               </div>
             </div>
           )
         })()}
 
-        {/* Pending action banner */}
-        <div style={{ padding: '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFFAE8)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 2px 10px rgba(245,166,35,0.12)' }}>
-          <div style={{ width: 44, height: 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 2px 8px rgba(245,166,35,0.35)' }}>
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><line x1="10" y1="6" x2="10" y2="11" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="#fff"/></svg>
-          </div>
-          <div style={{ flex: 1, minWidth: 180 }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#8A4D00', marginBottom: '2px' }}>Invoice Pending Authorization</div>
-            <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5 }}>
-              <strong>INV-2026-0842</strong> · City Medical Centre · {formatCurrency(450)} awaiting your approval
-            </div>
-          </div>
-          <GGButton variant="warning" size="sm" onClick={() => navigate('/app/invoices/INV-2026-0842')} style={{ background: C.warning, color: '#fff', boxShadow: '0 2px 8px rgba(245,166,35,0.3)', flexShrink: 0 }}>
-            Review & Authorize →
-          </GGButton>
-        </div>
-
         {/* Find a Service (60%) + Recent Transactions (40%) */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
 
           {/* Service grid */}
-          <GGCard padding="22px">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Find a Service</div>
-              <span onClick={() => navigate('/app/services')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>See all →</span>
+          <GGCard padding={isMobile ? '16px' : '22px'}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>Find a Service</div>
+              <span onClick={() => navigate('/app/services')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}>See all →</span>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '12px' }}>
+            <form
+              onSubmit={e => {
+                e.preventDefault()
+                const form = e.currentTarget
+                const value = new FormData(form).get('q')
+                const q = typeof value === 'string' ? value.trim() : ''
+                navigate(q ? `/app/services?q=${encodeURIComponent(q)}` : '/app/services')
+              }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                marginBottom: '16px',
+                padding: '0 14px',
+                height: 44,
+                borderRadius: radius.sm,
+                border: `1.5px solid ${C.border}`,
+                background: C.bg,
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+                <circle cx="7" cy="7" r="4.5" stroke={C.textLight} strokeWidth="1.4" />
+                <line x1="10.5" y1="10.5" x2="13.5" y2="13.5" stroke={C.textLight} strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              <input
+                name="q"
+                type="search"
+                placeholder="Search providers, services..."
+                aria-label="Search providers, services, and locations"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  border: 'none',
+                  outline: 'none',
+                  background: 'transparent',
+                  fontSize: '13px',
+                  fontFamily: font.family,
+                  color: C.text,
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  border: 'none',
+                  background: C.blue500,
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  fontFamily: font.family,
+                  padding: '7px 14px',
+                  borderRadius: radius.full,
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                Search
+              </button>
+            </form>
+
+            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '8px' : '12px' }}>
               {categories.map(cat => {
                 if (cat.id === 'global_specialists') {
                   return (
                     <div key={cat.id} onClick={() => navigate('/app/services')}
                       style={{ 
-                        gridColumn: isMobile ? 'span 2' : 'span 3',
-                        padding: '12px 18px', 
+                        gridColumn: 'span 3',
+                        padding: isMobile ? '10px 14px' : '12px 18px', 
                         borderRadius: radius.sm, 
                         background: C.bg, 
                         border: 'none',
@@ -230,49 +853,42 @@ export function DashboardScreen() {
                         flexDirection: 'row', 
                         alignItems: 'center', 
                         justifyContent: 'space-between',
-                        gap: '12px', 
+                        gap: '10px', 
                         transition: 'all 0.18s ease'
                       }}
-                      onMouseEnter={e => { 
-                        e.currentTarget.style.transform = 'translateY(-1px)'; 
-                        e.currentTarget.style.boxShadow = shadow.sm;
-                      }}
-                      onMouseLeave={e => { 
-                        e.currentTarget.style.transform = 'none'; 
-                        e.currentTarget.style.boxShadow = 'none';
-                      }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                         <div style={{ 
-                          width: '38px', 
-                          height: '38px', 
+                          width: isMobile ? '34px' : '38px', 
+                          height: isMobile ? '34px' : '38px', 
                           borderRadius: '8px', 
                           background: 'rgba(153, 157, 173, 0.12)', 
                           display: 'flex', 
                           alignItems: 'center', 
                           justifyContent: 'center', 
-                          color: C.textLight 
+                          color: C.textLight,
+                          flexShrink: 0,
                         }}>
                           {catIcons[cat.id]}
                         </div>
                         <div style={{ textAlign: 'left' }}>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>{cat.label}</div>
-                          <div style={{ fontSize: '11px', color: C.textSub, marginTop: '1px' }}>International tertiary care & medical tourism</div>
+                          <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, fontFamily: font.family }}>{cat.label}</div>
+                          <div style={{ fontSize: '10px', color: C.textSub, marginTop: '1px', fontFamily: font.family }}>International tertiary care</div>
                         </div>
                       </div>
                       <span style={{
                         display: 'inline-flex',
                         alignItems: 'center',
-                        fontSize: '10px',
-                        padding: '3px 8px',
+                        fontSize: '9px',
+                        padding: '2px 7px',
                         fontFamily: font.family,
-                        fontWeight: 600,
+                        fontWeight: 700,
                         borderRadius: radius.full,
                         background: 'rgba(153, 157, 173, 0.12)',
                         color: C.textLight,
-                        letterSpacing: '0.01em',
                         whiteSpace: 'nowrap'
                       }}>
-                        Coming Soon
+                        Soon
                       </span>
                     </div>
                   )
@@ -281,7 +897,7 @@ export function DashboardScreen() {
                 return (
                   <div key={cat.id} onClick={() => navigate(`/app/services/${cat.id}`)}
                     style={{ 
-                      padding: '18px 12px', 
+                      padding: isMobile ? '12px 6px' : '18px 12px', 
                       borderRadius: radius.sm, 
                       background: C.bg, 
                       border: 'none',
@@ -289,21 +905,14 @@ export function DashboardScreen() {
                       display: 'flex', 
                       flexDirection: 'column', 
                       alignItems: 'center', 
-                      gap: '8px', 
+                      gap: '6px', 
                       transition: 'all 0.18s ease',
-                      boxShadow: 'none'
+                      fontFamily: font.family,
                     }}
-                    onMouseEnter={e => { 
-                      e.currentTarget.style.transform = 'translateY(-2px)'; 
-                      e.currentTarget.style.boxShadow = shadow.sm;
-                    }}
-                    onMouseLeave={e => { 
-                      e.currentTarget.style.transform = 'none'; 
-                      e.currentTarget.style.boxShadow = 'none';
-                    }}>
+                  >
                     <div style={{ 
-                      width: '44px', 
-                      height: '44px', 
+                      width: isMobile ? '38px' : '44px', 
+                      height: isMobile ? '38px' : '44px', 
                       borderRadius: '10px', 
                       background: 'rgba(56, 182, 255, 0.08)', 
                       display: 'flex', 
@@ -311,12 +920,10 @@ export function DashboardScreen() {
                       justifyContent: 'center', 
                       color: C.blue500,
                       marginBottom: '2px',
-                      transition: 'transform 0.18s ease'
                     }}>
                       {catIcons[cat.id]}
                     </div>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: C.text, textAlign: 'center', letterSpacing: '-0.01em' }}>{cat.label}</span>
-                    <span style={{ fontSize: '11px', color: C.textSub }}>{cat.nearby} nearby</span>
+                    <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 700, color: C.text, textAlign: 'center', letterSpacing: '-0.01em', fontFamily: font.family }}>{cat.label}</span>
                   </div>
                 )
               })}
@@ -324,279 +931,18 @@ export function DashboardScreen() {
           </GGCard>
 
           {/* Upcoming Appointments */}
-          <GGCard padding="24px">
-            {/* Card header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ width: 32, height: 32, borderRadius: '9px', background: 'rgba(74,173,223,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                    <rect x="1" y="2.5" width="14" height="12" rx="2" stroke={C.blue500} strokeWidth="1.4"/>
-                    <path d="M1 6.5h14M5 1v3M11 1v3" stroke={C.blue500} strokeWidth="1.3" strokeLinecap="round"/>
-                    <circle cx="8" cy="10.5" r="1.4" fill={C.blue500}/>
-                  </svg>
-                </div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Appointments</div>
-              </div>
-              <span onClick={() => navigate('/app/appointments')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>View all →</span>
-            </div>
-
-            {MOCK_APPOINTMENTS.length === 0 ? (
-              <div style={{ padding: '32px 0', textAlign: 'center' }}>
-                <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px', display: 'block' }}><rect x="3" y="5" width="26" height="24" rx="4" stroke={C.border} strokeWidth="1.6"/><path d="M3 12h26M10 2v6M22 2v6" stroke={C.border} strokeWidth="1.6" strokeLinecap="round"/></svg>
-                <div style={{ fontSize: '14px', fontWeight: 600, color: C.textSub }}>No upcoming appointments</div>
-                <div style={{ fontSize: '12px', color: C.textLight, marginTop: '5px' }}>Book via Find Service</div>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {MOCK_APPOINTMENTS.map((apt, i) => {
-                  const aptDate = new Date(apt.date)
-                  const dayNum = aptDate.getDate()
-                  const monthStr = aptDate.toLocaleDateString('en-US', { month: 'short' })
-                  const isConfirmed = apt.status === 'confirmed'
-                  const isBeneficiary = apt.for !== u.name
-                  return (
-                    <div
-                      key={apt.id}
-                      style={{ display: 'flex', gap: '14px', padding: '16px 0', borderBottom: i < MOCK_APPOINTMENTS.length - 1 ? `1px solid ${C.border}` : 'none' }}
-                    >
-                      {/* Date badge — prominent */}
-                      <div style={{
-                        width: 54, minWidth: 54, height: 62,
-                        borderRadius: '14px',
-                        background: isConfirmed
-                          ? `linear-gradient(145deg, rgba(74,173,223,0.18), rgba(74,173,223,0.08))`
-                          : `linear-gradient(145deg, rgba(245,166,35,0.18), rgba(245,166,35,0.08))`,
-                        border: `1.5px solid ${isConfirmed ? 'rgba(74,173,223,0.3)' : 'rgba(245,166,35,0.3)'}`,
-                        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                        boxShadow: isConfirmed ? '0 2px 8px rgba(74,173,223,0.12)' : '0 2px 8px rgba(245,166,35,0.12)',
-                      }}>
-                        <div style={{ fontSize: '24px', fontWeight: 900, color: isConfirmed ? C.blue500 : C.warning, lineHeight: 1, letterSpacing: '-0.04em' }}>{dayNum}</div>
-                        <div style={{ fontSize: '10px', fontWeight: 800, color: isConfirmed ? C.blue500 : C.warning, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '3px', opacity: 0.85 }}>{monthStr}</div>
-                      </div>
-
-                      {/* Details */}
-                      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{apt.provider}</div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
-                          <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><circle cx="6" cy="6" r="4.5" stroke={C.textSub} strokeWidth="1.2"/><path d="M6 3.5v2.5l1.5 1.5" stroke={C.textSub} strokeWidth="1.2" strokeLinecap="round"/></svg>
-                          <span style={{ fontSize: '12px', color: C.textSub, fontWeight: 500 }}>{formatTime12h(apt.time)}</span>
-                          <span style={{ fontSize: '12px', color: C.border }}>·</span>
-                          <span style={{ fontSize: '12px', color: C.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{apt.service}</span>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
-                          {isBeneficiary && (
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 9px', borderRadius: '20px', background: 'rgba(74,173,223,0.08)', border: '1px solid rgba(74,173,223,0.2)', flexShrink: 0 }}>
-                              <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="3.5" r="2" stroke={C.blue500} strokeWidth="1.2"/><path d="M1 9.5c0-2.2 1.8-4 4-4s4 1.8 4 4" stroke={C.blue500} strokeWidth="1.2" strokeLinecap="round"/></svg>
-                              <span style={{ fontSize: '11px', color: C.blue500, fontWeight: 600 }}>{apt.for}</span>
-                            </div>
-                          )}
-                          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: '20px', background: isConfirmed ? C.successBg : C.warningBg, border: `1px solid ${isConfirmed ? 'rgba(16,185,129,0.25)' : 'rgba(245,166,35,0.25)'}` }}>
-                            {isConfirmed
-                              ? <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5 4-4" stroke={C.success} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                              : <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><circle cx="5" cy="5" r="4" stroke={C.warning} strokeWidth="1.2"/><path d="M5 3v2.5" stroke={C.warning} strokeWidth="1.4" strokeLinecap="round"/><circle cx="5" cy="7" r="0.6" fill={C.warning}/></svg>
-                            }
-                            <span style={{ fontSize: '11px', fontWeight: 700, color: isConfirmed ? C.success : C.warning }}>
-                              {isConfirmed ? 'Confirmed' : 'Pending'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            )}
-          </GGCard>
-        </div>
-
-        {/* Health News */}
-        <div>
-          {/* Section header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-            <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>Health News</div>
-            <span style={{ fontSize: '12px', fontWeight: 700, color: C.blue500, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: font.family }}>Live Feed</span>
-          </div>
-
-          {/* Three-column card grid / carousel on mobile+tablet */}
-          <div
-            className={(isMobile || isTablet) ? 'hide-scrollbar' : undefined}
-            style={
-              (isMobile || isTablet)
-                ? {
-                    display: 'flex',
-                    flexDirection: 'row',
-                    gap: '16px',
-                    overflowX: 'auto',
-                    scrollSnapType: 'x mandatory',
-                    WebkitOverflowScrolling: 'touch',
-                    paddingBottom: '8px',
-                  }
-                : { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }
-            }>
-            {MOCK_NEWS.map((item, index) => {
-              // Custom styled brand presets.
-              // To establish asymmetrical premium editorial rhythm:
-              // Index 0: Dark featured brand-colored card (Navy/Blue)
-              // Index 1: Soft warm, energetic green card
-              // Index 2: Light crisp brand-blue gradient card
-              
-              const itemStyles = [
-                // 1. Dark Navy Featured Card
-                {
-                  cardBg: `linear-gradient(135deg, ${C.navy800} 0%, #152B55 100%)`,
-                  textColor: '#FFFFFF',
-                  arrowColor: C.blue300,
-                  borderColor: 'rgba(255, 255, 255, 0.08)',
-                  dividerColor: 'rgba(255, 255, 255, 0.08)',
-                  hoverBorder: C.blue500,
-                  hoverShadow: '0 12px 28px rgba(56, 182, 255, 0.15)',
-                  labelColor: 'rgba(255, 255, 255, 0.4)',
-                  badgeFill: 'rgba(56, 182, 255, 0.18)',
-                  tagColor: C.blue300,
-                },
-                // 2. Light Blue Tinted Card
-                {
-                  cardBg: 'linear-gradient(135deg, #EBF8FF 0%, #FFFFFF 100%)',
-                  textColor: C.navy800,
-                  arrowColor: C.blue500,
-                  borderColor: 'rgba(56, 182, 255, 0.15)',
-                  dividerColor: 'rgba(56, 182, 255, 0.12)',
-                  hoverBorder: C.blue500,
-                  hoverShadow: '0 12px 28px rgba(56, 182, 255, 0.12)',
-                  labelColor: C.textLight,
-                  badgeFill: 'rgba(56, 182, 255, 0.08)',
-                  tagColor: '#0369A1',
-                },
-                // 3. Clean White with Navy Accent Card
-                {
-                  cardBg: '#FFFFFF',
-                  textColor: C.navy800,
-                  arrowColor: C.navy800,
-                  borderColor: C.border,
-                  dividerColor: 'rgba(9, 28, 68, 0.08)',
-                  hoverBorder: C.navy800,
-                  hoverShadow: '0 12px 28px rgba(9, 28, 68, 0.10)',
-                  labelColor: C.textLight,
-                  badgeFill: 'rgba(9, 28, 68, 0.05)',
-                  tagColor: C.navy800,
-                },
-              ]
-
-              const cfg = itemStyles[index] || itemStyles[2]
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => setSelectedNews(item)}
-                  style={{
-                    background: cfg.cardBg,
-                    borderRadius: '16px',
-                    border: `1px solid ${cfg.borderColor}`,
-                    padding: '20px',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    minHeight: '210px',
-                    boxShadow: '0 4px 12px rgba(9, 28, 68, 0.01)',
-                    transition: 'all 0.18s ease-in-out',
-                    ...(isMobile || isTablet ? {
-                      flexShrink: 0,
-                      width: isMobile ? 'calc(85vw - 32px)' : 'calc(60vw - 32px)',
-                      scrollSnapAlign: 'start',
-                    } : {}),
-                    position: 'relative',
-                  }}
-                  onMouseEnter={e => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.boxShadow = cfg.hoverShadow
-                    e.currentTarget.style.borderColor = cfg.hoverBorder
-                  }}
-                  onMouseLeave={e => {
-                    e.currentTarget.style.transform = 'none'
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(9, 28, 68, 0.01)'
-                    e.currentTarget.style.borderColor = cfg.borderColor
-                  }}
-                >
-                  {/* Link arrow */}
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '14px' }}>
-                    <svg width="12" height="12" viewBox="0 0 14 14" fill="none" style={{ transition: 'transform 0.18s', opacity: 0.65 }}>
-                      <path d="M2 12L12 2M12 2H5M12 2v7" stroke={cfg.arrowColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-
-                  {/* Middle: Title */}
-                  <div style={{
-                    fontSize: '14px',
-                    fontWeight: 700,
-                    color: cfg.textColor,
-                    lineHeight: 1.45,
-                    fontFamily: font.family,
-                    flex: 1,
-                    display: '-webkit-box',
-                    WebkitLineClamp: 3,
-                    WebkitBoxOrient: 'vertical',
-                    overflow: 'hidden',
-                    marginBottom: '16px'
-                  }}>
-                    {item.title}
-                  </div>
-
-                  {/* Bottom: Publisher Metadata Row */}
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    paddingTop: '12px',
-                    borderTop: `1px dashed ${cfg.dividerColor}`,
-                  }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{
-                        fontSize: '9px',
-                        fontWeight: 700,
-                        color: cfg.labelColor,
-                        letterSpacing: '0.06em',
-                        textTransform: 'uppercase',
-                        marginBottom: '2px'
-                      }}>
-                        Verified Source
-                      </div>
-                      <div style={{
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: cfg.textColor,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        opacity: index === 0 ? 0.95 : 1
-                      }}>
-                        {item.source}
-                      </div>
-                    </div>
-
-                    {/* Date capsule aligned right */}
-                    <div style={{
-                      fontSize: '9px',
-                      fontWeight: 700,
-                      color: cfg.tagColor,
-                      background: cfg.badgeFill,
-                      padding: '3px 8px',
-                      borderRadius: '6px',
-                      fontFamily: 'monospace',
-                      flexShrink: 0
-                    }}>
-                      {formatDate(item.date, { month: 'short', day: 'numeric' })}
-                    </div>
-                  </div>
-
-                </div>
-              )
+          <DashboardAppointmentsCard
+            appointments={appointments.filter(a => {
+              const status = getAppointmentDisplayStatus(a)
+              return status !== 'completed' && status !== 'cancelled'
             })}
-          </div>
+          />
         </div>
+
+        {/* Sponsored banner strip */}
+        <AdBannerStrip key={adVersion} countryName={country?.name} />
+
+        <HealthNewsSection articles={healthNews ?? dashboard.news} />
       </div>
     </AppLayout>
   )

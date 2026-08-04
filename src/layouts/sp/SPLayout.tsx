@@ -1,11 +1,12 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ROUTES } from '@/router/routes'
 import { C, font, shadow } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useNotificationsStore } from '@/store/notifications.store'
+import { useLogoutMutation, useSPNotifications } from '@/hooks/api'
 import { NotificationPanel } from '@/components/NotificationPanel'
 import { SPSidebar } from './SPSidebar'
+import { SPTopBar } from './SPTopBar'
 import { SPBottomNav } from './SPBottomNav'
 
 interface SPLayoutProps {
@@ -19,8 +20,20 @@ interface SPLayoutProps {
 export function SPLayout({ children, title, subtitle, back = false }: SPLayoutProps) {
   const { isDesktop } = useResponsive()
   const navigate = useNavigate()
+  const logoutMutation = useLogoutMutation()
+  const { data: notifications } = useSPNotifications()
   const { spNotifs, openPanel } = useNotificationsStore()
   const unreadCount = spNotifs.filter(n => !n.read).length
+
+  useEffect(() => {
+    if (notifications) {
+      useNotificationsStore.setState({ spNotifs: notifications })
+    }
+  }, [notifications])
+
+  const handleSignOut = () => {
+    logoutMutation.mutate()
+  }
 
   const topBar = (dark = false) => (
     <div style={{
@@ -93,7 +106,9 @@ export function SPLayout({ children, title, subtitle, back = false }: SPLayoutPr
       {/* Sign Out (Mobile only) */}
       {!isDesktop && (
         <button
-          onClick={() => navigate(ROUTES.LOGIN)}
+          onClick={handleSignOut}
+          aria-label="Sign out"
+          title="Sign out"
           style={{
             background: 'rgba(255,255,255,0.08)',
             border: '1px solid rgba(255,255,255,0.1)',
@@ -122,12 +137,11 @@ export function SPLayout({ children, title, subtitle, back = false }: SPLayoutPr
       <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
         <SPSidebar />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-          {topBar(false)}
+          <SPTopBar title={title} subtitle={subtitle} back={back} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '28px' }}>
             {children}
           </main>
         </div>
-        <NotificationPanel role="sp" />
       </div>
     )
   }

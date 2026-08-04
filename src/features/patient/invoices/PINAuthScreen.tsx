@@ -5,10 +5,13 @@ import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { StepIndicator } from '@/design-system'
 import { formatCurrency } from '@/utils/format'
+import { usePatientInvoice, useAuthorizePaymentMutation } from '@/hooks/api'
+import { isMockApi } from '@/api/config'
 import { MOCK_INVOICE } from '@/mock/patient.mock'
+import { useUserStore } from '@/store/user.store'
+import { route, ROUTES } from '@/router/routes'
 
 const PIN_LENGTH = 4
-const CORRECT_PIN = '1234'
 
 const KEYS = [
   ['1','2','3'],
@@ -20,7 +23,10 @@ const KEYS = [
 export function PINAuthScreen() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
-  const inv = MOCK_INVOICE
+  const user = useUserStore(s => s.user)
+  const { data: invoice } = usePatientInvoice(id)
+  const inv = invoice ?? (isMockApi ? MOCK_INVOICE : undefined)
+  const authorizeMutation = useAuthorizePaymentMutation()
 
   const [step, setStep] = useState(1)
   const [pin, setPin] = useState('')
@@ -28,6 +34,7 @@ export function PINAuthScreen() {
   const locked = lockTimer > 0
   const [attempts, setAttempts] = useState(0)
   const [processing, setProcessing] = useState(false)
+  const [pinError, setPinError] = useState<string | null>(null)
 
   useEffect(() => {
     if (lockTimer <= 0) return
@@ -44,20 +51,114 @@ export function PINAuthScreen() {
     return () => clearTimeout(t)
   }, [lockTimer])
 
-  const handleConfirm = (entered: string) => {
-    if (entered !== CORRECT_PIN) {
-      const next = attempts + 1
-      setAttempts(next)
-      if (next >= 3) { setLockTimer(30 * 60) }
+  if (!user.hasPaymentPin) {
+    return (
+      <AppLayout title="Payment Authorization" subtitle="Payment PIN required" back notifCount={0}>
+        <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
+          <GGCard padding="28px">
+            <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Set up your payment PIN first</div>
+            <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '18px' }}>
+              You need a payment PIN before you can authorize this invoice.
+            </div>
+            <button
+              onClick={() => navigate(ROUTES.SECURITY_PIN, {
+                state: {
+                  returnTo: `/app/invoices/${id}/pay`,
+                },
+              })}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: radius.sm, border: 'none', background: C.navy800, color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}
+            >
+              Set Up Payment PIN
+            </button>
+          </GGCard>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  if (!inv) {
+    return (
+      <AppLayout title="Payment Authorization" subtitle="Invoice not found" back notifCount={0}>
+        <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
+          <GGCard padding="28px">
+            <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Payment authorization unavailable</div>
+            <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6 }}>
+              We could not load the invoice for this payment request.
+            </div>
+          </GGCard>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  if (inv.status === 'rejected') {
+    return (
+      <AppLayout title="Payment Authorization" subtitle="Invoice rejected" back notifCount={0}>
+        <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
+          <GGCard padding="28px">
+            <div style={{ fontSize: '18px', fontWeight: 700, color: C.error, marginBottom: '8px' }}>Authorization blocked</div>
+            <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '18px' }}>
+              This invoice was rejected. The provider must correct and resubmit it before you can authorize payment.
+            </div>
+            <button
+              onClick={() => navigate(route.patientInvoice(id ?? ''))}
+              style={{ width: '100%', padding: '12px 16px', borderRadius: radius.sm, border: 'none', background: C.navy800, color: '#fff', fontSize: '14px', fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}
+            >
+              Back to Invoice Review
+            </button>
+          </GGCard>
+        </div>
+      </AppLayout>
+    )
+  }
+
+  const walletPayAmount = Math.min(Math.max(0, user.creditAvailable), inv.amount)
+  const offAppDue = Math.max(0, Number((inv.amount - walletPayAmount).toFixed(2)))
+  const isPartialPay = walletPayAmount > 0 && offAppDue > 0
+
+  const handleConfirm = async (entered: string) => {
+    if (!id) return
+    setPinError(null)
+
+    try {
+      const result = await authorizeMutation.mutateAsync({
+        invoiceId: id,
+        pin: entered,
+        step,
+      })
+
+      if (!result.success) {
+        if (result.lockedUntil) {
+          setLockTimer(Math.max(0, Math.floor((result.lockedUntil - Date.now()) / 1000)))
+          setPin('')
+          return
+        }
+        const next = attempts + 1
+        setAttempts(next)
+        setPinError(result.message ?? 'Incorrect PIN. Please try again.')
+        setPin('')
+        return
+      }
+
+      setAttempts(0)
+      if (step < 3) {
+        setTimeout(() => { setStep(s => s + 1); setPin('') }, 400)
+      } else {
+        setProcessing(true)
+        setTimeout(() => {
+          setProcessing(false)
+          navigate(`/app/invoices/${id}/success`, {
+            state: {
+              walletAmountPaid: result.walletAmountPaid ?? walletPayAmount,
+              offAppAmountDue: result.offAppAmountDue ?? offAppDue,
+              invoiceAmount: result.invoiceAmount ?? inv.amount,
+            },
+          })
+        }, 2200)
+      }
+    } catch {
+      setPinError('Unable to authorize payment. Please try again.')
       setPin('')
-      return
-    }
-    setAttempts(0)
-    if (step < 3) {
-      setTimeout(() => { setStep(s => s + 1); setPin('') }, 400)
-    } else {
-      setProcessing(true)
-      setTimeout(() => { setProcessing(false); navigate(`/app/invoices/${id}/success`) }, 2200)
     }
   }
 
@@ -71,15 +172,20 @@ export function PINAuthScreen() {
   }
 
   const stepMessages: Record<number, { title: string; sub: string }> = {
-    1: { title: 'First Confirmation',  sub: 'Enter your 4-digit payment PIN' },
-    2: { title: 'Second Confirmation', sub: 'Re-enter your PIN to confirm' },
-    3: { title: 'Final Authorization', sub: `You are about to authorize ${formatCurrency(inv.amount)} to ${inv.provider.name}. This action is irreversible.` },
+    1: { title: 'Enter your PIN',  sub: 'Enter your 4-digit payment PIN (1 of 3)' },
+    2: { title: 'Confirm your PIN', sub: 'Enter the same PIN again (2 of 3)' },
+    3: {
+      title: 'Final confirmation',
+      sub: isPartialPay
+        ? `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount)} from your allocation. Settle ${formatCurrency(offAppDue)} off-app with ${inv.provider.name}.`
+        : `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount)} to ${inv.provider.name}. This action is irreversible.`,
+    },
   }
 
   const sm = stepMessages[step]
 
   return (
-    <AppLayout title="Payment Authorization" subtitle="Triple-PIN Security" back notifCount={0}>
+    <AppLayout title="Payment Authorization" subtitle="Enter PIN 3 times" back notifCount={0}>
       <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="40px">
           {processing ? (
@@ -87,8 +193,8 @@ export function PINAuthScreen() {
               <div style={{ width: 72, height: 72, borderRadius: '50%', background: C.successBg, margin: '0 auto 24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <div style={{ width: 36, height: 36, border: `3px solid ${C.success}`, borderTopColor: 'transparent', borderRadius: '50%', animation: 'gg-spin 0.8s linear infinite' }} />
               </div>
-              <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Processing Payment…</div>
-              <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>Transmitting authorization to finance partner. Please wait.</div>
+              <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Processing Payment...</div>
+              <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>Recording authorization and notifying both parties. Please wait.</div>
               <style>{`@keyframes gg-spin { to { transform: rotate(360deg) } }`}</style>
             </div>
           ) : locked ? (
@@ -106,14 +212,21 @@ export function PINAuthScreen() {
           ) : (
             <div>
               <div style={{ marginBottom: '28px' }}>
-                <StepIndicator steps={['PIN 1', 'PIN 2', 'PIN 3']} current={step - 1} />
+                <StepIndicator steps={['1st entry', '2nd entry', '3rd entry']} current={step - 1} />
               </div>
 
               <div style={{ padding: '14px 18px', background: step === 3 ? C.warningBg : C.bg, borderRadius: radius.sm, border: `1px solid ${step === 3 ? 'rgba(245,166,35,0.25)' : C.border}`, marginBottom: '24px', textAlign: 'center' }}>
-                <div style={{ fontSize: '11px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: '4px' }}>Authorizing Payment</div>
-                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em' }}>{formatCurrency(inv.amount)}</div>
+                <div style={{ fontSize: '11px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: '4px' }}>
+                  {isPartialPay ? 'Authorizing In-App Portion' : 'Authorizing Payment'}
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em' }}>{formatCurrency(walletPayAmount)}</div>
                 <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>to {inv.provider.name}</div>
-                {step === 3 && <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>⚠ This action is irreversible</div>}
+                {isPartialPay && (
+                  <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>
+                    Invoice {formatCurrency(inv.amount)} · Off-app remainder {formatCurrency(offAppDue)}
+                  </div>
+                )}
+                {step === 3 && <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>Warning: This action is irreversible</div>}
               </div>
 
               <div style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -127,13 +240,11 @@ export function PINAuthScreen() {
                 ))}
               </div>
 
-              {attempts > 0 && (
+              {(attempts > 0 || pinError) && (
                 <div style={{ textAlign: 'center', fontSize: '12px', color: C.error, fontWeight: 600, marginBottom: '8px' }}>
-                  Incorrect PIN — {3 - attempts} {attempts === 2 ? 'attempt' : 'attempts'} remaining
+                  {pinError ?? `Incorrect PIN - ${3 - attempts} ${attempts === 2 ? 'attempt' : 'attempts'} remaining`}
                 </div>
               )}
-
-              <div style={{ textAlign: 'center', fontSize: '11px', color: C.textLight, marginBottom: '20px' }}>Demo PIN: 1234</div>
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
                 {KEYS.flat().map((k, idx) => {

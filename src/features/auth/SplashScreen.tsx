@@ -50,6 +50,9 @@ export function SplashScreen() {
         <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>
           Gateway Global Healthcare
         </div>
+        <div style={{ marginTop: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.04em', fontFamily: font.family }}>
+          A product of Gateway Global
+        </div>
       </div>
 
       {/* Loading dots */}

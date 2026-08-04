@@ -24,10 +24,13 @@ export const C = {
 
 export const font = {
   family: "'Figtree', 'Helvetica Neue', Arial, sans-serif",
+  mono: "'Figtree', 'Courier New', monospace",
 } as const
 
 export const radius = {
+  xs:   '6px',
   sm:   '10px',
+  md:   '12px',
   lg:   '16px',
   xl:   '24px',
   full: '9999px',

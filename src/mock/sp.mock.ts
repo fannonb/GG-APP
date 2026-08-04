@@ -4,12 +4,13 @@ import type { SPInvoice, Payment } from '@/types/invoice.types'
 import type { Notification } from '@/types/user.types'
 
 export const MOCK_SP_NOTIFICATIONS: Notification[] = [
-  { id: 'SN001', type: 'appointment', title: 'New Appointment Request',    body: 'Sarah Johnson has sent a new appointment request for 21 May 2026 at 09:00.', time: '2026-05-19T08:30:00', read: false, screen: 'appointments' },
-  { id: 'SN002', type: 'appointment', title: 'New Appointment Request',    body: 'Grace Mutasa submitted a follow-up request for David Mutasa on 22 May at 08:30.', time: '2026-05-20T09:15:00', read: false, screen: 'appointments' },
-  { id: 'SN003', type: 'payment',     title: 'Payment Received',           body: 'Z$280.00 received for Michael Tawanda — General Consultation (INV-2026-0841).', time: '2026-05-18T14:10:00', read: false, screen: 'payments' },
+  { id: 'SN001', type: 'appointment', title: 'New Appointment Request',       body: 'Sarah Johnson has sent a new appointment request for 21 May 2026 at 09:00.', time: '2026-05-19T08:30:00', read: false, screen: 'appointments' },
+  { id: 'SN002', type: 'appointment', title: 'New Appointment Request',       body: 'Grace Mutasa submitted a follow-up request for David Mutasa on 22 May at 08:30.', time: '2026-05-20T09:15:00', read: false, screen: 'appointments' },
+  { id: 'SN007', type: 'appointment', title: 'Appointment Cancelled',         body: 'Fannon Benjamin cancelled their General Consulting appointment on Jun 16 at 3:30 PM.', time: '2026-06-14T10:00:00', read: false, screen: '/sp/appointments' },
+  { id: 'SN003', type: 'payment',     title: 'Payment Received',              body: 'Z$280.00 received for Michael Tawanda — General Consultation (INV-2026-0841).', time: '2026-05-18T14:10:00', read: false, screen: 'payments' },
   { id: 'SN004', type: 'invoice',     title: 'Invoice Pending Authorization', body: 'Invoice INV-2026-0842 for Z$450.00 is awaiting patient authorization from Sarah Johnson.', time: '2026-05-19T09:15:00', read: false, screen: 'invoices' },
-  { id: 'SN005', type: 'invoice',     title: 'Invoice Authorized',         body: 'Sarah Johnson authorized invoice INV-2026-0840 for Z$450.00. Payment is being processed.', time: '2026-05-17T10:45:00', read: true,  screen: 'invoices' },
-  { id: 'SN006', type: 'system',      title: 'License Verification Active', body: 'Your practice license MCZ-2019-04821 is verified and active until 31 Dec 2026.', time: '2026-05-01T09:00:00', read: true,  screen: 'settings' },
+  { id: 'SN005', type: 'invoice',     title: 'Invoice Authorized',            body: 'Sarah Johnson authorized invoice INV-2026-0840 for Z$450.00. Payment is being processed.', time: '2026-05-17T10:45:00', read: true,  screen: 'invoices' },
+  { id: 'SN006', type: 'system',      title: 'License Verification Active',   body: 'Your practice license MCZ-2019-04821 is verified and active until 31 Dec 2026.', time: '2026-05-01T09:00:00', read: true,  screen: 'settings' },
 ]
 
 export const MOCK_SP = {
@@ -27,9 +28,37 @@ export const MOCK_SP = {
   pendingAppointments: 3,
 }
 
+/** Freshly activated provider — no activity yet (demo "new provider" mode). */
+export const MOCK_SP_NEW = {
+  name: 'Harare Wellness Clinic',
+  type: 'General Practitioner',
+  email: 'contact@hararewellness.co.zw',
+  phone: '+263 77 000 0000',
+  license: 'Pending verification',
+  country: 'Zimbabwe',
+  status: 'active' as const,
+  totalEarnings: 0,
+  monthlyEarnings: 0,
+  pendingPayments: 0,
+  totalPatients: 0,
+  pendingAppointments: 0,
+}
+
+export const MOCK_SP_NEW_NOTIFICATIONS: Notification[] = [
+  {
+    id: 'SNW001',
+    type: 'system',
+    title: 'Welcome to GG\'APP',
+    body: 'Your provider account is active. Complete your practice profile to start receiving appointment requests.',
+    time: '2026-06-01T09:00:00',
+    read: false,
+    screen: 'settings',
+  },
+]
+
 export const MOCK_SP_APPOINTMENTS: Appointment[] = [
   {
-    id: 'APT-001', patient: 'Sarah Johnson', phone: '+263 77 123 4567',
+    id: 'APT-001', patientId: 'P001', patient: 'Sarah Johnson', phone: '+263 77 123 4567',
     service: 'General Consultation',
     description: 'Experiencing persistent headaches and dizziness for 3 days. History of mild hypertension.',
     date: '2026-05-21', time: '09:00', status: 'new',
@@ -40,7 +69,7 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     mode: 'Home Visit', address: '14 Borrowdale Rd, Harare North', duration: '30 – 45 min',
   },
   {
-    id: 'APT-002', patient: 'Sarah Johnson', phone: '+263 77 123 4567',
+    id: 'APT-002', patientId: 'P001', patient: 'Sarah Johnson', phone: '+263 77 123 4567',
     service: 'Pediatric Consultation',
     description: 'Child presenting with fever and persistent cough for 2 days. No known prior conditions. Mother suspects possible chest infection based on breathing pattern.',
     date: '2026-05-21', time: '10:30', status: 'confirmed',
@@ -50,7 +79,7 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     mode: 'Home Visit', address: '14 Borrowdale Rd, Harare North', duration: '30 min',
   },
   {
-    id: 'APT-003', patient: 'Michael Tawanda', phone: '+263 77 234 5678',
+    id: 'APT-003', patientId: 'P002', patient: 'Michael Tawanda', phone: '+263 77 234 5678',
     service: 'General Consultation',
     description: 'Routine annual checkup. No specific complaints. Patient last seen 11 months ago. Requests full blood workup referral.',
     date: '2026-05-20', time: '14:00', status: 'completed',
@@ -58,9 +87,10 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     forSelf: true, beneficiary: null,
     medicalHistory: ['High Cholesterol'], allergies: [], requestedAt: '2026-05-16',
     mode: 'Home Visit', address: '7 Avondale Close, Harare', duration: '45 min',
+    hasInvoice: true,
   },
   {
-    id: 'APT-004', patient: 'Grace Mutasa', phone: '+263 77 345 6789',
+    id: 'APT-004', patientId: 'P003', patient: 'Grace Mutasa', phone: '+263 77 345 6789',
     service: 'Follow-up Consultation',
     description: 'Follow-up on hypertension management for account holder spouse. Previous review showed BP still not within range. Medication adjustment expected.',
     date: '2026-05-22', time: '08:30', status: 'new',
@@ -70,7 +100,7 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     mode: 'Home Visit', address: '22 Greendale Ave, Harare', duration: '30 min',
   },
   {
-    id: 'APT-005', patient: 'Tendai Moyo', phone: '+263 77 456 7890',
+    id: 'APT-005', patientId: 'P004', patient: 'Tendai Moyo', phone: '+263 77 456 7890',
     service: 'General Consultation',
     description: 'Skin rash on forearms — appeared 5 days ago. Suspected allergic reaction to a new laundry detergent. Accompanied by mild itching.',
     date: '2026-05-19', time: '11:00', status: 'cancelled',
@@ -78,6 +108,7 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     forSelf: true, beneficiary: null,
     medicalHistory: ['Eczema (childhood)'], allergies: ['Latex'], requestedAt: '2026-05-17',
     mode: 'Home Visit', address: '5 Msasa Park Drive, Harare', duration: '30 min',
+    cancellationReason: 'Scheduling conflict', cancellationNote: 'Will rebook next week.',
   },
 ]
 
@@ -221,25 +252,34 @@ export const MOCK_SP_PATIENTS: SPPatient[] = [
 ]
 
 export const MOCK_SP_PAYMENTS: Payment[] = [
-  { id: 'PAY-2026-042', patient: 'Sarah Johnson',    amount: 450.00, date: '2026-05-19', status: 'pending', ref: 'TXN-2026-004' },
-  { id: 'PAY-2026-041', patient: 'Sarah Johnson',    amount: 450.00, date: '2026-05-15', status: 'pending', ref: 'TXN-2026-001' },
-  { id: 'PAY-2026-039', patient: 'Michael Tawanda',  amount: 280.00, date: '2026-05-10', status: 'pending', ref: 'TXN-2026-002' },
-  { id: 'PAY-2026-038', patient: 'Grace Mutasa',     amount: 150.00, date: '2026-04-28', status: 'paid', ref: 'TXN-2026-003' },
-  { id: 'PAY-2026-037', patient: 'David Chirwa',     amount: 300.00, date: '2026-04-12', status: 'paid', ref: 'TXN-2026-005' },
-  { id: 'PAY-2026-036', patient: 'Sarah Johnson',    amount: 225.00, date: '2026-04-02', status: 'paid', ref: 'TXN-2026-006' },
-  { id: 'PAY-2026-035', patient: 'Michael Tawanda',  amount: 225.00, date: '2026-02-14', status: 'paid', ref: 'TXN-2026-007' },
-  { id: 'PAY-2026-034', patient: 'Grace Mutasa',     amount: 75.00,  date: '2026-02-10', status: 'paid', ref: 'TXN-2026-008' },
-  { id: 'PAY-2026-033', patient: 'Sarah Johnson',    amount: 150.00, date: '2026-02-18', status: 'paid', ref: 'TXN-2026-009' },
-  { id: 'PAY-2026-032', patient: 'David Chirwa',     amount: 225.00, date: '2026-01-20', status: 'paid', ref: 'TXN-2026-010' },
-  { id: 'PAY-2026-031', patient: 'Sarah Johnson',    amount: 225.00, date: '2025-11-05', status: 'paid', ref: 'TXN-2025-011' },
-  { id: 'PAY-2026-030', patient: 'David Chirwa',     amount: 225.00, date: '2025-09-14', status: 'paid', ref: 'TXN-2025-012' },
+  { id: 'PAY-2026-042', patient: 'Sarah Johnson',    amount: 450.00, date: '2026-05-19', status: 'authorized', ref: 'TXN-2026-004' },
+  { id: 'PAY-2026-041', patient: 'Sarah Johnson',    amount: 450.00, date: '2026-05-15', status: 'authorized', ref: 'TXN-2026-001' },
+  { id: 'PAY-2026-039', patient: 'Michael Tawanda',  amount: 280.00, date: '2026-05-10', status: 'authorized', ref: 'TXN-2026-002' },
+  { id: 'PAY-2026-038', patient: 'Grace Mutasa',     amount: 150.00, date: '2026-04-28', status: 'authorized', ref: 'TXN-2026-003' },
+  { id: 'PAY-2026-037', patient: 'David Chirwa',     amount: 300.00, date: '2026-04-12', status: 'authorized', ref: 'TXN-2026-005' },
+  { id: 'PAY-2026-036', patient: 'Sarah Johnson',    amount: 225.00, date: '2026-04-02', status: 'authorized', ref: 'TXN-2026-006' },
+  { id: 'PAY-2026-035', patient: 'Michael Tawanda',  amount: 225.00, date: '2026-02-14', status: 'authorized', ref: 'TXN-2026-007' },
+  { id: 'PAY-2026-034', patient: 'Grace Mutasa',     amount: 75.00,  date: '2026-02-10', status: 'authorized', ref: 'TXN-2026-008' },
+  { id: 'PAY-2026-033', patient: 'Sarah Johnson',    amount: 150.00, date: '2026-02-18', status: 'authorized', ref: 'TXN-2026-009' },
+  { id: 'PAY-2026-032', patient: 'David Chirwa',     amount: 225.00, date: '2026-01-20', status: 'authorized', ref: 'TXN-2026-010' },
+  { id: 'PAY-2026-031', patient: 'Sarah Johnson',    amount: 225.00, date: '2025-11-05', status: 'authorized', ref: 'TXN-2025-011' },
+  { id: 'PAY-2026-030', patient: 'David Chirwa',     amount: 225.00, date: '2025-09-14', status: 'authorized', ref: 'TXN-2025-012' },
 ]
+
+function mockInvoiceLines(names: string[], amount: number) {
+  const base = Number((amount / names.length).toFixed(2))
+  const remainder = Number((amount - base * names.length).toFixed(2))
+  return names.map((name, index) => ({
+    name,
+    amount: index === 0 ? base + remainder : base,
+  }))
+}
 
 export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0845', patient: 'Sarah Johnson', patientId: 'P001',
     phone: '+263 77 123 4567', email: 'sarah.j@email.com',
-    services: ['General Consultation', 'Blood Pressure Monitoring'],
+    services: mockInvoiceLines(['General Consultation', 'Blood Pressure Monitoring'], 450),
     issueDate: '2026-05-19', amount: 450.00, status: 'pending',
     submittedAt: '2026-05-19', attachment: 'INV-2026-0845.pdf',
     diagnosis: 'Mild Hypertension and routine assessment.',
@@ -250,7 +290,7 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0844', patient: 'Sarah Johnson', patientId: 'P001',
     phone: '+263 77 123 4567', email: 'sarah.j@email.com',
-    services: ['General Consultation', 'Blood Pressure Monitoring'],
+    services: mockInvoiceLines(['General Consultation', 'Blood Pressure Monitoring'], 450),
     issueDate: '2026-05-15', amount: 450.00, status: 'pending',
     submittedAt: '2026-05-15', attachment: 'INV-2026-0844.pdf',
     diagnosis: 'General health review.',
@@ -261,7 +301,7 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0843', patient: 'Michael Tawanda', patientId: 'P002',
     phone: '+263 77 456 7890', email: 'michael.t@email.com',
-    services: ['General Consultation', 'Blood Pressure Monitoring', 'Pathology Referral'],
+    services: mockInvoiceLines(['General Consultation', 'Blood Pressure Monitoring', 'Pathology Referral'], 280),
     issueDate: '2026-05-10', amount: 280.00, status: 'pending',
     submittedAt: '2026-05-10', attachment: 'INV-2026-0843.pdf',
     diagnosis: 'Diabetes type 2 checkup.',
@@ -272,8 +312,8 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0842', patient: 'Michael Tawanda', patientId: 'P002',
     phone: '+263 77 456 7890', email: 'michael.t@email.com',
-    services: ['General Consultation', 'Blood Pressure Monitoring', 'Pathology Request'],
-    issueDate: '2026-05-20', amount: 225.00, status: 'cancelled',
+    services: mockInvoiceLines(['General Consultation', 'Blood Pressure Monitoring', 'Pathology Request'], 225),
+    issueDate: '2026-05-20', amount: 225.00, status: 'rejected',
     submittedAt: '2026-05-20', attachment: 'INV-2026-0842.pdf',
     diagnosis: 'Elevated HbA1c (8.2%) with suboptimal glycaemic control. BP mildly elevated at 148/92 mmHg.',
     treatment: 'Metformin 1000mg BD (continue). Amlodipine increased to 10mg daily. Pathology request forms issued.',
@@ -283,8 +323,8 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0841', patient: 'Sarah Johnson', patientId: 'P001',
     phone: '+263 77 123 4567', email: 'sarah.j@email.com',
-    services: ['General Consultation', 'Blood Pressure Monitoring'],
-    issueDate: '2026-05-18', amount: 180.00, status: 'cancelled',
+    services: mockInvoiceLines(['General Consultation', 'Blood Pressure Monitoring'], 180),
+    issueDate: '2026-05-18', amount: 180.00, status: 'rejected',
     submittedAt: '2026-05-18', attachment: 'INV-2026-0841.pdf',
     diagnosis: 'Hypertension well-controlled. BP 128/82 mmHg on current regimen.',
     treatment: 'Continue Amlodipine 5mg daily. Continue Atorvastatin 20mg nightly.',
@@ -295,7 +335,7 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
     id: 'INV-2026-0835', patient: 'Sarah Johnson (for Emma)', patientId: 'P001',
     phone: '+263 77 123 4567', email: 'sarah.j@email.com',
     beneficiary: { name: 'Emma Johnson', relation: 'Child', age: 13 },
-    services: ['Pediatric Consultation', 'Prescription'],
+    services: mockInvoiceLines(['Pediatric Consultation', 'Prescription'], 150),
     issueDate: '2026-05-15', amount: 150.00, status: 'paid',
     submittedAt: '2026-05-15', paidAt: '2026-05-17', paymentRef: 'PAY-0045-ZW', attachment: 'INV-2026-0835.pdf',
     diagnosis: 'Acute upper respiratory tract infection with pyrexia (38.4°C). Mild pharyngeal erythema.',
@@ -306,8 +346,8 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0829', patient: 'David Chirwa', patientId: 'P004',
     phone: '+263 77 654 3210', email: 'david.c@email.com',
-    services: ['General Consultation', 'Prescription'],
-    issueDate: '2026-05-08', amount: 150.00, status: 'cancelled',
+    services: mockInvoiceLines(['General Consultation', 'Prescription'], 150),
+    issueDate: '2026-05-08', amount: 150.00, status: 'rejected',
     submittedAt: '2026-05-08', attachment: 'INV-2026-0829.pdf',
     diagnosis: 'Mild intermittent asthma, partially controlled.',
     treatment: 'Salbutamol inhaler 100mcg PRN (continue). Added Beclometasone 50mcg BD.',
@@ -317,7 +357,7 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0822', patient: 'Grace Mutasa', patientId: 'P003',
     phone: '+263 77 789 0123', email: 'grace.m@email.com',
-    services: ['General Consultation', 'Prescription', 'Specialist Referral'],
+    services: mockInvoiceLines(['General Consultation', 'Prescription', 'Specialist Referral'], 225),
     issueDate: '2026-04-28', amount: 225.00, status: 'paid',
     submittedAt: '2026-04-28', paidAt: '2026-04-30', paymentRef: 'PAY-0041-ZW', attachment: 'INV-2026-0822.pdf',
     diagnosis: 'Antenatal review at 28 weeks gestation. BP 116/74 mmHg. Fetal heart rate 148 bpm.',
@@ -328,8 +368,8 @@ export const MOCK_SP_INVOICES: SPInvoice[] = [
   {
     id: 'INV-2026-0808', patient: 'Grace Mutasa', patientId: 'P003',
     phone: '+263 77 789 0123', email: 'grace.m@email.com',
-    services: ['General Consultation'],
-    issueDate: '2026-04-10', amount: 75.00, status: 'cancelled',
+    services: mockInvoiceLines(['General Consultation'], 75),
+    issueDate: '2026-04-10', amount: 75.00, status: 'rejected',
     submittedAt: '2026-04-10', attachment: 'invoice_april.pdf',
     diagnosis: 'General wellness consultation. BP 118/76 mmHg — within normal range.',
     treatment: 'No pharmacological treatment required. Nutritional counselling provided.',

@@ -5,58 +5,77 @@ import { SPRouter } from './SPRouter'
 import { AdminRouter } from './AdminRouter'
 import { SplashScreen } from '@/features/auth/SplashScreen'
 import { LoginScreen } from '@/features/auth/LoginScreen'
+import { AdminLoginScreen } from '@/features/auth/AdminLoginScreen'
 import { RegisterScreen } from '@/features/auth/RegisterScreen'
 import { EmailVerifyScreen } from '@/features/auth/EmailVerifyScreen'
 import { OnboardingScreen } from '@/features/auth/OnboardingScreen'
-import { TweaksPanel } from '@/components/TweaksPanel'
+import { ForgotPasswordScreen } from '@/features/auth/ForgotPasswordScreen'
+import { ResetPasswordScreen } from '@/features/auth/ResetPasswordScreen'
+import { TermsScreen } from '@/features/legal/TermsScreen'
+import { PrivacyPolicyScreen } from '@/features/legal/PrivacyPolicyScreen'
+import { NotFoundPage } from '@/components/errors/NotFoundPage'
 import { ROUTES } from './routes'
 import type { UserRole } from '@/types/user.types'
 import type { ReactNode } from 'react'
 
-function ProtectedRoute({ children, requiredRole }: { children: ReactNode; requiredRole?: UserRole }) {
+function ProtectedRoute({
+  children,
+  requiredRole,
+  loginPath,
+}: {
+  children: ReactNode
+  requiredRole?: UserRole
+  loginPath?: string
+}) {
   const { loggedIn, userRole } = useAuthStore()
-  if (!loggedIn) return <Navigate to={ROUTES.LOGIN} replace />
-  if (requiredRole && userRole !== requiredRole) return <Navigate to={ROUTES.LOGIN} replace />
+  const redirectTo = loginPath ?? ROUTES.LOGIN
+  if (!loggedIn) return <Navigate to={redirectTo} replace />
+  if (requiredRole && userRole !== requiredRole) return <Navigate to={redirectTo} replace />
   return <>{children}</>
 }
 
 export function AppRouter() {
   return (
-    <>
-      <Routes>
-        {/* Public */}
-        <Route path={ROUTES.SPLASH}           element={<SplashScreen />} />
-        <Route path={ROUTES.LOGIN}            element={<LoginScreen />} />
-        <Route path={ROUTES.REGISTER}         element={<RegisterScreen />} />
-        <Route path={ROUTES.VERIFY}            element={<EmailVerifyScreen />} />
-        <Route path={ROUTES.ONBOARDING}        element={<OnboardingScreen />} />
+    <Routes>
+      <Route path={ROUTES.SPLASH} element={<SplashScreen />} />
+      <Route path={ROUTES.LOGIN} element={<LoginScreen />} />
+      <Route path={ROUTES.ADMIN_LOGIN} element={<AdminLoginScreen />} />
+      <Route path={ROUTES.REGISTER} element={<RegisterScreen />} />
+      <Route path={ROUTES.VERIFY} element={<EmailVerifyScreen />} />
+      <Route path={ROUTES.ONBOARDING} element={<OnboardingScreen />} />
+      <Route path={ROUTES.FORGOT_PASSWORD} element={<ForgotPasswordScreen />} />
+      <Route path={ROUTES.RESET_PASSWORD} element={<ResetPasswordScreen />} />
+      <Route path={ROUTES.TERMS} element={<TermsScreen />} />
+      <Route path={ROUTES.PRIVACY_POLICY} element={<PrivacyPolicyScreen />} />
 
-        {/* Patient portal */}
-        <Route path="/app/*" element={
+      <Route
+        path="/app/*"
+        element={
           <ProtectedRoute requiredRole="patient">
             <PatientRouter />
           </ProtectedRoute>
-        } />
+        }
+      />
 
-        {/* SP portal */}
-        <Route path="/sp/*" element={
+      <Route
+        path="/sp/*"
+        element={
           <ProtectedRoute requiredRole="sp">
             <SPRouter />
           </ProtectedRoute>
-        } />
+        }
+      />
 
-        {/* Admin */}
-        <Route path="/admin/*" element={
-          <ProtectedRoute requiredRole="admin">
+      <Route
+        path="/admin/*"
+        element={
+          <ProtectedRoute requiredRole="admin" loginPath={ROUTES.ADMIN_LOGIN}>
             <AdminRouter />
           </ProtectedRoute>
-        } />
+        }
+      />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to={ROUTES.DASHBOARD} replace />} />
-      </Routes>
-
-      <TweaksPanel />
-    </>
+      <Route path="*" element={<NotFoundPage />} />
+    </Routes>
   )
 }

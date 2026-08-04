@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#0D1E42" />
     <meta name="description" content="GG'APP — Healthcare Access Platform" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/logo.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="GG'APP" />
     <title>GG'APP — Healthcare Access Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -23,6 +29,74 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      (function () {
+        var bootState = {
+          mounted: false,
+          errors: [],
+        }
+
+        window.__GG_APP_BOOT__ = bootState
+
+        function escapeHtml(value) {
+          return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+        }
+
+        function showBootFailure(reason) {
+          if (bootState.mounted) return
+
+          var existing = document.getElementById('gg-app-boot-error')
+          var details = bootState.errors.length
+            ? '<pre style="margin-top:12px;white-space:pre-wrap;font-size:12px;line-height:1.55;color:#2E3E5C;background:#FAF6F5;border:1px solid #EAE6E5;border-radius:10px;padding:12px;max-height:220px;overflow:auto;">' + escapeHtml(bootState.errors.join('\n\n')) + '</pre>'
+            : ''
+
+          var markup =
+            '<div id="gg-app-boot-error" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#EEF4FB;font-family:Figtree,Helvetica Neue,Arial,sans-serif;">' +
+              '<div style="width:min(560px,100%);background:#fff;border:1px solid #EAE6E5;border-radius:20px;box-shadow:0 20px 50px rgba(13,30,66,0.08);padding:24px 22px;">' +
+                '<div style="font-size:24px;font-weight:800;letter-spacing:-0.03em;color:#091C44;margin-bottom:10px;">App failed to load</div>' +
+                '<div style="font-size:14px;line-height:1.6;color:#2E3E5C;">' + escapeHtml(reason) + '</div>' +
+                '<div style="font-size:13px;line-height:1.6;color:#2E3E5C;margin-top:8px;">Try reloading this page after the dev server is running. If it keeps happening, the error details below should help pinpoint the failing script.</div>' +
+                details +
+                '<button onclick="window.location.reload()" style="margin-top:16px;padding:12px 16px;border:0;border-radius:12px;background:#38B6FF;color:#091C44;font-size:14px;font-weight:700;cursor:pointer;">Reload</button>' +
+              '</div>' +
+            '</div>'
+
+          if (existing) {
+            existing.outerHTML = markup
+            return
+          }
+
+          var root = document.getElementById('root')
+          if (root) {
+            root.innerHTML = markup
+          } else {
+            document.body.insertAdjacentHTML('beforeend', markup)
+          }
+        }
+
+        window.addEventListener('error', function (event) {
+          var message = event && event.message ? event.message : 'Unknown startup error'
+          bootState.errors.push('Error: ' + message)
+        })
+
+        window.addEventListener('unhandledrejection', function (event) {
+          var reason = event && event.reason
+          bootState.errors.push('Unhandled rejection: ' + (reason && reason.stack ? reason.stack : String(reason)))
+        })
+
+        window.setTimeout(function () {
+          if (!bootState.mounted) {
+            showBootFailure('The startup bundle did not mount the React app within a few seconds.')
+          }
+        }, 4000)
+
+        // Service worker lifecycle (registration, dev cleanup) is handled
+        // in src/services/pwa.ts once the app mounts.
+      })()
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

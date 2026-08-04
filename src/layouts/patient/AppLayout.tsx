@@ -1,16 +1,17 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { ROUTES, LOGO } from '@/router/routes'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useNotificationsStore } from '@/store/notifications.store'
+import { useUserStore } from '@/store/user.store'
 import { NotificationPanel } from '@/components/NotificationPanel'
-import { MOCK_USER } from '@/mock/patient.mock'
-import { FlagImg } from '@/components/FlagImg'
+import { useLogoutMutation, usePatientNotifications, usePatientProfile } from '@/hooks/api'
 import { AppSidebar } from './AppSidebar'
 import { AppTopBar } from './AppTopBar'
 import { PATIENT_NAV, PatientNavIcon, isPatientNavActive } from './patientNav'
+import { useLocationStore } from '@/store/location.store'
 
 interface AppLayoutProps {
   children: ReactNode
@@ -34,8 +35,37 @@ export function AppLayout({ children, title, subtitle, back = false, backLabel }
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
   const navigate = useNavigate()
+  const logoutMutation = useLogoutMutation()
+  const { data: profile } = usePatientProfile()
+  const { data: notifications } = usePatientNotifications()
   const { patientNotifs, openPanel } = useNotificationsStore()
   const unreadCount = patientNotifs.filter(n => !n.read).length
+
+  useEffect(() => {
+    if (!profile) return
+
+    useUserStore.setState({
+      user: profile.user,
+      beneficiaries: profile.beneficiaries,
+    })
+  }, [profile])
+
+  useEffect(() => {
+    if (!notifications) return
+
+    useNotificationsStore.setState({
+      patientNotifs: notifications,
+    })
+  }, [notifications])
+
+  useEffect(() => {
+    useLocationStore.getState().requestLocation()
+  }, [])
+
+  const handleSignOut = () => {
+    setMenuOpen(false)
+    logoutMutation.mutate()
+  }
 
   if (isDesktop) {
     return (
@@ -85,9 +115,34 @@ export function AppLayout({ children, title, subtitle, back = false, backLabel }
           {subtitle && <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.6)', fontFamily: font.family, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>}
         </div>
 
-        <button onClick={openPanel} style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '4px', flexShrink: 0 }}>
+        <button onClick={openPanel} style={{ position: 'relative', background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.8)', padding: '4px', flexShrink: 0 }} aria-label="Notifications">
           <svg width="20" height="20" viewBox="0 0 18 18" fill="none"><path d="M9 2a5.5 5.5 0 00-5.5 5.5c0 2.5-.8 4-1.5 5h14c-.7-1-1.5-2.5-1.5-5A5.5 5.5 0 009 2z" stroke="currentColor" strokeWidth="1.4"/><path d="M7 14.5a2 2 0 004 0" stroke="currentColor" strokeWidth="1.4"/></svg>
           {unreadCount > 0 && <span style={{ position: 'absolute', top: 0, right: 0, width: 8, height: 8, borderRadius: '50%', background: C.error }} />}
+        </button>
+
+        <button
+          onClick={handleSignOut}
+          aria-label="Sign out"
+          title="Sign out"
+          style={{
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: '10px',
+            width: 38,
+            height: 38,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            color: 'rgba(255,255,255,0.85)',
+            flexShrink: 0,
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 16 16" fill="none">
+            <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            <path d="M10 11l3-3-3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M13 8H6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          </svg>
         </button>
       </div>
 
@@ -140,39 +195,18 @@ export function AppLayout({ children, title, subtitle, back = false, backLabel }
               })}
             </nav>
 
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <div style={{ padding: '4px 10px 0' }}>
-                <button
-                  onClick={() => { setMenuOpen(false); navigate(ROUTES.LOGIN) }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '11px 14px', borderRadius: radius.sm, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.38)', fontSize: '13px', fontWeight: 500, fontFamily: font.family, cursor: 'pointer' }}
-                >
-                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
-                    <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                    <path d="M10 11l3-3-3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M13 8H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
-                  </svg>
-                  Sign Out
-                </button>
-              </div>
-
-              <div style={{ margin: '0 10px', height: '1px', background: 'rgba(255,255,255,0.06)' }} />
-
-              <div style={{ padding: '8px 10px 16px' }}>
-                <NavLink to={ROUTES.PROFILE} style={{ textDecoration: 'none' }} onClick={() => setMenuOpen(false)}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 12px', borderRadius: radius.sm, background: 'rgba(74,173,223,0.08)' }}>
-                    <div style={{ width: 40, height: 40, borderRadius: '50%', background: C.blue500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#fff', fontFamily: font.family }}>{MOCK_USER.name.split(' ').map(n => n[0]).join('')}</span>
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: font.family }}>{MOCK_USER.name}</div>
-                      <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center', gap: '4px', fontFamily: font.family }}>
-                        <FlagImg code={MOCK_USER.countryCode} size={16} />
-                        <span>Patient Account</span>
-                      </div>
-                    </div>
-                  </div>
-                </NavLink>
-              </div>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 10px 16px' }}>
+              <button
+                onClick={handleSignOut}
+                style={{ display: 'flex', alignItems: 'center', gap: '10px', width: '100%', padding: '11px 14px', borderRadius: radius.sm, border: 'none', background: 'transparent', color: 'rgba(255,255,255,0.38)', fontSize: '13px', fontWeight: 500, fontFamily: font.family, cursor: 'pointer' }}
+              >
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                  <path d="M6 2H3a1 1 0 00-1 1v10a1 1 0 001 1h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                  <path d="M10 11l3-3-3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M13 8H6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+                Sign Out
+              </button>
             </div>
           </div>
         </>

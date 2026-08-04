@@ -18,7 +18,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
   const colors = ['', C.error, C.warning, C.blue500, C.success]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '8px' }}>
       <div style={{ display: 'flex', gap: '4px' }}>
         {[1, 2, 3, 4].map(i => (
           <div key={i} style={{

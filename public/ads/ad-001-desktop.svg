@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="90" viewBox="0 0 1200 90">
+  <!-- Background -->
+  <rect width="1200" height="90" fill="#050E22"/>
+  <!-- Decorative orbs -->
+  <circle cx="1230" cy="-18" r="170" fill="#38B6FF" opacity="0.07"/>
+  <circle cx="1100" cy="108" r="110" fill="#38B6FF" opacity="0.04"/>
+  <!-- Logo tile -->
+  <rect x="22" y="22" width="46" height="46" rx="8" fill="#38B6FF"/>
+  <text x="45" y="52" font-family="system-ui,-apple-system,Arial,sans-serif" font-size="17" font-weight="bold" fill="#050E22" text-anchor="middle">HS</text>
+  <!-- Headline -->
+  <text x="84" y="40" font-family="system-ui,-apple-system,Arial,sans-serif" font-size="15" font-weight="bold" fill="#FFFFFF" letter-spacing="-0.3">Protect your family&#x2019;s health</text>
+  <!-- Tagline -->
+  <text x="84" y="58" font-family="system-ui,-apple-system,Arial,sans-serif" font-size="12" fill="#FFFFFF" opacity="0.62">Comprehensive medical cover from Z$25/month &#xB7; No waiting periods</text>
+  <!-- CTA button -->
+  <rect x="1052" y="26" width="130" height="38" rx="7" fill="#38B6FF"/>
+  <text x="1117" y="50" font-family="system-ui,-apple-system,Arial,sans-serif" font-size="12" font-weight="bold" fill="#050E22" text-anchor="middle">Get Covered &#x2192;</text>
+  <!-- AD label -->
+  <text x="1192" y="11" font-family="system-ui,-apple-system,Arial,sans-serif" font-size="8" font-weight="bold" fill="#FFFFFF" opacity="0.25" text-anchor="end" letter-spacing="1">AD</text>
+</svg>

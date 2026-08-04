@@ -10,6 +10,18 @@ dist-ssr/
 .env.local
 .env.*.local
 
+# Redis local dump
+dump.rdb
+
+# Agent/editor workspace junk
+.claude/
+.codex*
+*.codex*
+
+# Dev-only capture scripts + screenshots
+screenshots/
+capture-screens.*
+
 # Editor
 .vscode/
 .idea/

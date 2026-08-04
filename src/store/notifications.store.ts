@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { MOCK_NOTIFICATIONS } from '@/mock/patient.mock'
 import { MOCK_SP_NOTIFICATIONS } from '@/mock/sp.mock'
 import type { Notification } from '@/types/user.types'
 
@@ -15,7 +14,7 @@ interface NotificationsStore {
 }
 
 export const useNotificationsStore = create<NotificationsStore>(set => ({
-  patientNotifs: MOCK_NOTIFICATIONS,
+  patientNotifs: [],
   spNotifs: MOCK_SP_NOTIFICATIONS,
   panelOpen: false,
   openPanel:  () => set({ panelOpen: true }),

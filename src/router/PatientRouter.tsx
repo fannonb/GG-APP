@@ -14,10 +14,19 @@ import { InvoiceListScreen }      from '@/features/patient/invoices/InvoiceListS
 import { InvoiceReviewScreen }    from '@/features/patient/invoices/InvoiceReviewScreen'
 import { PINAuthScreen }          from '@/features/patient/invoices/PINAuthScreen'
 import { PaymentSuccessScreen }   from '@/features/patient/invoices/PaymentSuccessScreen'
-import { AppointmentsScreen }       from '@/features/patient/AppointmentsScreen'
+import { AppointmentsScreen }         from '@/features/patient/AppointmentsScreen'
+import { RescheduleReviewScreen }    from '@/features/patient/RescheduleReviewScreen'
 import { TransactionHistoryScreen } from '@/features/patient/TransactionHistoryScreen'
 import { ProfileScreen }          from '@/features/patient/ProfileScreen'
+import { PaymentPinSetupScreen }  from '@/features/patient/PaymentPinSetupScreen'
+import { HealthLedgerScreen }     from '@/features/patient/ledger/HealthLedgerScreen'
+import { LedgerPinSetupScreen }   from '@/features/patient/ledger/LedgerPinSetupScreen'
+import { LedgerAccessScreen }     from '@/features/patient/ledger/LedgerAccessScreen'
 import { NotificationsScreen }    from '@/features/patient/NotificationsScreen'
+import { PrescriptionRequestsScreen } from '@/features/patient/PrescriptionRequestsScreen'
+import { PrescriptionConfirmScreen } from '@/features/patient/PrescriptionConfirmScreen'
+import { PrescriptionDetailScreen } from '@/features/patient/PrescriptionDetailScreen'
+import { NotFoundPage } from '@/components/errors/NotFoundPage'
 
 export function PatientRouter() {
   return (
@@ -38,10 +47,19 @@ export function PatientRouter() {
       <Route path="invoices/:id"           element={<InvoiceReviewScreen />} />
       <Route path="invoices/:id/pay"       element={<PINAuthScreen />} />
       <Route path="invoices/:id/success"   element={<PaymentSuccessScreen />} />
-      <Route path="appointments"            element={<AppointmentsScreen />} />
+      <Route path="appointments"              element={<AppointmentsScreen />} />
+      <Route path="appointments/:id/reschedule" element={<RescheduleReviewScreen />} />
+      <Route path="prescriptions"             element={<PrescriptionRequestsScreen />} />
+      <Route path="prescriptions/confirm"     element={<PrescriptionConfirmScreen />} />
+      <Route path="prescriptions/:id"         element={<PrescriptionDetailScreen />} />
       <Route path="transactions"           element={<TransactionHistoryScreen />} />
       <Route path="profile"               element={<ProfileScreen />} />
+      <Route path="security/pin"          element={<PaymentPinSetupScreen />} />
+      <Route path="ledger"                element={<HealthLedgerScreen />} />
+      <Route path="ledger/pin"            element={<LedgerPinSetupScreen />} />
+      <Route path="ledger/access"         element={<LedgerAccessScreen />} />
       <Route path="notifications"          element={<NotificationsScreen />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   )
 }

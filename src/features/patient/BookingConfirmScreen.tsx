@@ -4,14 +4,25 @@ import { GGCard, GGButton, GGBadge } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { MOCK_PROVIDERS } from '@/mock/patient.mock'
+import type { CreateAppointmentResult } from '@/api/types'
 import type { Provider } from '@/types/provider.types'
 
 export function BookingConfirmScreen() {
   const navigate = useNavigate()
-  const { state } = useLocation() as { state?: { provider?: Provider; booking?: { date?: string; time?: string } } }
+  const { state } = useLocation() as {
+    state?: {
+      provider?: Provider
+      booking?: { date?: string; time?: string }
+      bookingResult?: CreateAppointmentResult
+    }
+  }
   const p = state?.provider ?? MOCK_PROVIDERS[0]
   const booking = state?.booking ?? {}
-  const [refNum] = useState(() => 'BK-' + String(Math.floor(100000 + Math.random() * 900000)))
+  const bookingResult = state?.bookingResult
+  const [generatedRefNum] = useState(() => 'BK-' + String(Math.floor(100000 + Math.random() * 900000)))
+  const refNum = bookingResult?.id ?? generatedRefNum
+  const appointmentDate = bookingResult?.date ?? booking.date
+  const appointmentTime = bookingResult?.time ?? booking.time
 
   return (
     <AppLayout title="Request Confirmed" subtitle="Pending provider confirmation" back notifCount={1}>
@@ -31,7 +42,7 @@ export function BookingConfirmScreen() {
               {[
                 { label: 'Reference',    val: refNum },
                 { label: 'Provider',     val: p.name },
-                { label: 'Appointment', val: booking.date ? `${booking.date} at ${booking.time}` : 'Pending confirmation' },
+                { label: 'Appointment', val: appointmentDate ? `${appointmentDate} at ${appointmentTime}` : 'Pending confirmation' },
                 { label: 'Status',       val: <GGBadge type="warning">Pending Confirmation</GGBadge> },
               ].map(item => (
                 <div key={item.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: '8px', borderBottom: `1px solid ${C.border}` }}>

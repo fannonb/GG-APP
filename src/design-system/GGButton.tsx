@@ -11,6 +11,7 @@ interface GGButtonProps {
   size?: ButtonSize
   onClick?: () => void
   disabled?: boolean
+  loading?: boolean
   fullWidth?: boolean
   style?: CSSProperties
   type?: 'button' | 'submit' | 'reset'
@@ -29,12 +30,14 @@ export function GGButton({
   size = 'md',
   onClick,
   disabled = false,
+  loading = false,
   fullWidth = false,
   style: sx,
   type = 'button',
 }: GGButtonProps) {
   const [hovered, setHovered] = useState(false)
   const [pressed, setPressed] = useState(false)
+  const isDisabled = disabled || loading
 
   const base: CSSProperties = {
     display: 'inline-flex',
@@ -100,16 +103,32 @@ export function GGButton({
   }
 
   return (
-    <button
-      type={type}
-      onClick={disabled ? undefined : onClick}
-      style={{ ...base, ...SIZES[size], ...variants[variant], ...(sx ?? {}) }}
-      onMouseEnter={() => !disabled && setHovered(true)}
-      onMouseLeave={() => { setHovered(false); setPressed(false) }}
-      onMouseDown={() => !disabled && setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-    >
-      {children}
-    </button>
+    <>
+      {loading && <style>{'@keyframes gg-spin { to { transform: rotate(360deg) } }'}</style>}
+      <button
+        type={type}
+        onClick={isDisabled ? undefined : onClick}
+        style={{ ...base, ...SIZES[size], ...variants[variant], opacity: isDisabled ? 0.5 : 1, cursor: isDisabled ? 'not-allowed' : 'pointer', ...(sx ?? {}) }}
+        onMouseEnter={() => !isDisabled && setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setPressed(false) }}
+        onMouseDown={() => !isDisabled && setPressed(true)}
+        onMouseUp={() => setPressed(false)}
+      >
+        {loading && (
+          <span
+            style={{
+              width: '14px',
+              height: '14px',
+              borderRadius: '50%',
+              border: '2px solid currentColor',
+              borderTopColor: 'transparent',
+              display: 'inline-block',
+              animation: 'gg-spin 0.8s linear infinite',
+            }}
+          />
+        )}
+        {children}
+      </button>
+    </>
   )
 }

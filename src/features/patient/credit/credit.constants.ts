@@ -9,14 +9,14 @@ export const CREDIT_JOURNEY_STEPS = [
   },
   {
     step: 2,
-    title: 'Choose a Partner & Apply',
-    desc: 'Choose a licensed finance partner available in your country and complete the form.',
+    title: 'Submit Application',
+    desc: 'Choose a finance partner and send your request to GG\'APP for review.',
     path: '/app/credit/apply',
   },
   {
     step: 3,
-    title: 'Balance Loaded',
-    desc: 'Once approved, your balance appears here and is ready to use.',
+    title: 'Use Your Balance',
+    desc: 'Once approved, your wallet balance is ready to use at verified providers.',
     path: '/app/credit',
   },
 ] as const

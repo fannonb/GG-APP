@@ -1,0 +1,32 @@
+{
+  "id": "/",
+  "name": "GG'APP — Healthcare Access Platform",
+  "short_name": "GG'APP",
+  "description": "Healthcare access platform connecting patients, providers, and administrators.",
+  "theme_color": "#091C44",
+  "background_color": "#EEF4FB",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "start_url": "/",
+  "scope": "/",
+  "icons": [
+    {
+      "src": "/icons.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "1869x1744",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

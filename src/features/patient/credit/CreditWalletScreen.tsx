@@ -1,34 +1,48 @@
 import { useNavigate } from 'react-router-dom'
+import { isMockApi } from '@/api/config'
 import { GGCard, GGButton, GGBadge } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
+import { usePatientTransactions } from '@/hooks/api'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate } from '@/utils/format'
-import { MOCK_USER, MOCK_TRANSACTIONS, MOCK_BENEFICIARIES } from '@/mock/patient.mock'
 import { getCountryByCode } from '@/config/countries'
 import { FlagImg } from '@/components/FlagImg'
 import { useAuthStore } from '@/store/auth.store'
 import { ROUTES } from '@/router/routes'
 import { CreditEmptyState } from './components/CreditEmptyState'
+import { CreditLowBalancePrompt } from './components/CreditLowBalancePrompt'
 import { PARTNER_LOGOS } from './partner-logos'
+import { useUserStore } from '@/store/user.store'
+import { isCreditRunningLow } from '@/utils/credit-threshold'
 
 export function CreditWalletScreen() {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
   const { userMode } = useAuthStore()
-  const isNew = userMode === 'new'
-  const u = MOCK_USER
+  const u = useUserStore(s => s.user)
+  const beneficiaries = useUserStore(s => s.beneficiaries)
+  const { data: liveTransactions = [] } = usePatientTransactions()
+  const isNew = isMockApi
+    ? userMode === 'new'
+    : u.creditStatus === 'not_applied' && u.creditLimit === 0
   const country = getCountryByCode(u.countryCode)
   const currency = country?.currencySymbol ?? 'Z$'
   const outstanding = 450.00
-  const transactions = isNew ? [] : MOCK_TRANSACTIONS
-  const beneficiaries = isNew ? [] : MOCK_BENEFICIARIES
-  const thisMonthUsage = transactions
+  const transactions = isNew ? [] : liveTransactions
+  const spendableTransactions = transactions.filter(
+    transaction => transaction.status !== 'failed',
+  )
+  const beneficiariesActive = Boolean(u.beneficiariesEnabled) || beneficiaries.length > 0
+  const activeBeneficiaries = isNew || !beneficiariesActive ? [] : beneficiaries
+  const thisMonthUsage = spendableTransactions
     .filter(t => new Date(t.date).getMonth() === new Date().getMonth())
     .reduce((s, t) => s + t.amount, 0)
   const limitUsedPct = u.creditLimit > 0
     ? Math.round(((u.creditLimit - u.creditAvailable) / u.creditLimit) * 100)
     : 0
+  const showLowBalancePrompt = u.creditStatus === 'approved'
+    && isCreditRunningLow(u.creditAvailable, u.countryCode)
 
   if (isNew) return (
     <AppLayout title="Wallet" subtitle="Healthcare credit" notifCount={0}>
@@ -39,6 +53,10 @@ export function CreditWalletScreen() {
   return (
     <AppLayout title="Balance" subtitle="Manage your healthcare balance" notifCount={1}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
+
+        {showLowBalancePrompt && (
+          <CreditLowBalancePrompt available={u.creditAvailable} countryCode={u.countryCode} />
+        )}
 
         {/* Bespoke, High-End SaaS Healthcare Credit Hub */}
         <div style={{
@@ -285,16 +303,18 @@ export function CreditWalletScreen() {
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {transactions.map((tx, i) => (
                 <div key={tx.id} style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 0', borderBottom: i < transactions.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-                  <div style={{ width: 42, height: 44, borderRadius: '12px', background: C.successBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3.5 9l4 4 7-7" stroke={C.success} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div style={{ width: 42, height: 44, borderRadius: '12px', background: tx.status === 'failed' ? C.errorBg : C.blue100, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    {tx.status === 'failed' ? <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M4 4l10 10M14 4L4 14" stroke={C.error} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg> : <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M3.5 9l4 4 7-7" stroke={C.blue500} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '14px', fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tx.provider}</div>
                     <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>{tx.service} · {formatDate(tx.date, { month: 'short', day: 'numeric' })}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>-{formatCurrency(tx.amount)}</div>
-                    <div style={{ marginTop: '4px' }}><GGBadge type="success">Paid</GGBadge></div>
+                    <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>-{formatCurrency(tx.amount, currency)}</div>
+                    {tx.status === 'failed' && (
+                      <div style={{ marginTop: '4px' }}><GGBadge type="error">Failed</GGBadge></div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -309,12 +329,32 @@ export function CreditWalletScreen() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
                 <div>
                   <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>Authorized Beneficiaries</div>
-                  <div style={{ fontSize: '11px', color: C.textLight, marginTop: '2px', fontFamily: font.family }}>Registered beneficiaries on this balance</div>
+                  <div style={{ fontSize: '11px', color: C.textLight, marginTop: '2px', fontFamily: font.family }}>
+                    {beneficiariesActive
+                      ? 'Registered beneficiaries on this balance'
+                      : 'Enable beneficiaries in Profile to add family cover'}
+                  </div>
                 </div>
-                <span style={{ fontSize: '11px', color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}>+ Add</span>
+                <button
+                  type="button"
+                  onClick={() => navigate(ROUTES.PROFILE, { state: { tab: 'beneficiaries' } })}
+                  style={{ fontSize: '11px', color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family, background: 'none', border: 'none', padding: 0 }}
+                >
+                  {beneficiariesActive ? '+ Add' : 'Manage'}
+                </button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {beneficiaries.map(b => (
+                {!beneficiariesActive && (
+                  <div style={{ padding: '10px 12px', background: C.bg, borderRadius: radius.sm, border: `1px dashed ${C.border}`, fontSize: '12px', color: C.textSub, lineHeight: 1.5, fontFamily: font.family }}>
+                    Beneficiaries are currently off for this account.
+                  </div>
+                )}
+                {beneficiariesActive && activeBeneficiaries.length === 0 && (
+                  <div style={{ padding: '10px 12px', background: C.bg, borderRadius: radius.sm, border: `1px dashed ${C.border}`, fontSize: '12px', color: C.textSub, lineHeight: 1.5, fontFamily: font.family }}>
+                    No beneficiaries added yet.
+                  </div>
+                )}
+                {activeBeneficiaries.map(b => (
                   <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 10px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}` }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.navy800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <span style={{ fontSize: '11px', fontWeight: 700, color: '#fff', fontFamily: font.family }}>
