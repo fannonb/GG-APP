@@ -24,6 +24,7 @@ import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../prisma/prisma.service'
 import { RedisService } from '../../redis/redis.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
+import { MailService } from '../../common/services/mail.service'
 import { parseDurationToMs, parseDurationToSeconds } from '../../common/utils/duration.util'
 import { GoogleAuthService } from './google-auth.service'
 import type { GoogleAuthDto } from './dto/google-auth.dto'
@@ -40,6 +41,7 @@ export class AuthService {
   private readonly configService: ConfigService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly googleAuth: GoogleAuthService
+  private readonly mailService: MailService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -48,6 +50,7 @@ export class AuthService {
     @Inject(ConfigService) configService: ConfigService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(GoogleAuthService) googleAuth: GoogleAuthService,
+    @Inject(MailService) mailService: MailService,
   ) {
     this.prisma = prisma
     this.redis = redis
@@ -55,6 +58,7 @@ export class AuthService {
     this.configService = configService
     this.fieldEncryption = fieldEncryption
     this.googleAuth = googleAuth
+    this.mailService = mailService
   }
 
   async registerPatient(dto: RegisterPatientDto) {
@@ -102,11 +106,11 @@ export class AuthService {
           email,
           passwordHash,
           role: UserRole.PATIENT,
-          // Email delivery isn't wired up yet, so every registration is approved
-          // immediately — the patient can sign in right away. (Same behavior the
-          // web app previously got via its client-side verification token.)
           status: UserStatus.ACTIVE,
-          emailVerifiedAt: new Date(),
+          // When Resend is configured, the account stays unverified until the
+          // user confirms the email link. Without a mail provider we fall back
+          // to auto-verifying so local development is never blocked.
+          emailVerifiedAt: this.mailService.isEnabled ? null : new Date(),
           googleId,
           authProvider: isGoogleSignup ? AuthProvider.GOOGLE : AuthProvider.LOCAL,
           phone: dto.phone,
@@ -162,6 +166,24 @@ export class AuthService {
       }
     } catch {
       // Non-critical — registration already succeeded
+    }
+
+    if (this.mailService.isEnabled) {
+      const verificationToken = randomUUID()
+      await this.prisma.emailVerificationToken.create({
+        data: {
+          token: verificationToken,
+          userId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      })
+      void this.mailService.sendVerificationEmail(email, verificationToken)
+
+      return {
+        message:
+          'Registration successful. Check your email to verify your account before signing in.',
+        verificationToken,
+      }
     }
 
     const session = await this.issueSession({ userId, email, role: 'patient' })
@@ -244,7 +266,7 @@ export class AuthService {
           status: UserStatus.ACTIVE,
           phone: dto.phone,
           country: dto.country,
-          emailVerifiedAt: new Date(),
+          emailVerifiedAt: this.mailService.isEnabled ? null : new Date(),
         },
       })
 
@@ -299,8 +321,22 @@ export class AuthService {
       return createdApplication
     })
 
+    if (this.mailService.isEnabled) {
+      const verificationToken = randomUUID()
+      await this.prisma.emailVerificationToken.create({
+        data: {
+          token: verificationToken,
+          userId: application.userId,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      })
+      void this.mailService.sendVerificationEmail(email, verificationToken)
+    }
+
     return {
-      message: 'Application submitted successfully. We will review it shortly.',
+      message: this.mailService.isEnabled
+        ? 'Application submitted successfully. Verify your email to track your application.'
+        : 'Application submitted successfully. We will review it shortly.',
       applicationId: application.id,
       status: this.mapProviderApplicationStatus(application.status),
     }
@@ -437,6 +473,8 @@ export class AuthService {
         screen: '/login',
       },
     })
+
+    void this.mailService.sendPasswordResetEmail(normalizedEmail, token)
 
     const response: ForgotPasswordResponse = { message: genericMessage }
     if (this.shouldExposeResetUrl()) {
@@ -706,9 +744,8 @@ export class AuthService {
   }
 
   private buildPasswordResetUrl(token: string) {
-    const appBaseUrl = this.configService.get<string>('app.appBaseUrl')
     const origins = this.configService.get<string[]>('app.corsOrigins') ?? ['http://localhost:5173']
-    const baseUrl = appBaseUrl?.trim() || origins[0] || 'http://localhost:5173'
+    const baseUrl = origins[0] ?? 'http://localhost:5173'
     return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`
   }
 

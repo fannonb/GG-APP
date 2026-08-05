@@ -25,6 +25,14 @@ export interface AdminNewsArticlePayload {
   url?: string
 }
 
+export interface AdminNewsCategory {
+  id: number
+  name: string
+  articleCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface AdminDashboardData {
   stats: AdminStats
   applications: SPApplication[]
@@ -39,6 +47,21 @@ export interface AdminPaymentsQuery {
 }
 
 export const adminService = {
+  async getNewsCategories(): Promise<AdminNewsCategory[]> {
+    const { data } = await apiClient.get<AdminNewsCategory[]>('/admin/news/categories')
+    return data
+  },
+
+  async createNewsCategory(name: string): Promise<AdminNewsCategory> {
+    const { data } = await apiClient.post<AdminNewsCategory>('/admin/news/categories', { name })
+    return data
+  },
+
+  async deleteNewsCategory(id: number): Promise<{ success: boolean }> {
+    const { data } = await apiClient.delete<{ success: boolean }>(`/admin/news/categories/${id}`)
+    return data
+  },
+
   async getNews(): Promise<NewsItem[]> {
     const { data } = await apiClient.get<NewsItem[]>('/admin/news')
     return data

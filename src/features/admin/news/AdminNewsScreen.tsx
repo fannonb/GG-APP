@@ -1,9 +1,12 @@
 import { useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { formatDate } from '@/utils/format'
 import { useNews } from '@/providers/NewsProvider'
+import { adminService, type AdminNewsCategory } from '@/api/services/admin.service'
+import { queryKeys } from '@/api/query-keys'
 import type { NewsItem } from '@/types/user.types'
 
 // ─── Exact card styles from HealthNewsSection ─────────────────────────────────
@@ -34,8 +37,6 @@ const CARD_STYLES = [
     slotLabel: 'Slot 3+',
   },
 ]
-
-const SUGGESTED_TAGS = ['Health Alert', 'Local Health', 'Research', 'Wellness', 'Policy', 'Treatment', 'Prevention', 'Nutrition']
 
 // ─── Preview card (matches patient card exactly) ──────────────────────────────
 
@@ -149,12 +150,14 @@ function ComposePanel({
   editing,
   draft, setDraft,
   slotIndex,
+  availableTags,
   onPublish, onUpdate, onCancel,
 }: {
   editing: NewsItem | null
   draft: typeof EMPTY_DRAFT
   setDraft: (d: typeof EMPTY_DRAFT) => void
   slotIndex: number
+  availableTags: string[]
   onPublish: () => void
   onUpdate: () => void
   onCancel: () => void
@@ -215,12 +218,17 @@ function ComposePanel({
         <div>
           <label style={{ display: 'block', fontSize: '10px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '5px', fontFamily: font.family }}>Category Tag</label>
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '7px' }}>
-            {SUGGESTED_TAGS.map(t => (
+            {availableTags.map(t => (
               <button key={t} onClick={() => setDraft({ ...draft, tag: t })}
                 style={{ padding: '3px 10px', borderRadius: radius.full, border: `1.5px solid ${draft.tag === t ? C.blue500 : C.border}`, background: draft.tag === t ? C.blue100 : C.bg, color: draft.tag === t ? C.navy800 : C.textSub, fontSize: '11px', fontWeight: draft.tag === t ? 700 : 500, cursor: 'pointer', fontFamily: font.family, transition: 'all 0.1s' }}>
                 {t}
               </button>
             ))}
+            {availableTags.length === 0 && (
+              <span style={{ fontSize: '11px', color: C.textLight, fontFamily: font.family }}>
+                No saved tags yet — add some in the “Manage Category Tags” panel, or type a custom tag below.
+              </span>
+            )}
           </div>
           <input
             value={draft.tag}
@@ -283,6 +291,117 @@ function ComposePanel({
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
+// ---- Category tag manager ----
+
+function NewsCategoryManager() {
+  const queryClient = useQueryClient()
+  const [newTag, setNewTag] = useState('')
+  const [error, setError] = useState<string | null>(null)
+
+  const categoriesQuery = useQuery({
+    queryKey: queryKeys.admin.newsCategories,
+    queryFn: () => adminService.getNewsCategories(),
+  })
+
+  const invalidate = () =>
+    queryClient.invalidateQueries({ queryKey: queryKeys.admin.newsCategories })
+
+  const createMutation = useMutation({
+    mutationFn: (name: string) => adminService.createNewsCategory(name),
+    onSuccess: () => {
+      setNewTag('')
+      setError(null)
+      void invalidate()
+    },
+    onError: (err: unknown) => {
+      const message =
+        typeof err === 'object' && err !== null && 'message' in err
+          ? String((err as { message: unknown }).message)
+          : 'Could not add tag'
+      setError(message)
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => adminService.deleteNewsCategory(id),
+    onSuccess: () => void invalidate(),
+    onError: () => setError('Could not delete tag — try again.'),
+  })
+
+  const categories: AdminNewsCategory[] = categoriesQuery.data ?? []
+
+  const handleAdd = () => {
+    const name = newTag.trim()
+    if (!name) return
+    createMutation.mutate(name)
+  }
+
+  return (
+    <div style={{ background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
+      <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, fontFamily: font.family }}>Manage Category Tags</div>
+          <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>
+            Tags shown in the compose panel. Deleting a tag does not remove it from existing articles.
+          </div>
+        </div>
+        <span style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, background: C.blue100, padding: '3px 10px', borderRadius: radius.full, fontFamily: font.family }}>
+          {categories.length} tag{categories.length === 1 ? '' : 's'}
+        </span>
+      </div>
+
+      <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input
+            value={newTag}
+            onChange={e => setNewTag(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') handleAdd() }}
+            placeholder="Add a custom tag, e.g. Vaccination Drive"
+            style={{ flex: 1, padding: '9px 12px', fontSize: '13px', fontFamily: font.family, color: C.text, background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: radius.sm, outline: 'none', boxSizing: 'border-box' }}
+            onFocus={e => (e.target.style.borderColor = C.blue500)}
+            onBlur={e => (e.target.style.borderColor = C.border)}
+          />
+          <button
+            onClick={handleAdd}
+            disabled={!newTag.trim() || createMutation.isPending}
+            style={{ padding: '9px 16px', borderRadius: radius.sm, border: 'none', background: newTag.trim() && !createMutation.isPending ? C.navy800 : C.border, fontSize: '12px', fontWeight: 700, color: newTag.trim() && !createMutation.isPending ? '#fff' : C.textLight, cursor: newTag.trim() && !createMutation.isPending ? 'pointer' : 'not-allowed', fontFamily: font.family, display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            <svg width="11" height="11" viewBox="0 0 12 12" fill="none"><path d="M6 1v10M1 6h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
+            Add
+          </button>
+        </div>
+
+        {error && (
+          <div style={{ fontSize: '11px', fontWeight: 600, color: C.error, fontFamily: font.family }}>{error}</div>
+        )}
+
+        {categories.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {categories.map(category => (
+              <div key={category.id} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '4px 6px 4px 12px', borderRadius: radius.full, background: C.bg, border: `1.5px solid ${C.border}`, fontFamily: font.family }}>
+                <span style={{ fontSize: '12px', fontWeight: 600, color: C.text }}>{category.name}</span>
+                <span style={{ fontSize: '10px', fontWeight: 700, color: C.textLight }}>
+                  {category.articleCount} article{category.articleCount === 1 ? '' : 's'}
+                </span>
+                <button
+                  onClick={() => {
+                    if (category.articleCount > 0 && !window.confirm(`"${category.name}" is used by ${category.articleCount} article(s). Existing articles keep the tag; only the suggestion is removed. Delete anyway?`)) return
+                    deleteMutation.mutate(category.id)
+                  }}
+                  title={`Delete tag "${category.name}"`}
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', border: 'none', background: `${C.error}14`, color: C.error, cursor: 'pointer', fontFamily: font.family }}
+                >
+                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none"><path d="M1 1l8 8M9 1L1 9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function AdminNewsScreen() {
   const { isMobile, isTablet } = useResponsive()
   const isNarrow = isMobile || isTablet
@@ -291,6 +410,12 @@ export function AdminNewsScreen() {
   const [editing, setEditing]   = useState<NewsItem | null>(null)
   const [draft,   setDraft]     = useState<typeof EMPTY_DRAFT>(EMPTY_DRAFT)
   const [toast,   setToast]     = useState<string | null>(null)
+
+  const categoriesQuery = useQuery({
+    queryKey: queryKeys.admin.newsCategories,
+    queryFn: () => adminService.getNewsCategories(),
+  })
+  const availableTags = (categoriesQuery.data ?? []).map(category => category.name)
 
   const showToast = (msg: string) => {
     setToast(msg)
@@ -362,6 +487,11 @@ export function AdminNewsScreen() {
 
         <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1fr 420px', gap: '24px', alignItems: 'flex-start' }}>
 
+          {/* Category tag manager */}
+          <div style={{ gridColumn: '1 / -1' }}>
+            <NewsCategoryManager />
+          </div>
+
           {/* Left — published articles list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -408,6 +538,7 @@ export function AdminNewsScreen() {
             draft={draft}
             setDraft={setDraft}
             slotIndex={previewSlotIndex}
+            availableTags={availableTags}
             onPublish={handlePublish}
             onUpdate={handleUpdate}
             onCancel={handleCancel}

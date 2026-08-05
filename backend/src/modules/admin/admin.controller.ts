@@ -11,6 +11,7 @@ import { GetAdminPaymentsQueryDto } from './dto/get-admin-payments-query.dto'
 import { ProviderApplicationActionDto } from './dto/provider-application-action.dto'
 import { CreditApplicationActionDto } from './dto/credit-application-action.dto'
 import { CreateNewsArticleDto, UpdateNewsArticleDto } from './dto/news-article.dto'
+import { CreateNewsCategoryDto } from './dto/news-category.dto'
 import { GetAdminLedgerAccessQueryDto } from '../ledger/dto/ledger-query.dto'
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -46,6 +47,21 @@ export class AdminController {
   @Delete('news/:id')
   archiveNews(@Param('id') articleId: string) {
     return this.adminService.archiveNews(articleId)
+  }
+
+  @Get('news/categories')
+  getNewsCategories() {
+    return this.adminService.getNewsCategories()
+  }
+
+  @Post('news/categories')
+  createNewsCategory(@Body() dto: CreateNewsCategoryDto) {
+    return this.adminService.createNewsCategory(dto)
+  }
+
+  @Delete('news/categories/:id')
+  deleteNewsCategory(@Param('id') categoryId: string) {
+    return this.adminService.deleteNewsCategory(Number(categoryId))
   }
 
   @Get('analytics')

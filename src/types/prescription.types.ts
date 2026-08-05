@@ -33,7 +33,7 @@ export interface PrescriptionRequest {
   deliveryAddress?: string
   patientNotes?: string
   pharmacyNotes?: string
-  attachment: AppointmentAttachmentPayload & { dataUrl?: string; url?: string }
+  attachment: AppointmentAttachmentPayload & { dataUrl?: string }
   quotedItems?: PrescriptionQuotedItem[]
   quotedAmount?: number
   deliveryFee?: number
@@ -59,7 +59,7 @@ export interface CreatePrescriptionRequestPayload {
   fulfillmentMode?: PrescriptionFulfillmentMode
   deliveryAddress?: string
   patientNotes?: string
-  attachment: AppointmentAttachmentPayload & { dataUrl?: string; url?: string }
+  attachment: AppointmentAttachmentPayload & { dataUrl?: string }
 }
 
 export interface QuotePrescriptionRequestPayload {

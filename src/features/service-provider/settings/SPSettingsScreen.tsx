@@ -246,7 +246,7 @@ export function SPSettingsScreen() {
     const f = payoutForm
     // Build the canonical accountNumber/accountName based on method
     let accountNumber = ''
-    const accountName = f.accountName.trim()
+    let accountName = f.accountName.trim()
     if (f.method === 'mpesa') {
       accountNumber = f.mpesaType === 'paybill' ? f.paybillNumber.trim() : f.accountNumber.trim()
       if (!accountNumber) return

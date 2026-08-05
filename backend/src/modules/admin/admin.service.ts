@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
@@ -24,8 +25,11 @@ import {
 } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
+import { MailService } from '../../common/services/mail.service'
 import { LedgerService } from '../ledger/ledger.service'
+import { getInvoiceAttachmentDataUrl } from '../../common/utils/invoice-attachment.util'
 import type { CreateNewsArticleDto, UpdateNewsArticleDto } from './dto/news-article.dto'
+import type { CreateNewsCategoryDto } from './dto/news-category.dto'
 
 const ADMIN_PROVIDER_DETAIL_INCLUDE = {
   authUser: true,
@@ -49,7 +53,6 @@ type AdminProviderRecord = Prisma.ProviderGetPayload<{
   include: typeof ADMIN_PROVIDER_DETAIL_INCLUDE
 }>
 
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- Prisma's GetPayload requires the empty args shape
 type AdminNewsArticleRecord = Prisma.NewsArticleGetPayload<{}>
 
 type ResolvedProviderApplication = {
@@ -87,15 +90,18 @@ export class AdminService {
   private readonly prisma: PrismaService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly ledgerService: LedgerService
+  private readonly mailService: MailService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(LedgerService) ledgerService: LedgerService,
+    @Inject(MailService) mailService: MailService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
     this.ledgerService = ledgerService
+    this.mailService = mailService
   }
 
   async getDashboard() {
@@ -189,6 +195,60 @@ export class AdminService {
         return right.publishedAt.getTime() - left.publishedAt.getTime()
       })
       .map(item => this.mapNewsArticle(item))
+  }
+
+  async getNewsCategories() {
+    const [categories, articles] = await Promise.all([
+      this.prisma.newsCategory.findMany({
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.newsArticle.findMany({
+        where: { status: { not: NewsStatus.ARCHIVED } },
+        select: { tag: true },
+      }),
+    ])
+
+    const counts = new Map<string, number>()
+    for (const article of articles) {
+      counts.set(article.tag, (counts.get(article.tag) ?? 0) + 1)
+    }
+
+    return categories.map(category => ({
+      ...category,
+      articleCount: counts.get(category.name) ?? 0,
+    }))
+  }
+
+  async createNewsCategory(dto: CreateNewsCategoryDto) {
+    const name = dto.name.trim()
+    if (!name) {
+      throw new BadRequestException('Category name cannot be empty')
+    }
+
+    const existing = await this.prisma.newsCategory.findUnique({ where: { name } })
+    if (existing) {
+      throw new ConflictException(`Category "${name}" already exists`)
+    }
+
+    return this.prisma.newsCategory.create({
+      data: { name },
+    })
+  }
+
+  async deleteNewsCategory(categoryId: number) {
+    const existing = await this.prisma.newsCategory.findUnique({
+      where: { id: categoryId },
+    })
+    if (!existing) {
+      throw new NotFoundException('Category not found')
+    }
+
+    // Articles keep their tag text; only the managed suggestion is removed.
+    await this.prisma.newsCategory.delete({
+      where: { id: categoryId },
+    })
+
+    return { success: true }
   }
 
   async createNews(dto: CreateNewsArticleDto) {
@@ -2058,6 +2118,16 @@ export class AdminService {
       })
     })
 
+    const approvedPatientName =
+      `${application.patient.patientProfile?.firstName ?? ''} ${application.patient.patientProfile?.lastName ?? ''}`.trim() ||
+      'there'
+    void this.mailService.sendCreditDecisionEmail(application.patient.email, {
+      patientName: approvedPatientName,
+      approved: true,
+      amount: `KSh ${Number(approvedAmount).toFixed(2)}`,
+      note: dto.note ?? undefined,
+    })
+
     return this.getCreditApplication(applicationId)
   }
 
@@ -2137,6 +2207,15 @@ export class AdminService {
           } as Prisma.JsonObject,
         },
       })
+    })
+
+    const rejectedPatientName =
+      `${application.patient.patientProfile?.firstName ?? ''} ${application.patient.patientProfile?.lastName ?? ''}`.trim() ||
+      'there'
+    void this.mailService.sendCreditDecisionEmail(application.patient.email, {
+      patientName: rejectedPatientName,
+      approved: false,
+      note: dto.note ?? undefined,
     })
 
     return this.getCreditApplication(applicationId)

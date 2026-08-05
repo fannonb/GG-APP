@@ -27,12 +27,11 @@ import * as bcrypt from 'bcryptjs'
 import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { ReferenceService } from '../../common/services/reference.service'
-import { parseInvoiceAttachmentMetadata, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
+import { MailService } from '../../common/services/mail.service'
+import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { RedisService } from '../../redis/redis.service'
 import { ProvidersService } from '../providers/providers.service'
-import { StorageService } from '../../common/services/storage.service'
-import { NotificationsService } from '../notifications/notifications.service'
 import type { AuthorizeInvoiceDto } from './dto/authorize-invoice.dto'
 import type { CancelAppointmentDto } from './dto/cancel-appointment.dto'
 import type { CreateAppointmentDto } from './dto/create-appointment.dto'
@@ -63,8 +62,7 @@ export class PatientService {
   private readonly redis: RedisService
   private readonly providersService: ProvidersService
   private readonly referenceService: ReferenceService
-  private readonly storage: StorageService
-  private readonly notifications: NotificationsService
+  private readonly mailService: MailService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -72,32 +70,14 @@ export class PatientService {
     @Inject(RedisService) redis: RedisService,
     @Inject(ProvidersService) providersService: ProvidersService,
     @Inject(ReferenceService) referenceService: ReferenceService,
-    @Inject(StorageService) storage: StorageService,
-    @Inject(NotificationsService) notifications: NotificationsService,
+    @Inject(MailService) mailService: MailService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
     this.redis = redis
     this.providersService = providersService
     this.referenceService = referenceService
-    this.storage = storage
-    this.notifications = notifications
-  }
-
-  private async resolvePrescriptionAttachment(raw: Prisma.JsonValue | null | undefined) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      return raw
-    }
-    const metadata = raw as { storageKey?: string; dataUrl?: string; originalName?: string }
-    if (!metadata.storageKey && !metadata.dataUrl) {
-      return raw
-    }
-    const resolved = await this.storage.resolveAttachmentUrl(
-      metadata,
-      metadata.originalName ?? 'prescription.pdf',
-    )
-    if (!resolved) return raw
-    return { ...metadata, url: resolved.url }
+    this.mailService = mailService
   }
 
   async getProfile(userId: string) {
@@ -863,13 +843,35 @@ export class PatientService {
           screen: '/sp/appointments',
         },
       })
-      await this.notifications.sendPushToUser(provider.authUserId, {
-        title: 'New Appointment Request',
-        body: attachments.length > 0
-          ? `${patientName} sent a new appointment request with ${attachments.length} attachment${attachments.length === 1 ? '' : 's'}.`
-          : `${patientName} sent a new appointment request.`,
-        data: { screen: '/sp/appointments' },
+    }
+
+    if (provider.authUserId) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: [userId, provider.authUserId] } },
+        select: { id: true, email: true },
       })
+      const emailById = new Map(users.map(user => [user.id, user.email]))
+      const dateLabel = appointmentDate.toISOString().slice(0, 10)
+
+      const providerEmail = emailById.get(provider.authUserId)
+      if (providerEmail) {
+        void this.mailService.sendAppointmentRequestEmail(providerEmail, {
+          patientName,
+          providerName: provider.name,
+          date: dateLabel,
+          time: dto.time,
+        })
+      }
+
+      const patientEmail = emailById.get(userId)
+      if (patientEmail) {
+        void this.mailService.sendAppointmentRequestReceivedEmail(patientEmail, {
+          patientName,
+          providerName: provider.name,
+          date: dateLabel,
+          time: dto.time,
+        })
+      }
     }
 
     await this.prisma.auditLog.create({
@@ -1241,10 +1243,7 @@ export class PatientService {
       throw new NotFoundException('Invoice not found')
     }
 
-    const attachment = await this.storage.resolveAttachmentUrl(
-      parseInvoiceAttachmentMetadata(invoice.attachmentMetadata),
-      invoice.attachment ?? 'invoice.pdf',
-    )
+    const attachment = getInvoiceAttachmentDataUrl(invoice.attachment, invoice.attachmentMetadata)
     if (!attachment) {
       throw new NotFoundException('Invoice document is not available')
     }
@@ -2330,19 +2329,7 @@ export class PatientService {
           fulfillmentMode,
           deliveryAddress: dto.deliveryAddress?.trim() || null,
           patientNotes: dto.patientNotes?.trim() || null,
-          prescriptionAttachment: (this.storage.isEnabled
-            ? {
-                ...(await this.storage.storeAttachment({
-                  dataUrl: dto.attachment.dataUrl,
-                  originalName: dto.attachment.name,
-                  mimeType: dto.attachment.mimeType,
-                  sizeBytes: dto.attachment.sizeBytes,
-                  displaySize: dto.attachment.size,
-                  prefix: 'prescriptions',
-                })),
-                type: dto.attachment.type,
-              }
-            : dto.attachment) as unknown as Prisma.InputJsonValue,
+          prescriptionAttachment: dto.attachment as unknown as Prisma.InputJsonValue,
           forSelf: dto.forSelf,
         },
         include: {
@@ -2401,7 +2388,7 @@ export class PatientService {
       orderBy: { createdAt: 'desc' },
     })
 
-    return Promise.all(requests.map(request => this.mapPrescriptionRequest(request)))
+    return requests.map(request => this.mapPrescriptionRequest(request))
   }
 
   async markPrescriptionQuoteReviewed(userId: string, requestReference: string) {
@@ -2545,7 +2532,7 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
-  private async mapPrescriptionRequest(
+  private mapPrescriptionRequest(
     request: {
       id: string
       reference: string
@@ -2582,7 +2569,7 @@ export class PatientService {
       deliveryAddress: request.deliveryAddress ?? undefined,
       patientNotes: request.patientNotes ?? undefined,
       pharmacyNotes: request.pharmacyNotes ?? undefined,
-      attachment: await this.resolvePrescriptionAttachment(request.prescriptionAttachment),
+      attachment: request.prescriptionAttachment,
       quotedItems: request.quotedItems ?? undefined,
       quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
       deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,

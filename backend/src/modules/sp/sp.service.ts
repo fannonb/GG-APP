@@ -41,10 +41,9 @@ import type { UpsertInvoiceDto } from './dto/upsert-invoice.dto'
 import type { QuotePrescriptionRequestDto } from './dto/quote-prescription-request.dto'
 import type { RejectPrescriptionRequestDto } from './dto/reject-prescription-request.dto'
 import { computeSpOnboardingProgress } from '../../common/utils/sp-onboarding.util'
-import { parseInvoiceAttachmentMetadata, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
+import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
 import { ReferenceService } from '../../common/services/reference.service'
-import { StorageService } from '../../common/services/storage.service'
-import { NotificationsService } from '../notifications/notifications.service'
+import { MailService } from '../../common/services/mail.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 
 @Injectable()
@@ -53,39 +52,20 @@ export class SpService {
   private readonly redis: RedisService
   private readonly referenceService: ReferenceService
   private readonly fieldEncryption: FieldEncryptionService
-  private readonly storage: StorageService
-  private readonly notifications: NotificationsService
+  private readonly mailService: MailService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(RedisService) redis: RedisService,
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
-    @Inject(StorageService) storage: StorageService,
-    @Inject(NotificationsService) notifications: NotificationsService,
+    @Inject(MailService) mailService: MailService,
   ) {
     this.prisma = prisma
     this.redis = redis
     this.referenceService = referenceService
     this.fieldEncryption = fieldEncryption
-    this.storage = storage
-    this.notifications = notifications
-  }
-
-  private async resolvePrescriptionAttachment(raw: Prisma.JsonValue | null | undefined) {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-      return raw
-    }
-    const metadata = raw as { storageKey?: string; dataUrl?: string; originalName?: string }
-    if (!metadata.storageKey && !metadata.dataUrl) {
-      return raw
-    }
-    const resolved = await this.storage.resolveAttachmentUrl(
-      metadata,
-      metadata.originalName ?? 'prescription.pdf',
-    )
-    if (!resolved) return raw
-    return { ...metadata, url: resolved.url }
+    this.mailService = mailService
   }
 
   async getDashboard(userId: string) {
@@ -122,9 +102,7 @@ export class SpService {
       isPharmacy,
       isPharmacyOnly,
       appointments: appointments.map(appointment => this.mapAppointment(appointment)),
-      prescriptionRequests: await Promise.all(
-        prescriptionRequests.map(request => this.mapPrescriptionRequest(request)),
-      ),
+      prescriptionRequests: prescriptionRequests.map(request => this.mapPrescriptionRequest(request)),
       patients,
       payments: invoices
         .filter(
@@ -150,7 +128,7 @@ export class SpService {
   async getPrescriptionRequests(userId: string) {
     const provider = await this.resolveProvider(userId)
     const requests = await this.getPrescriptionRequestRecords(provider.id)
-    return Promise.all(requests.map(request => this.mapPrescriptionRequest(request)))
+    return requests.map(request => this.mapPrescriptionRequest(request))
   }
 
   async getPrescriptionRequest(userId: string, requestReference: string) {
@@ -246,10 +224,11 @@ export class SpService {
       },
     })
 
-    await this.notifications.sendPushToUser(request.patientUserId, {
-      title: 'Quote Ready',
-      body: `${provider.name} sent pricing for your prescription. Review and accept or decline the quote to continue.`,
-      data: { screen: `/app/prescriptions/${updated.reference}` },
+    const quotePatientName = formatPatientFullName(updated.patient.patientProfile)
+    void this.mailService.sendPrescriptionQuoteReadyEmail(updated.patient.email, {
+      patientName: quotePatientName,
+      providerName: provider.name,
+      reference: updated.reference,
     })
 
     return this.mapPrescriptionRequest(updated)
@@ -570,6 +549,16 @@ export class SpService {
         },
       }),
     ])
+
+    if (dto.status === 'confirmed') {
+      const confirmedPatientName = formatPatientFullName(appointment.patient.patientProfile)
+      void this.mailService.sendAppointmentConfirmationEmail(appointment.patient.email, {
+        patientName: confirmedPatientName,
+        providerName: provider.name,
+        date: appointment.date.toISOString().slice(0, 10),
+        time: appointment.timeLabel,
+      })
+    }
 
     return this.mapAppointment(updatedAppointment)
   }
@@ -978,10 +967,7 @@ export class SpService {
       throw new NotFoundException('Invoice not found')
     }
 
-    const attachment = await this.storage.resolveAttachmentUrl(
-      parseInvoiceAttachmentMetadata(invoice.attachmentMetadata),
-      invoice.attachment ?? 'invoice.pdf',
-    )
+    const attachment = getInvoiceAttachmentDataUrl(invoice.attachment, invoice.attachmentMetadata)
     if (!attachment) {
       throw new NotFoundException('Invoice document is not available')
     }
@@ -1080,12 +1066,7 @@ export class SpService {
           submittedAt: new Date(),
           attachment: dto.attachment?.originalName ?? null,
           attachmentMetadata: dto.attachment
-            ? ((this.storage.isEnabled
-                ? await this.storage.storeAttachment({
-                    ...dto.attachment,
-                    prefix: 'invoices',
-                  })
-                : dto.attachment) as unknown as Prisma.InputJsonValue)
+            ? (dto.attachment as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           lineItems: {
             create: this.resolveLineItems(dto, serviceNames),
@@ -1141,12 +1122,6 @@ export class SpService {
         },
       })
 
-      await this.notifications.sendPushToUser(appointment.patientUserId, {
-        title: 'New Invoice Available',
-        body: `A new invoice from ${provider.name} is awaiting your authorization.`,
-        data: { screen: `/app/invoices/${createdInvoice.reference}` },
-      })
-
       await tx.auditLog.create({
         data: {
           actorUserId: userId,
@@ -1161,6 +1136,14 @@ export class SpService {
       })
 
       return createdInvoice
+    })
+
+    const invoicePatientName = formatPatientFullName(patientProfile)
+    void this.mailService.sendInvoiceIssuedEmail(appointment.patient.email, {
+      patientName: invoicePatientName,
+      providerName: provider.name,
+      reference: invoice.reference,
+      amount: `KSh ${Number(invoice.amount).toFixed(2)}`,
     })
 
     return this.mapSpInvoice(invoice)
@@ -1284,12 +1267,7 @@ export class SpService {
           internalNote: request.pharmacyNotes,
           attachment: dto.attachment?.originalName ?? null,
           attachmentMetadata: dto.attachment
-            ? ((this.storage.isEnabled
-                ? await this.storage.storeAttachment({
-                    ...dto.attachment,
-                    prefix: 'invoices',
-                  })
-                : dto.attachment) as unknown as Prisma.InputJsonValue)
+            ? (dto.attachment as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
           lineItems: {
             create: lineItems.length > 0 ? lineItems : [{ name: 'Prescription fulfillment', amount }],
@@ -1312,12 +1290,6 @@ export class SpService {
         },
       })
 
-      await this.notifications.sendPushToUser(request.patientUserId, {
-        title: 'Invoice Ready for Payment',
-        body: `Your medication invoice from ${provider.name} is ready. Review and ${request.fulfillmentMode === 'DELIVERY' ? 'approve delivery' : 'approve preparation'} to proceed.`,
-        data: { screen: `/app/invoices/${createdInvoice.reference}` },
-      })
-
       await tx.auditLog.create({
         data: {
           actorUserId: userId,
@@ -1332,6 +1304,14 @@ export class SpService {
       })
 
       return createdInvoice
+    })
+
+    const rxPatientName = formatPatientFullName(request.patient.patientProfile)
+    void this.mailService.sendInvoiceIssuedEmail(request.patient.email, {
+      patientName: rxPatientName,
+      providerName: provider.name,
+      reference: invoice.reference,
+      amount: `KSh ${Number(invoice.amount).toFixed(2)}`,
     })
 
     return this.mapSpInvoice(invoice)
@@ -1364,9 +1344,9 @@ export class SpService {
     if (dto.attachment) {
       this.ensureAttachmentContent(dto)
     } else {
-      const existingAttachment = await this.storage.resolveAttachmentUrl(
-        parseInvoiceAttachmentMetadata(existing.attachmentMetadata),
-        existing.attachment ?? 'invoice.pdf',
+      const existingAttachment = getInvoiceAttachmentDataUrl(
+        existing.attachment,
+        existing.attachmentMetadata,
       )
       if (!existingAttachment) {
         throw new BadRequestException('Invoice PDF must be re-uploaded')
@@ -1411,12 +1391,7 @@ export class SpService {
           paymentRef: null,
           attachment: dto.attachment?.originalName ?? existing.attachment,
           attachmentMetadata: dto.attachment
-            ? ((this.storage.isEnabled
-                ? await this.storage.storeAttachment({
-                    ...dto.attachment,
-                    prefix: 'invoices',
-                  })
-                : dto.attachment) as unknown as Prisma.InputJsonValue)
+            ? (dto.attachment as unknown as Prisma.InputJsonValue)
             : existing.attachmentMetadata ?? Prisma.JsonNull,
           rejectionReason: null,
           lineItems: {
@@ -2894,7 +2869,7 @@ export class SpService {
     return request
   }
 
-  private async mapPrescriptionRequest(
+  private mapPrescriptionRequest(
     request: {
       id: string
       reference: string
@@ -2935,7 +2910,7 @@ export class SpService {
       deliveryAddress: request.deliveryAddress ?? undefined,
       patientNotes: request.patientNotes ?? undefined,
       pharmacyNotes: request.pharmacyNotes ?? undefined,
-      attachment: await this.resolvePrescriptionAttachment(request.prescriptionAttachment),
+      attachment: request.prescriptionAttachment,
       quotedItems: request.quotedItems ?? undefined,
       quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
       deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,
