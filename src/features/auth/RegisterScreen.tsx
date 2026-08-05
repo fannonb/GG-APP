@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { C, font } from '@/design-system/tokens'
-import { LOGO, ROUTES } from '@/router/routes'
+import { ROUTES } from '@/router/routes'
 import { useResponsive } from '@/hooks/useResponsive'
 import { AuthBrandPanel } from './components/AuthBrandPanel'
+import { AuthCompactBrandHeader } from './components/AuthCompactBrandHeader'
 import { EntityTabBar } from './components/EntityTabBar'
 import { PatientRegisterFlow } from './components/PatientRegisterFlow'
 import { SPRegisterFlow } from './components/SPRegisterFlow'
@@ -13,7 +14,8 @@ type Tab = 'patient' | 'sp'
 export function RegisterScreen() {
   const [searchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>((searchParams.get('tab') as Tab) ?? 'patient')
-  const { isMobile } = useResponsive()
+  const { isDesktop } = useResponsive()
+  const compactBrand = !isDesktop
   useNavigate()
 
   const focusColor = tab === 'patient' ? C.blue500 : '#10B981'
@@ -21,83 +23,15 @@ export function RegisterScreen() {
   return (
     <div style={{
       display: 'flex',
-      flexDirection: isMobile ? 'column' : 'row',
-      height: isMobile ? 'auto' : '100vh',
+      flexDirection: compactBrand ? 'column' : 'row',
+      height: compactBrand ? 'auto' : '100vh',
       minHeight: '100vh',
-      overflow: isMobile ? 'visible' : 'hidden',
+      overflow: compactBrand ? 'visible' : 'hidden',
       fontFamily: font.family,
       background: C.bg,
     }}>
       <AuthBrandPanel tab={tab} />
-
-      {/* Mobile brand header */}
-      {isMobile && (
-        <div style={{
-          background: 'linear-gradient(135deg, #091C44 0%, #050E22 100%)',
-          padding: '24px 20px 20px',
-          position: 'relative',
-          overflow: 'hidden',
-          borderRadius: '0 0 28px 28px',
-          boxShadow: '0 8px 24px rgba(5, 14, 34, 0.2)',
-        }}>
-          {[160, 260, 360].map((r, i) => {
-            const rgb = tab === 'patient' ? '56, 182, 255' : '16, 185, 129'
-            return (
-              <div key={i} style={{
-                position: 'absolute',
-                width: r, height: r,
-                borderRadius: '50%',
-                border: `1px solid rgba(${rgb},${0.06 - i * 0.015})`,
-                top: '50%', right: '-40px',
-                transform: 'translateY(-50%)',
-                pointerEvents: 'none',
-                transition: 'all 0.3s ease',
-              }} />
-            )
-          })}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', position: 'relative' }}>
-            {/* Glassmorphic Logo Frame */}
-            <div style={{ 
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '8px',
-              borderRadius: '12px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              backdropFilter: 'blur(8px)',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.15)',
-              marginBottom: '10px',
-            }}>
-              <img src={LOGO} alt="GG'APP" width={48} height={48} style={{ objectFit: 'contain', display: 'block' }} />
-            </div>
-            <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.75)', fontWeight: 500, lineHeight: 1.4, textAlign: 'center', fontFamily: font.family }}>
-              {tab === 'patient' ? 'Healthcare Access, Simplified.' : 'Grow Your Practice.'}
-            </div>
-          </div>
-          <div style={{ marginTop: '14px', display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap', position: 'relative' }}>
-            {(tab === 'patient'
-              ? ['Zero Upfront Cost', 'Verified Providers', 'Secure Payments']
-              : ['Instant Disbursements', 'Pre-verified Patients', 'Simplified Admin']
-            ).map(label => {
-              const accentColor = tab === 'patient' ? '#38B6FF' : '#10B981'
-              return (
-                <div key={label} style={{
-                  padding: '4px 10px',
-                  borderRadius: '20px',
-                  background: `${accentColor}10`,
-                  border: `1px solid ${accentColor}30`,
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  color: 'rgba(255,255,255,0.8)',
-                  whiteSpace: 'nowrap',
-                  transition: 'all 0.3s ease',
-                }}>{label}</div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      {compactBrand && <AuthCompactBrandHeader tab={tab} />}
 
       <div style={{
         flex: 1,
@@ -142,11 +76,11 @@ export function RegisterScreen() {
         </div>
 
         <div style={{
-          minHeight: isMobile ? 'auto' : '100%',
+          minHeight: compactBrand ? 'auto' : '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          padding: isMobile ? '16px 12px 24px' : '36px 40px',
+          padding: compactBrand ? '16px 12px 24px' : '36px 40px',
           boxSizing: 'border-box',
           position: 'relative',
           zIndex: 1,
@@ -154,7 +88,7 @@ export function RegisterScreen() {
           <div style={{
             width: '100%',
             maxWidth: 520,
-            padding: isMobile ? '20px 16px' : '40px 36px',
+            padding: compactBrand ? '20px 16px' : '40px 36px',
           }}>
             <EntityTabBar tab={tab} setTab={setTab} />
 

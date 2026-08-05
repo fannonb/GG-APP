@@ -72,8 +72,9 @@ const CONTENT: Record<Tab, BrandContent> = {
 }
 
 export function AuthBrandPanel({ tab }: AuthBrandPanelProps) {
-  const { isMobile, isTablet } = useResponsive()
-  if (isMobile) return null
+  const { isDesktop } = useResponsive()
+  // Mobile/tablet use AuthCompactBrandHeader instead of this full side panel.
+  if (!isDesktop) return null
 
   const c = CONTENT[tab]
   const panelWidth = '50%'
@@ -88,7 +89,7 @@ export function AuthBrandPanel({ tab }: AuthBrandPanelProps) {
       background: 'linear-gradient(135deg, #091C44 0%, #050E22 100%)',
       display: 'flex',
       flexDirection: 'column',
-      padding: isTablet ? '32px 20px' : '40px 36px',
+      padding: '40px 36px',
       position: 'relative',
       overflow: 'hidden',
       minHeight: '100vh',
@@ -148,7 +149,7 @@ export function AuthBrandPanel({ tab }: AuthBrandPanelProps) {
         {/* Headline & Subtitle */}
         <div>
           <div style={{
-            fontSize: isTablet ? '26px' : '32px',
+            fontSize: '32px',
             fontWeight: 800,
             color: '#fff',
             letterSpacing: '-0.03em',
