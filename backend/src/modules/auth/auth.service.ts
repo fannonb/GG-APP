@@ -739,8 +739,10 @@ export class AuthService {
 
   private shouldExposeResetUrl() {
     const nodeEnv = this.configService.get<string>('app.nodeEnv') ?? 'development'
-    const brevoApiKey = this.configService.get<string>('notifications.brevoApiKey')
-    return nodeEnv !== 'production' || !brevoApiKey
+    // Only expose the reset link in the API response outside production, or as
+    // a dev fallback when no mail provider is configured (the link is otherwise
+    // delivered by email only).
+    return nodeEnv !== 'production' || !this.mailService.isEnabled
   }
 
   private buildPasswordResetUrl(token: string) {
