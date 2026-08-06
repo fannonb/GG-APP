@@ -13,6 +13,8 @@ export interface LoginPayload {
   email: string
   password: string
   role: 'patient' | 'sp' | 'admin'
+  /** Required for admin logins — sent as the X-Admin-Portal header. */
+  portalToken?: string
 }
 
 export interface RegisterPatientPayload {

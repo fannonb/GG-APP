@@ -1,5 +1,15 @@
 export const LOGO = '/gg-logo-v4.png'
 
+/**
+ * Secret admin portal path, set at build time via VITE_ADMIN_PORTAL_PATH.
+ * Defaults to /admin so local development keeps working; production must set a
+ * non-guessable value. When it differs from /admin, the old /admin/* URLs fall
+ * through to the 404 page.
+ */
+export const ADMIN_PORTAL_PATH = (
+  import.meta.env.VITE_ADMIN_PORTAL_PATH?.trim() || '/admin'
+).replace(/\/+$/, '')
+
 export const ROUTES = {
   // Public
   SPLASH:          '/',
@@ -59,20 +69,19 @@ export const ROUTES = {
   SP_PAYMENTS:  '/sp/payments',
   SP_SETTINGS:  '/sp/settings',
 
-  // Admin (public)
-  ADMIN_LOGIN: '/admin/login',
+  // Admin portal (private link — only reachable via the secret path)
+  ADMIN_LOGIN: `${ADMIN_PORTAL_PATH}/login`,
 
-  // Admin portal
-  ADMIN_DASHBOARD:    '/admin/dashboard',
-  ADMIN_APPLICATIONS: '/admin/applications',
-  ADMIN_CREDIT_APPLICATIONS: '/admin/credit-applications',
-  ADMIN_USERS:        '/admin/users',
-  ADMIN_PROVIDERS:    '/admin/providers',
-  ADMIN_PAYMENTS:     '/admin/payments',
-  ADMIN_ANALYTICS:    '/admin/analytics',
-  ADMIN_NEWS:         '/admin/news',
-  ADMIN_ADS:          '/admin/ads',
-  ADMIN_LEDGER_ACCESS: '/admin/ledger-access',
+  ADMIN_DASHBOARD:    `${ADMIN_PORTAL_PATH}/dashboard`,
+  ADMIN_APPLICATIONS: `${ADMIN_PORTAL_PATH}/applications`,
+  ADMIN_CREDIT_APPLICATIONS: `${ADMIN_PORTAL_PATH}/credit-applications`,
+  ADMIN_USERS:        `${ADMIN_PORTAL_PATH}/users`,
+  ADMIN_PROVIDERS:    `${ADMIN_PORTAL_PATH}/providers`,
+  ADMIN_PAYMENTS:     `${ADMIN_PORTAL_PATH}/payments`,
+  ADMIN_ANALYTICS:    `${ADMIN_PORTAL_PATH}/analytics`,
+  ADMIN_NEWS:         `${ADMIN_PORTAL_PATH}/news`,
+  ADMIN_ADS:          `${ADMIN_PORTAL_PATH}/ads`,
+  ADMIN_LEDGER_ACCESS: `${ADMIN_PORTAL_PATH}/ledger-access`,
 } as const
 
 /** Dynamic route builders for navigation */

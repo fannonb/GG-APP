@@ -8,6 +8,7 @@ import { ROUTES, LOGO } from '@/router/routes'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useLoginMutation } from '@/hooks/api'
 import { ApiError } from '@/api/types'
+import { ADMIN_PORTAL_TOKEN } from '@/api/config'
 
 const ACCENT = '#F5A623'
 const DARK = '#0A1628'
@@ -31,7 +32,7 @@ export function AdminLoginScreen() {
     loginMutation.error instanceof ApiError ? loginMutation.error.message : null
 
   const onSubmit = handleSubmit(values => {
-    loginMutation.mutate({ ...values, role: 'admin' })
+    loginMutation.mutate({ ...values, role: 'admin', portalToken: ADMIN_PORTAL_TOKEN })
   })
 
   const emailField = register('email')

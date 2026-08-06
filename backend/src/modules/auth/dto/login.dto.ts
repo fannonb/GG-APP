@@ -1,4 +1,4 @@
-import { IsEmail, IsIn, IsString, MinLength } from 'class-validator'
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator'
 
 export class LoginDto {
   @IsEmail()
@@ -10,4 +10,9 @@ export class LoginDto {
 
   @IsIn(['patient', 'sp', 'admin'])
   role!: 'patient' | 'sp' | 'admin'
+
+  /** Portal token required for admin logins (X-Admin-Portal header value). */
+  @IsOptional()
+  @IsString()
+  portalToken?: string
 }

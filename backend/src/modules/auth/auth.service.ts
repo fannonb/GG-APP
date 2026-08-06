@@ -4,6 +4,8 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  NotFoundException,
+  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -431,21 +433,53 @@ export class AuthService {
       throw new UnauthorizedException('Invalid email or password')
     }
 
+    const requestedRole = this.mapRequestedRole(dto.role)
+
+    // Admin portal gate: admin login requires the secret portal token. A wrong
+    // or missing token returns 404 so the existence of an admin login is not
+    // revealed, and repeated failures are throttled via Redis.
+    if (requestedRole === UserRole.ADMIN) {
+      const expectedToken = this.configService.get<string>('portal.adminToken') ?? ''
+      if (!expectedToken || dto.portalToken !== expectedToken) {
+        throw new NotFoundException()
+      }
+      const attempts = Number((await this.redis.get(this.getAdminLoginKey(email))) ?? '0')
+      if (attempts >= 5) {
+        throw new TooManyRequestsException(
+          'Too many admin login attempts. Please try again later.',
+        )
+      }
+    }
+
     if (user.authProvider === AuthProvider.GOOGLE && user.role === UserRole.PATIENT) {
       throw new UnauthorizedException('This account uses Google Sign-In. Please continue with Google.')
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash)
     if (!passwordMatches) {
+      if (requestedRole === UserRole.ADMIN) await this.recordAdminLoginFailure(email)
       throw new UnauthorizedException('Invalid email or password')
     }
 
-    const requestedRole = this.mapRequestedRole(dto.role)
     if (user.role !== requestedRole) {
+      if (requestedRole === UserRole.ADMIN) await this.recordAdminLoginFailure(email)
       throw new UnauthorizedException('This account is not registered for the selected portal')
     }
 
     await this.assertLoginAccess(user.id, user.role, user.status, user.emailVerifiedAt)
+
+    if (requestedRole === UserRole.ADMIN) {
+      await this.redis.del(this.getAdminLoginKey(email))
+      await this.prisma.auditLog.create({
+        data: {
+          actorUserId: user.id,
+          action: 'auth.admin.login',
+          entityType: 'User',
+          entityId: user.id,
+          metadata: { email } as Prisma.JsonObject,
+        },
+      })
+    }
 
     return this.issueSession({
       userId: user.id,
@@ -673,7 +707,10 @@ export class AuthService {
     role: 'patient' | 'sp' | 'admin'
   }): Promise<AuthSessionResponse> {
     const accessTtl = this.configService.getOrThrow<string>('auth.accessTtl')
-    const refreshTtl = this.configService.getOrThrow<string>('auth.refreshTtl')
+    // Admin sessions expire much sooner than patient/provider sessions.
+    const refreshTtl = this.configService.getOrThrow<string>(
+      params.role === 'admin' ? 'auth.adminRefreshTtl' : 'auth.refreshTtl',
+    )
     const accessSecret = this.configService.getOrThrow<string>('auth.accessSecret')
     const refreshSecret = this.configService.getOrThrow<string>('auth.refreshSecret')
     const jti = randomUUID()
@@ -760,6 +797,16 @@ export class AuthService {
 
   private getPasswordResetUserKey(userId: string) {
     return `password-reset:user:${userId}`
+  }
+
+  private getAdminLoginKey(email: string) {
+    return `admin-login:${email}`
+  }
+
+  private async recordAdminLoginFailure(email: string) {
+    const key = this.getAdminLoginKey(email)
+    const current = Number((await this.redis.get(key)) ?? '0')
+    await this.redis.set(key, String(current + 1), 15 * 60)
   }
 
   private shouldExposeResetUrl() {

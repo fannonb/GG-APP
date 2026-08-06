@@ -8,3 +8,6 @@ export const isMockApi =
 export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
 export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? ''
+
+/** Secret admin portal token sent with admin login requests. */
+export const ADMIN_PORTAL_TOKEN = import.meta.env.VITE_ADMIN_PORTAL_TOKEN ?? ''

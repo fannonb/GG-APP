@@ -27,6 +27,13 @@ export function configuration() {
       refreshSecret: process.env.JWT_REFRESH_SECRET ?? '',
       accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
       refreshTtl: process.env.JWT_REFRESH_TTL ?? '30d',
+      adminRefreshTtl: process.env.ADMIN_REFRESH_TTL ?? '60m',
+    },
+    portal: {
+      // Secret admin portal path/token. The path is used only by the frontend;
+      // the token must be sent with admin login requests (X-Admin-Portal header).
+      adminPath: process.env.ADMIN_PORTAL_PATH ?? '',
+      adminToken: process.env.ADMIN_PORTAL_TOKEN ?? '',
     },
     security: {
       fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY ?? '',

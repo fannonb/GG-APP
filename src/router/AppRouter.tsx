@@ -14,7 +14,7 @@ import { ResetPasswordScreen } from '@/features/auth/ResetPasswordScreen'
 import { TermsScreen } from '@/features/legal/TermsScreen'
 import { PrivacyPolicyScreen } from '@/features/legal/PrivacyPolicyScreen'
 import { NotFoundPage } from '@/components/errors/NotFoundPage'
-import { ROUTES } from './routes'
+import { ROUTES, ADMIN_PORTAL_PATH } from './routes'
 import type { UserRole } from '@/types/user.types'
 import type { ReactNode } from 'react'
 
@@ -67,7 +67,7 @@ export function AppRouter() {
       />
 
       <Route
-        path="/admin/*"
+        path={`${ADMIN_PORTAL_PATH}/*`}
         element={
           <ProtectedRoute requiredRole="admin" loginPath={ROUTES.ADMIN_LOGIN}>
             <AdminRouter />

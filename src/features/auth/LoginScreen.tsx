@@ -310,31 +310,6 @@ export function LoginScreen() {
             </form>
           </div>
 
-          {/* Admin portal link */}
-          <div style={{ marginTop: '20px', textAlign: 'center' }}>
-            <Link
-              to={ROUTES.ADMIN_LOGIN}
-              style={{
-                fontSize: '12px',
-                color: C.textSub,
-                opacity: 0.6,
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '5px',
-                fontFamily: font.family,
-                transition: 'opacity 0.15s',
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
-              onMouseLeave={e => (e.currentTarget.style.opacity = '0.6')}
-            >
-              <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-                <rect x="1" y="4" width="10" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.2"/>
-                <path d="M4 4V3a2 2 0 014 0v1" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-              </svg>
-              Admin Portal
-            </Link>
-          </div>
         </div>
       </div>
     </div>
