@@ -1,7 +1,7 @@
 import type { LegalSection } from './LegalDocumentScreen'
 
 export const PRIVACY_POLICY_EFFECTIVE_DATE = '20th July, 2026'
-export const PRIVACY_POLICY_LAST_UPDATED = '22nd July, 2026'
+export const PRIVACY_POLICY_LAST_UPDATED = '7th August, 2026'
 
 export const PRIVACY_POLICY_INTRO =
   "GG'APP (\"we\", \"our\", or \"us\") respects your privacy and is committed to protecting your personal information. This Privacy Policy explains how we collect, use, store, disclose, and protect your information when you use GG'APP."
@@ -34,6 +34,9 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
           'Healthcare provider interactions',
           'Medical invoices',
           'Uploaded medical documents',
+        ],
+        body: [
+          'Uploaded medical documents are stored securely and used only for the purpose for which they were provided (for example, fulfilling a prescription or reviewing an invoice).',
         ],
       },
       {
@@ -86,6 +89,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
       'Detect fraud and abuse',
       'Provide customer support',
       'Send notifications and updates',
+      'Send account verification, security, and transactional emails (for example, email verification, password resets, invoice and appointment notifications)',
       'Improve platform functionality and user experience',
       'Meet legal and regulatory obligations',
     ],
@@ -125,7 +129,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         intro: 'Including:',
         bullets: [
           'Cloud hosting providers',
-          'Notification and email providers',
+          'Email delivery providers used for account verification, password resets, and transactional notifications (including Resend)',
           'Analytics providers',
           'Security and fraud prevention services',
         ],
@@ -211,7 +215,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
     heading: 'Third-Party Services',
     intro: "GG'APP may integrate with third-party services including:",
     bullets: [
-      'Google authentication services',
+      'Google authentication services — when you sign in with Google, we receive your name, email address, Google account ID, and profile photo from Google',
       'Push notification services',
       'Payment and finance systems',
       'Cloud infrastructure providers',
@@ -244,9 +248,8 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
     intro: 'For privacy-related inquiries, complaints, or data requests, contact:',
     bullets: [
       "GG'APP Data Protection Office",
-      'Email: [Insert Privacy Email]',
-      'Phone: [Insert Phone Number]',
-      'Address: [Insert Business Address]',
+      'Email: privacy@gatewayglobal.africa',
+      'Website: https://app.gatewayglobal.africa',
     ],
   },
   {

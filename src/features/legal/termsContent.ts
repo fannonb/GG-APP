@@ -1,7 +1,7 @@
 import type { LegalSection } from './LegalDocumentScreen'
 
 export const TERMS_EFFECTIVE_DATE = '20th July, 2026'
-export const TERMS_LAST_UPDATED = '22nd July, 2026'
+export const TERMS_LAST_UPDATED = '7th August, 2026'
 
 export const TERMS_INTRO =
   "Welcome to GG'APP (\"Platform\", \"App\", \"we\", \"our\", or \"us\"). These Terms and Conditions (\"Terms\") govern the use of the GG'APP mobile application, Progressive Web Application (PWA), website, and related services. By accessing or using GG'APP, you acknowledge that you have read, understood, and agreed to be bound by these Terms. If you do not agree with these Terms, you must not use the Platform."
@@ -39,7 +39,11 @@ export const TERMS_SECTIONS: LegalSection[] = [
         heading: '3.1 Registration',
         intro: 'Users may register using:',
         bullets: ['Email and password', 'Google Sign-In', "Any additional authentication methods introduced by GG'APP"],
-        body: ['Users are responsible for maintaining the confidentiality of their login credentials and payment PIN.'],
+        body: [
+          'Accounts created with an email and password must verify their email address before signing in.',
+          'Accounts created with Google Sign-In are verified by Google and do not require a separate verification email.',
+          'Users are responsible for maintaining the confidentiality of their login credentials and payment PIN.',
+        ],
       },
       {
         heading: '3.2 Account Security',
@@ -175,6 +179,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
     intro: "By using GG'APP, users consent to receiving:",
     bullets: ['Push notifications', 'SMS messages', 'Emails', 'In-app alerts', 'Transaction confirmations', 'Security notifications'],
     body: [
+      'Verification and transactional emails are delivered through a third-party email provider (Resend) from no-reply@gatewayglobal.africa.',
       'Users may adjust certain communication preferences within the application settings.',
       'Critical security and transactional notifications cannot be disabled.',
     ],
@@ -258,9 +263,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
     intro: 'For support, legal inquiries, or complaints, contact:',
     bullets: [
       "GG'APP Support Team",
-      'Email: [Insert Support Email]',
-      'Phone: [Insert Phone Number]',
-      'Website: [Insert Website URL]',
+      'Email: support@gatewayglobal.africa',
+      'Website: https://app.gatewayglobal.africa',
     ],
   },
 ]

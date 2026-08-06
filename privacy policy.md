@@ -1,6 +1,6 @@
 GG’APP Privacy Policy
 Effective Date: 20th July, 2026
-Last Updated: 22nd July, 2026
+Last Updated: 7th August, 2026
 GG’APP (“we”, “our”, or “us”) respects your privacy and is committed to protecting your personal information.
 This Privacy Policy explains how we collect, use, store, disclose, and protect your information when you use GG’APP.
 ________________________________________
@@ -58,6 +58,7 @@ We use collected information to:
 •	Detect fraud and abuse;
 •	Provide customer support;
 •	Send notifications and updates;
+•	Send account verification, security, and transactional emails (for example, email verification, password resets, invoice and appointment notifications);
 •	Improve platform functionality and user experience;
 •	Meet legal and regulatory obligations.
 ________________________________________
@@ -83,7 +84,7 @@ To:
 4.3 Service Providers and Vendors
 Including:
 •	Cloud hosting providers;
-•	Notification and email providers;
+•	Email delivery providers used for account verification, password resets, and transactional notifications (including Resend);
 •	Analytics providers;
 •	Security and fraud prevention services.
 4.4 Legal and Regulatory Authorities
@@ -155,7 +156,7 @@ Where international transfers occur, GG’APP will implement reasonable safeguar
 ________________________________________
 11. Third-Party Services
 GG’APP may integrate with third-party services including:
-•	Google authentication services;
+•	Google authentication services — when you sign in with Google, we receive your name, email address, Google account ID, and profile photo from Google;
 •	Push notification services;
 •	Payment and finance systems;
 •	Cloud infrastructure providers.
@@ -184,9 +185,8 @@ ________________________________________
 15. Contact Us
 For privacy-related inquiries, complaints, or data requests, contact:
 GG’APP Data Protection Office
-Email: [Insert Privacy Email]
-Phone: [Insert Phone Number]
-Address: [Insert Business Address]
+Email: privacy@gatewayglobal.africa
+Website: https://app.gatewayglobal.africa
 ________________________________________
 16. Consent
 By using GG’APP, you acknowledge that you have read and understood this Privacy Policy and consent to the collection and processing of your information as described herein.
