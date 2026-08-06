@@ -36,6 +36,11 @@ export interface CreditDecisionEmailData {
   note?: string
 }
 
+export interface ProviderApplicationEmailData {
+  practiceName: string
+  note?: string
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -268,6 +273,62 @@ export class MailService {
         ${data.note ? `<p>${escapeHtml(data.note)}</p>` : ''}
         <p>Sign in to see your credit wallet.</p>`,
         { label: 'View credit wallet', url: `${this.appBaseUrl}/app/credit` },
+      ),
+    })
+  }
+
+  async sendProviderApplicationApprovedEmail(
+    to: string,
+    data: ProviderApplicationEmailData,
+  ): Promise<boolean> {
+    return this.send({
+      to,
+      subject: `Your GG'APP provider application is approved`,
+      html: this.layout(
+        `
+        <p>Congratulations!</p>
+        <p>Your service provider application for <strong>${escapeHtml(data.practiceName)}</strong> has been
+        approved. You can now sign in to complete your profile and start accepting appointments.</p>
+        ${data.note ? `<p>Note from the review team: ${escapeHtml(data.note)}</p>` : ''}`,
+        { label: 'Go to provider dashboard', url: `${this.appBaseUrl}/app/sp/dashboard` },
+      ),
+    })
+  }
+
+  async sendProviderApplicationRejectedEmail(
+    to: string,
+    data: ProviderApplicationEmailData,
+  ): Promise<boolean> {
+    return this.send({
+      to,
+      subject: `Update on your GG'APP provider application`,
+      html: this.layout(
+        `
+        <p>Hi there,</p>
+        <p>We're sorry, but your service provider application for
+        <strong>${escapeHtml(data.practiceName)}</strong> was not approved at this time.</p>
+        ${data.note ? `<p>Reason given by the review team: ${escapeHtml(data.note)}</p>` : ''}
+        <p>You can revise and resubmit your application, or contact support if you have questions.</p>`,
+        { label: 'Check application status', url: `${this.appBaseUrl}/sp/pending` },
+      ),
+    })
+  }
+
+  async sendProviderApplicationInfoRequestedEmail(
+    to: string,
+    data: ProviderApplicationEmailData,
+  ): Promise<boolean> {
+    return this.send({
+      to,
+      subject: `More information needed for your GG'APP provider application`,
+      html: this.layout(
+        `
+        <p>Hi there,</p>
+        <p>We need a bit more information to finish reviewing your application for
+        <strong>${escapeHtml(data.practiceName)}</strong>.</p>
+        ${data.note ? `<p>What we need: ${escapeHtml(data.note)}</p>` : ''}
+        <p>Please log in to update your application so we can continue the review.</p>`,
+        { label: 'Update application', url: `${this.appBaseUrl}/sp/pending` },
       ),
     })
   }

@@ -532,6 +532,20 @@ export class AdminService {
       return createdProvider
     })
 
+    await this.prisma.notification.create({
+      data: {
+        userId: application.userId,
+        type: NotificationType.SYSTEM,
+        title: 'Application Approved',
+        body: `Your provider application for ${application.practiceName} has been approved. You can now complete your profile and start accepting appointments.`,
+        screen: '/sp/dashboard',
+      },
+    })
+    void this.mailService.sendProviderApplicationApprovedEmail(application.email, {
+      practiceName: application.practiceName,
+      note: note ?? undefined,
+    })
+
     return this.getProvider(String(provider.id))
   }
 
@@ -937,6 +951,36 @@ export class AdminService {
         } as Prisma.JsonObject,
       },
     })
+
+    if (status === ProviderApplicationStatus.REJECTED) {
+      await this.prisma.notification.create({
+        data: {
+          userId: application.userId,
+          type: NotificationType.SYSTEM,
+          title: 'Application Not Approved',
+          body: `Your provider application for ${application.practiceName} was not approved${note ? `: ${note}` : ''}.`,
+          screen: '/sp/pending',
+        },
+      })
+      void this.mailService.sendProviderApplicationRejectedEmail(application.email, {
+        practiceName: application.practiceName,
+        note: note ?? undefined,
+      })
+    } else if (status === ProviderApplicationStatus.INFO_REQUESTED) {
+      await this.prisma.notification.create({
+        data: {
+          userId: application.userId,
+          type: NotificationType.SYSTEM,
+          title: 'More Information Needed',
+          body: `The review team needs more information about ${application.practiceName}${note ? `: ${note}` : ''}.`,
+          screen: '/sp/pending',
+        },
+      })
+      void this.mailService.sendProviderApplicationInfoRequestedEmail(application.email, {
+        practiceName: application.practiceName,
+        note: note ?? undefined,
+      })
+    }
 
     return this.mapApplication(application)
   }

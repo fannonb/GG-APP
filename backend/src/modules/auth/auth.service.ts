@@ -107,10 +107,13 @@ export class AuthService {
           passwordHash,
           role: UserRole.PATIENT,
           status: UserStatus.ACTIVE,
-          // When Resend is configured, the account stays unverified until the
-          // user confirms the email link. Without a mail provider we fall back
-          // to auto-verifying so local development is never blocked.
-          emailVerifiedAt: this.mailService.isEnabled ? null : new Date(),
+          // Local accounts must verify their email before they can sign in
+          // (when Resend is configured). Google sign-ups are already verified
+          // by Google, so they never get a verification email and can sign in
+          // immediately. Without a mail provider we fall back to auto-verifying
+          // so local development is never blocked.
+          emailVerifiedAt:
+            isGoogleSignup || !this.mailService.isEnabled ? new Date() : null,
           googleId,
           authProvider: isGoogleSignup ? AuthProvider.GOOGLE : AuthProvider.LOCAL,
           phone: dto.phone,
@@ -168,7 +171,7 @@ export class AuthService {
       // Non-critical — registration already succeeded
     }
 
-    if (this.mailService.isEnabled) {
+    if (!isGoogleSignup && this.mailService.isEnabled) {
       const verificationToken = randomUUID()
       await this.prisma.emailVerificationToken.create({
         data: {
@@ -320,6 +323,28 @@ export class AuthService {
 
       return createdApplication
     })
+
+    // Notify admins about the new provider application (outside the tx so it
+    // never blocks submission).
+    try {
+      const adminUsers = await this.prisma.user.findMany({
+        where: { role: UserRole.ADMIN },
+        select: { id: true },
+      })
+      if (adminUsers.length > 0) {
+        await this.prisma.notification.createMany({
+          data: adminUsers.map(admin => ({
+            userId: admin.id,
+            type: NotificationType.SYSTEM,
+            title: 'New provider application',
+            body: `${dto.practiceName} (${email}) submitted a service provider application.`,
+            screen: '/admin/applications',
+          })),
+        })
+      }
+    } catch {
+      // Non-critical — application already submitted
+    }
 
     if (this.mailService.isEnabled) {
       const verificationToken = randomUUID()
