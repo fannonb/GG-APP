@@ -425,19 +425,11 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<AuthSessionResponse> {
     const email = dto.email.toLowerCase()
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-    })
-
-    if (!user) {
-      throw new UnauthorizedException('Invalid email or password')
-    }
-
     const requestedRole = this.mapRequestedRole(dto.role)
 
-    // Admin portal gate: admin login requires the secret portal token. A wrong
-    // or missing token returns 404 so the existence of an admin login is not
-    // revealed, and repeated failures are throttled via Redis.
+    // Admin portal gate runs before any user lookup: a wrong or missing token
+    // returns 404 regardless of whether the email exists, so admin login does
+    // not reveal user existence and repeated failures are throttled via Redis.
     if (requestedRole === UserRole.ADMIN) {
       const expectedToken = this.configService.get<string>('portal.adminToken') ?? ''
       if (!expectedToken || dto.portalToken !== expectedToken) {
@@ -449,6 +441,14 @@ export class AuthService {
           'Too many admin login attempts. Please try again later.',
         )
       }
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+    })
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password')
     }
 
     if (user.authProvider === AuthProvider.GOOGLE && user.role === UserRole.PATIENT) {
