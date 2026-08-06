@@ -397,7 +397,7 @@ export class PatientService {
         name: `${profile.firstName} ${profile.lastName}`.trim(),
         email: profile.user.email,
         phone: profile.user.phone ?? '',
-        nationalId: this.fieldEncryption.decrypt(profile.nationalIdEncrypted),
+        nationalId: this.fieldEncryption.tryDecrypt(profile.nationalIdEncrypted) ?? '',
         dateOfBirth: profile.dateOfBirth.toISOString(),
         country: profile.user.country ?? profile.countryCode,
         countryCode: profile.countryCode,
