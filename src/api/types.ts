@@ -38,6 +38,8 @@ export interface RegisterPatientResponse {
 export interface GoogleAuthPayload {
   code: string
   redirectUri: string
+  /** PKCE verifier for web/mobile authorization-code flows (S256). */
+  codeVerifier?: string
 }
 
 export interface GoogleAuthSessionResult extends AuthSession {

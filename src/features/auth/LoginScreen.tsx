@@ -6,6 +6,7 @@ import { GGInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { ROUTES } from '@/router/routes'
+import { consumeGooglePkceVerifier } from '@/lib/google-pkce'
 import { AuthBrandPanel } from './components/AuthBrandPanel'
 import { AuthCompactBrandHeader } from './components/AuthCompactBrandHeader'
 import { EntityTabBar } from './components/EntityTabBar'
@@ -38,7 +39,11 @@ export function LoginScreen() {
     handledCallback.current = true
     setSearchParams({}, { replace: true })
     if (code) {
-      googleCallbackMutation.mutate({ code, redirectUri: `${window.location.origin}${ROUTES.LOGIN}` })
+      googleCallbackMutation.mutate({
+        code,
+        redirectUri: `${window.location.origin}${ROUTES.LOGIN}`,
+        codeVerifier: consumeGooglePkceVerifier(searchParams.get('state')),
+      })
     } else if (oauthError) {
       setOauthCancelled(true)
     }

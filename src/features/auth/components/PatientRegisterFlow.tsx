@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm, type Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GGInput, GGButton, GGDatePicker } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -13,10 +13,15 @@ import {
   patientRegisterGoogleSchema,
   type PatientRegisterFormValues,
 } from '@/schemas/auth.schema'
-import { useRegisterPatientMutation, useGoogleLoginMutation } from '@/hooks/api'
+import {
+  useRegisterPatientMutation,
+  useGoogleLoginMutation,
+  useGoogleCallbackMutation,
+} from '@/hooks/api'
 import { useAuthStore } from '@/store/auth.store'
 import { PORTAL_HOME, ROUTES } from '@/router/routes'
 import { ApiError } from '@/api/types'
+import { consumeGooglePkceVerifier } from '@/lib/google-pkce'
 
 const STEPS = ['Personal Info', 'Identity', 'Security']
 const VERIFY_TOKEN_STORAGE_KEY = 'gg_verify_token'
@@ -51,15 +56,39 @@ function StepDots({ step }: { step: number }) {
 export function PatientRegisterFlow() {
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
   const setSession = useAuthStore(s => s.setSession)
   const { isMobile } = useResponsive()
   const [step, setStep] = useState(0)
   const [agreedToTerms, setAgreedToTerms] = useState(false)
   const registerMutation = useRegisterPatientMutation()
-  const googleMutation = useGoogleLoginMutation()
+  const googleMutation = useGoogleLoginMutation(ROUTES.REGISTER)
+  const googleCallbackMutation = useGoogleCallbackMutation()
+  const handledGoogleCallback = useRef(false)
 
   const googleProfile = (location.state as { googleProfile?: GoogleProfileState } | null)?.googleProfile ?? null
   const isGoogleSignup = googleProfile !== null
+
+  // Google consent returns here when sign-up is started from this screen:
+  // exchange the code, then either land on the pre-filled form (new user) or
+  // finish the session (existing user) — no detour through /login.
+  useEffect(() => {
+    if (handledGoogleCallback.current) return
+    const code = searchParams.get('code')
+    const oauthError = searchParams.get('error')
+    if (!code && !oauthError) return
+
+    handledGoogleCallback.current = true
+    setSearchParams({}, { replace: true })
+    if (code) {
+      googleCallbackMutation.mutate({
+        code,
+        redirectUri: `${window.location.origin}${ROUTES.REGISTER}`,
+        codeVerifier: consumeGooglePkceVerifier(searchParams.get('state')),
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
 
   const {
     register,

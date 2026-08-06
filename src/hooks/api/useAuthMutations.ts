@@ -10,6 +10,7 @@ import type { GoogleAuthPayload, GoogleAuthResult, LoginPayload, RegisterPatient
 import { ApiError } from '@/api/types'
 import { getGoogleOAuthUrl } from '@/api/client'
 import { isMockApi } from '@/api/config'
+import { createGooglePkcePair } from '@/lib/google-pkce'
 
 export function useLoginMutation() {
   const navigate = useNavigate()
@@ -47,16 +48,17 @@ function useHandleGoogleAuthResult() {
   }
 }
 
-export function useGoogleLoginMutation() {
+export function useGoogleLoginMutation(redirectPath: string = ROUTES.LOGIN) {
   const handleResult = useHandleGoogleAuthResult()
 
   return useMutation({
     mutationFn: async () => {
-      const redirectUri = `${window.location.origin}${ROUTES.LOGIN}`
+      const redirectUri = `${window.location.origin}${redirectPath}`
       if (isMockApi) {
         return authService.loginWithGoogle({ code: 'mock-code', redirectUri })
       }
-      const url = getGoogleOAuthUrl(redirectUri)
+      const { challenge, state } = await createGooglePkcePair()
+      const url = getGoogleOAuthUrl(redirectUri, { state, codeChallenge: challenge })
       if (!url) throw new ApiError('Google sign-in is not configured', 400)
       window.location.href = url
       return null

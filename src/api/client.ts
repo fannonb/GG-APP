@@ -65,7 +65,10 @@ apiClient.interceptors.response.use(
   },
 )
 
-export function getGoogleOAuthUrl(redirectUri: string): string | null {
+export function getGoogleOAuthUrl(
+  redirectUri: string,
+  opts?: { state?: string; codeChallenge?: string },
+): string | null {
   const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID
   if (!clientId) return null
   const params = new URLSearchParams({
@@ -76,5 +79,10 @@ export function getGoogleOAuthUrl(redirectUri: string): string | null {
     access_type: 'offline',
     prompt: 'consent',
   })
+  if (opts?.state) params.set('state', opts.state)
+  if (opts?.codeChallenge) {
+    params.set('code_challenge', opts.codeChallenge)
+    params.set('code_challenge_method', 'S256')
+  }
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`
 }
