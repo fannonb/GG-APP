@@ -221,6 +221,9 @@ export function PatientRegisterFlow() {
               {googleMutation.error instanceof ApiError && (
                 <span style={{ fontSize: '12px', color: C.error, fontWeight: 500 }}>{googleMutation.error.message}</span>
               )}
+              {googleCallbackMutation.error instanceof ApiError && (
+                <span style={{ fontSize: '12px', color: C.error, fontWeight: 500 }}>{googleCallbackMutation.error.message}</span>
+              )}
             </>
           )}
         </>

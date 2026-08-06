@@ -53,15 +53,23 @@ export function useGoogleLoginMutation(redirectPath: string = ROUTES.LOGIN) {
 
   return useMutation({
     mutationFn: async () => {
-      const redirectUri = `${window.location.origin}${redirectPath}`
-      if (isMockApi) {
-        return authService.loginWithGoogle({ code: 'mock-code', redirectUri })
+      try {
+        const redirectUri = `${window.location.origin}${redirectPath}`
+        if (isMockApi) {
+          return authService.loginWithGoogle({ code: 'mock-code', redirectUri })
+        }
+        const { challenge, state } = await createGooglePkcePair()
+        const url = getGoogleOAuthUrl(redirectUri, { state, codeChallenge: challenge })
+        if (!url) throw new ApiError('Google sign-in is not configured', 400)
+        window.location.href = url
+        return null
+      } catch (error) {
+        if (error instanceof ApiError) throw error
+        throw new ApiError(
+          'Google sign-in could not be started. Please try again or use email registration.',
+          0,
+        )
       }
-      const { challenge, state } = await createGooglePkcePair()
-      const url = getGoogleOAuthUrl(redirectUri, { state, codeChallenge: challenge })
-      if (!url) throw new ApiError('Google sign-in is not configured', 400)
-      window.location.href = url
-      return null
     },
     onSuccess: result => {
       if (!result) return
