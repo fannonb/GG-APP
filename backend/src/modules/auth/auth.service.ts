@@ -5,9 +5,9 @@ import {
   Inject,
   Injectable,
   NotFoundException,
-  TooManyRequestsException,
   UnauthorizedException,
 } from '@nestjs/common'
+import { ThrottlerException } from '@nestjs/throttler'
 import { ConfigService } from '@nestjs/config'
 import {
   AuthProvider,
@@ -445,7 +445,7 @@ export class AuthService {
       }
       const attempts = Number((await this.redis.get(this.getAdminLoginKey(email))) ?? '0')
       if (attempts >= 5) {
-        throw new TooManyRequestsException(
+        throw new ThrottlerException(
           'Too many admin login attempts. Please try again later.',
         )
       }
