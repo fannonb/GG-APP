@@ -533,11 +533,18 @@ export class AuthService {
       },
     })
 
-    void this.mailService.sendPasswordResetEmail(normalizedEmail, token)
+    void this.mailService.sendPasswordResetEmail(
+      normalizedEmail,
+      token,
+      user.role === UserRole.ADMIN ? 'admin' : undefined,
+    )
 
     const response: ForgotPasswordResponse = { message: genericMessage }
     if (this.shouldExposeResetUrl()) {
-      response.resetUrl = this.buildPasswordResetUrl(token)
+      response.resetUrl = this.buildPasswordResetUrl(
+        token,
+        user.role === UserRole.ADMIN ? 'admin' : undefined,
+      )
     }
 
     return response
@@ -817,10 +824,11 @@ export class AuthService {
     return nodeEnv !== 'production' || !this.mailService.isEnabled
   }
 
-  private buildPasswordResetUrl(token: string) {
+  private buildPasswordResetUrl(token: string, role?: 'admin') {
     const origins = this.configService.get<string[]>('app.corsOrigins') ?? ['http://localhost:5173']
     const baseUrl = origins[0] ?? 'http://localhost:5173'
-    return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`
+    const roleParam = role ? `&role=${role}` : ''
+    return `${baseUrl}/reset-password?token=${encodeURIComponent(token)}${roleParam}`
   }
 
   private mapRequestedRole(role: LoginDto['role']) {

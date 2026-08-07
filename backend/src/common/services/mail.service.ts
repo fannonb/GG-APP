@@ -161,8 +161,13 @@ export class MailService {
     })
   }
 
-  async sendPasswordResetEmail(to: string, token: string): Promise<boolean> {
-    const url = `${this.appBaseUrl}/reset-password?token=${encodeURIComponent(token)}`
+  async sendPasswordResetEmail(
+    to: string,
+    token: string,
+    role?: 'admin',
+  ): Promise<boolean> {
+    const roleParam = role ? `&role=${role}` : ''
+    const url = `${this.appBaseUrl}/reset-password?token=${encodeURIComponent(token)}${roleParam}`
     return this.send({
       to,
       subject: "Reset your GG'APP password",
