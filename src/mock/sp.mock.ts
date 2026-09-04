@@ -88,6 +88,7 @@ export const MOCK_SP_APPOINTMENTS: Appointment[] = [
     medicalHistory: ['High Cholesterol'], allergies: [], requestedAt: '2026-05-16',
     mode: 'Home Visit', address: '7 Avondale Close, Harare', duration: '45 min',
     hasInvoice: true,
+    hasVisit: true,
   },
   {
     id: 'APT-004', patientId: 'P003', patient: 'Grace Mutasa', phone: '+263 77 345 6789',

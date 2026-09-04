@@ -36,6 +36,7 @@ export function SPNewDashboardScreen() {
   } = useSpOnboardingProgress()
 
   const sp = dashboard?.sp
+  const isPharmacyOnly = Boolean(dashboard?.isPharmacyOnly)
   const notifications = dashboard?.notifications ?? []
 
   const hour = new Date().getHours()
@@ -60,7 +61,7 @@ export function SPNewDashboardScreen() {
 
   if (isLoading || !sp) {
     return (
-      <SPLayout title="Dashboard" subtitle="Get started with GG'APP">
+      <SPLayout title="Dashboard">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading provider dashboard...
@@ -90,19 +91,24 @@ export function SPNewDashboardScreen() {
   ]
 
   return (
-    <SPLayout title="Dashboard" subtitle="Get started with GG'APP" notifCount={unreadCount}>
+    <SPLayout title="Dashboard" notifCount={unreadCount}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
-        {/* Greeting */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em' }}>
+              <div style={{ fontSize: isMobile ? '20px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
                 {greeting}, {sp.name}
               </div>
-              <FlagImg code={countryCode} size={isMobile ? 18 : 20} style={{ boxShadow: '0 1px 4px rgba(0,0,0,0.12)', borderRadius: '3px' }} />
+              {countryCode && (
+                <FlagImg
+                  code={countryCode}
+                  size={isMobile ? 16 : 20}
+                  style={{ borderRadius: '3px' }}
+                />
+              )}
             </div>
-            <div style={{ fontSize: '14px', color: C.textSub, marginTop: '4px' }}>{today}</div>
+            <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>{today}</div>
           </div>
           <GGBadge type={onboardingComplete ? 'success' : 'info'}>
             {onboardingComplete ? 'Setup Complete' : 'Getting Started'}
@@ -144,7 +150,7 @@ export function SPNewDashboardScreen() {
 
         {/* Main grid */}
         <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '3fr 2fr', gap: '20px' }}>
-          {/* Empty appointments */}
+          {/* Empty schedule / quotes */}
           <GGCard padding="24px">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -155,19 +161,32 @@ export function SPNewDashboardScreen() {
                     <circle cx="8" cy="10.5" r="1.4" fill={C.blue500}/>
                   </svg>
                 </div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Upcoming Appointments</div>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+                  {isPharmacyOnly ? 'Prescription quotes' : 'Upcoming Appointments'}
+                </div>
               </div>
-              <span onClick={() => navigate('/sp/appointments')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>View all →</span>
+              <span
+                onClick={() => navigate(isPharmacyOnly ? ROUTES.SP_PRESCRIPTIONS : '/sp/appointments')}
+                style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}
+              >
+                View all →
+              </span>
             </div>
             <div style={{ padding: '32px 16px', textAlign: 'center' }}>
               <div style={{ width: 56, height: 56, borderRadius: '16px', margin: '0 auto 14px', background: 'linear-gradient(145deg, rgba(56,182,255,0.12), rgba(56,182,255,0.04))', border: '1px solid rgba(56,182,255,0.18)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect x="3" y="5" width="26" height="24" rx="4" stroke={C.blue500} strokeWidth="1.6"/><path d="M3 12h26M10 2v6M22 2v6" stroke={C.blue500} strokeWidth="1.6" strokeLinecap="round"/></svg>
               </div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>No appointments yet</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>
+                {isPharmacyOnly ? 'No prescription quotes yet' : 'No appointments yet'}
+              </div>
               <div style={{ fontSize: '13px', color: C.textSub, marginTop: '6px', lineHeight: 1.55, maxWidth: 280, marginInline: 'auto' }}>
-                {onboardingComplete
-                  ? 'Patients will send booking requests here once they find your practice on GG\'APP.'
-                  : 'Complete your profile to appear in patient search results.'}
+                {isPharmacyOnly
+                  ? onboardingComplete
+                    ? 'Patients will send prescription quote requests here once they find your pharmacy on GG\'APP.'
+                    : 'Complete your profile to appear in patient search results.'
+                  : onboardingComplete
+                    ? 'Patients will send booking requests here once they find your practice on GG\'APP.'
+                    : 'Complete your profile to appear in patient search results.'}
               </div>
             </div>
           </GGCard>
@@ -177,7 +196,9 @@ export function SPNewDashboardScreen() {
               <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, marginBottom: '16px' }}>Quick Actions</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 {[
-                  { label: 'Appointments', screen: '/sp/appointments' },
+                  ...(isPharmacyOnly
+                    ? [{ label: 'Prescriptions', screen: ROUTES.SP_PRESCRIPTIONS }]
+                    : [{ label: 'Appointments', screen: '/sp/appointments' }]),
                   { label: 'Upload Invoice', screen: '/sp/invoices/upload' },
                   { label: 'Settings', screen: '/sp/settings' },
                 ].map(action => (

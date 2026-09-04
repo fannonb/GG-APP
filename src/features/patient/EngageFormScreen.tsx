@@ -135,7 +135,7 @@ export function EngageFormScreen() {
 
   if (providerId && providerLoading && !state?.provider) {
     return (
-      <AppLayout title="Engagement Request" subtitle="Loading provider details..." back notifCount={1}>
+      <AppLayout title="Engagement Request" back notifCount={1}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="36px">
             <div style={{ fontSize: '14px', color: C.textSub }}>Preparing your booking form...</div>
@@ -147,7 +147,7 @@ export function EngageFormScreen() {
 
   if (providerId && !providerLoading && !fetchedProvider && !state?.provider) {
     return (
-      <AppLayout title="Engagement Request" subtitle="Provider unavailable" back notifCount={1}>
+      <AppLayout title="Engagement Request" back notifCount={1}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="36px">
             <div style={{ fontSize: '14px', color: C.textSub, marginBottom: '16px' }}>
@@ -271,7 +271,7 @@ export function EngageFormScreen() {
   // ── Prescription-only mode (pure pharmacy or user chose prescription) ────────
   if (serviceMode === 'prescription') {
     return (
-      <AppLayout title="Upload Prescription" subtitle={`Sending to ${p.name}`} back notifCount={1}>
+      <AppLayout title="Upload Prescription" back notifCount={1}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="36px">
             {ProviderHeader}
@@ -300,7 +300,7 @@ export function EngageFormScreen() {
       : 'Consultation'
 
     return (
-      <AppLayout title="Engagement Request" subtitle={`Choose service type at ${p.name}`} back notifCount={1}>
+      <AppLayout title="Engagement Request" back notifCount={1}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="36px">
             {ProviderHeader}
@@ -396,7 +396,7 @@ export function EngageFormScreen() {
 
   // ── Standard appointment form ────────────────────────────────────────────────
   return (
-    <AppLayout title="Engagement Request" subtitle={`Sending request to ${p.name}`} back notifCount={1}>
+    <AppLayout title="Engagement Request" back notifCount={1}>
       <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="36px">
           {ProviderHeader}

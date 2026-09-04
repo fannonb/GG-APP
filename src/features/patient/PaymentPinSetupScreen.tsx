@@ -30,9 +30,6 @@ export function PaymentPinSetupScreen() {
   const [errors, setErrors] = useState<Record<string, string>>({})
 
   const title = isReset ? 'Reset Payment PIN' : 'Set Up Payment PIN'
-  const subtitle = isReset
-    ? 'Update the PIN you enter three times to authorize payments'
-    : 'Create the PIN required before you can authorize payments'
 
   const hintText = useMemo(
     () =>
@@ -87,7 +84,7 @@ export function PaymentPinSetupScreen() {
   }
 
   return (
-    <AppLayout title={title} subtitle={subtitle} back notifCount={1}>
+    <AppLayout title={title} back notifCount={1}>
       <div style={{ maxWidth: 560, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="28px">
           <div style={{ padding: '14px 16px', background: C.blue100, borderRadius: radius.sm, border: `1px solid rgba(74,173,223,0.2)`, fontSize: '13px', color: '#1A5D8A', lineHeight: 1.6, marginBottom: '18px' }}>

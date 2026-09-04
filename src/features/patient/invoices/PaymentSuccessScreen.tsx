@@ -36,7 +36,7 @@ export function PaymentSuccessScreen() {
 
   if (!inv) {
     return (
-      <AppLayout title="Payment Complete" subtitle="Invoice not found" back notifCount={0}>
+      <AppLayout title="Payment Complete" back notifCount={0}>
         <div style={{ maxWidth: 520, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="28px">
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Payment receipt unavailable</div>
@@ -80,7 +80,7 @@ export function PaymentSuccessScreen() {
   const canReview = !inv.reviewSubmitted
 
   return (
-    <AppLayout title="Payment Complete" subtitle="Payment confirmed for both parties" back notifCount={0}>
+    <AppLayout title="Payment Complete" back notifCount={0}>
       <div style={{ maxWidth: 520, margin: '0 auto', fontFamily: font.family }}>
 
         <GGCard padding="48px 40px" style={{ textAlign: 'center' }}>
@@ -109,7 +109,7 @@ export function PaymentSuccessScreen() {
               ...(isPartialPay
                 ? [{ label: 'Off-app due', val: formatCurrency(offAppDue) }]
                 : []),
-              { label: 'Payment Method',    val: "GG'APP Credit Wallet" },
+              { label: 'Payment Method',    val: "GG'APP healthcare credit" },
               { label: 'Status',            val: isPartialPay ? 'Partially Paid' : 'Paid' },
               { label: 'Timestamp',         val: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) },
             ].map(item => (

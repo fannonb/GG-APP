@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common'
+import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { Resend } from 'resend'
 
@@ -36,6 +36,10 @@ export interface CreditDecisionEmailData {
   note?: string
 }
 
+export interface LedgerPinEmailData {
+  patientName: string
+}
+
 export interface ProviderApplicationEmailData {
   practiceName: string
   note?: string
@@ -57,7 +61,9 @@ export class MailService {
   private readonly from: string
   private readonly appBaseUrl: string
 
-  constructor(configService: ConfigService) {
+  // Explicit @Inject token: tsx/esbuild doesn't emit constructor
+  // design-type metadata, so bare ConfigService DI would resolve undefined.
+  constructor(@Inject(ConfigService) configService: ConfigService) {
     const apiKey = configService.get<string>('notifications.resendApiKey') ?? ''
     this.from =
       configService.get<string>('notifications.emailFrom')?.trim() ||
@@ -334,6 +340,38 @@ export class MailService {
         ${data.note ? `<p>What we need: ${escapeHtml(data.note)}</p>` : ''}
         <p>Please log in to update your application so we can continue the review.</p>`,
         { label: 'Update application', url: `${this.appBaseUrl}/sp/pending` },
+      ),
+    })
+  }
+
+  async sendLedgerPinExpiredEmail(to: string, data: LedgerPinEmailData): Promise<boolean> {
+    return this.send({
+      to,
+      subject: 'Your Health Ledger PIN has expired',
+      html: this.layout(
+        `
+        <p>Hi ${escapeHtml(data.patientName)},</p>
+        <p>Your GG'APP Health Ledger PIN has expired. Providers can no longer unlock your treatment
+        history with that PIN.</p>
+        <p>Create a new Ledger PIN in the app whenever you want to share access again. Any previous
+        provider access has been removed.</p>`,
+        { label: 'Create a new Ledger PIN', url: `${this.appBaseUrl}/app/ledger/pin` },
+      ),
+    })
+  }
+
+  async sendLedgerPinResetEmail(to: string, data: LedgerPinEmailData): Promise<boolean> {
+    return this.send({
+      to,
+      subject: 'Your Health Ledger PIN was reset',
+      html: this.layout(
+        `
+        <p>Hi ${escapeHtml(data.patientName)},</p>
+        <p>Your GG'APP Health Ledger PIN was reset from your account. Providers who previously had
+        access must ask you for the new PIN.</p>
+        <p>If you didn't do this, sign in immediately and change your account password, then set a
+        new Ledger PIN.</p>`,
+        { label: 'Open Health Ledger', url: `${this.appBaseUrl}/app/ledger` },
       ),
     })
   }

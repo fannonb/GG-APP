@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios'
 import { API_BASE_URL, isMockApi } from '@/api/config'
-import { tokenStorage } from '@/lib/token-storage'
+import { isSessionCookieMode, setSessionCookieMode, tokenStorage } from '@/lib/token-storage'
 import { ApiError } from '@/api/types'
 import type { AuthSession } from '@/api/types'
 
@@ -9,11 +9,17 @@ let refreshPromise: Promise<AuthSession | null> | null = null
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   timeout: 30_000,
+  // Required so the httpOnly refresh cookie (cookie-mode sessions) is sent
+  // with cross-origin API calls. The backend CORS config allows credentials.
+  withCredentials: true,
   headers: { 'Content-Type': 'application/json' },
 })
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   if (isMockApi) return config
+  // Tells the backend to use the httpOnly-cookie refresh flow when
+  // SESSION_COOKIE_MODE is enabled (see auth.controller.ts).
+  config.headers['X-Client'] = 'web'
   const token = tokenStorage.getAccessToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -22,18 +28,33 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 })
 
 async function refreshAccessToken(): Promise<AuthSession | null> {
+  const cookieMode = isSessionCookieMode()
   const refreshToken = tokenStorage.getRefreshToken()
-  if (!refreshToken) return null
+  if (!cookieMode && !refreshToken) return null
 
   try {
+    // In cookie mode the refresh token travels in the httpOnly cookie, so the
+    // request body stays empty and credentials must be enabled.
     const { data } = await axios.post<AuthSession>(
       `${API_BASE_URL}/auth/refresh`,
-      { refreshToken },
+      cookieMode ? {} : { refreshToken },
+      {
+        withCredentials: cookieMode,
+        headers: cookieMode ? { 'X-Client': 'web' } : undefined,
+      },
     )
+    if (cookieMode) {
+      setSessionCookieMode(data.cookieSession === true)
+    }
     tokenStorage.setSession(data)
     return data
   } catch {
     tokenStorage.clear()
+    // Let the app react to a dead session immediately instead of leaving the
+    // UI showing an authenticated user whose tokens are already gone.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('gg:auth-expired'))
+    }
     return null
   }
 }
@@ -53,6 +74,9 @@ apiClient.interceptors.response.use(
       if (session) {
         original.headers.Authorization = `Bearer ${session.accessToken}`
         return apiClient(original)
+      }
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('gg:auth-expired'))
       }
     }
 

@@ -14,9 +14,13 @@ export class RedisService implements OnModuleDestroy {
   private readonly memoryStore = new Map<string, MemoryEntry>()
   private mode: 'redis' | 'memory' = 'memory'
   private connectPromise: Promise<void> | null = null
+  private readonly nodeEnv: string
+  private readonly redisConfigured: boolean
 
   constructor(@Inject(ConfigService) configService: ConfigService) {
+    this.nodeEnv = configService.get<string>('app.nodeEnv') ?? 'development'
     const url = configService.get<string>('redis.url')
+    this.redisConfigured = Boolean(url)
 
     if (!url) {
       this.logger.warn('REDIS_URL is not set; using in-memory session store.')
@@ -116,11 +120,21 @@ export class RedisService implements OnModuleDestroy {
       this.client.disconnect()
       this.client = null
       this.mode = 'memory'
+      if (this.nodeEnv === 'production') {
+        throw new Error('Redis is unreachable in production; refusing in-memory fallback.')
+      }
     }
   }
 
   private async canUseRedis() {
     if (!this.client && this.mode === 'memory') {
+      // Production must never silently degrade to the per-process memory
+      // store: revocation/refresh state would be lost and revoked sessions
+      // would be re-accepted (audit M5). Fail the call instead so auth can
+      // fail closed.
+      if (this.nodeEnv === 'production' && this.redisConfigured) {
+        throw new Error('Redis is unavailable in production; in-memory fallback is disabled.')
+      }
       return false
     }
 
@@ -132,6 +146,9 @@ export class RedisService implements OnModuleDestroy {
     }
 
     if (!this.client || this.mode === 'memory') {
+      if (this.nodeEnv === 'production' && this.redisConfigured) {
+        throw new Error('Redis is unavailable in production; in-memory fallback is disabled.')
+      }
       return false
     }
 
@@ -144,6 +161,14 @@ export class RedisService implements OnModuleDestroy {
       this.mode = 'redis'
       return true
     } catch (error) {
+      if (this.nodeEnv === 'production') {
+        this.client?.disconnect()
+        this.client = null
+        this.mode = 'memory'
+        throw new Error(
+          `Redis unavailable (${error instanceof Error ? error.message : String(error)}); in-memory fallback is disabled in production.`,
+        )
+      }
       this.logger.warn(`Redis unavailable (${(error as Error).message}); continuing with in-memory fallback.`)
       this.client.disconnect()
       this.client = null

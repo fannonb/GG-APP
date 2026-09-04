@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsEmail,
   IsIn,
   IsNumber,
   IsObject,
@@ -13,6 +14,10 @@ export class UpdateProviderProfileDto {
   @IsString()
   @MinLength(1)
   about?: string
+
+  @IsOptional()
+  @IsEmail()
+  email?: string
 
   @IsOptional()
   @IsArray()

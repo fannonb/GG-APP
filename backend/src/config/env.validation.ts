@@ -24,5 +24,23 @@ export function validateEnv(env: Record<string, unknown>) {
     throw new Error('FIELD_ENCRYPTION_KEY must be a 64 character hex string')
   }
 
+  // JWT signing secrets must have real entropy. The example placeholders in
+  // .env.example ("change-me-*") would otherwise pass the non-empty check and
+  // silently produce forgeable tokens. Hard-fail in production; warn loudly in
+  // development so local iteration is not blocked.
+  for (const secretVar of ['JWT_ACCESS_SECRET', 'JWT_REFRESH_SECRET']) {
+    const value = env[secretVar]
+    if (typeof value === 'string' && value.length >= 32) continue
+    if (env.NODE_ENV === 'production') {
+      throw new Error(
+        `${secretVar} must be at least 32 characters long in production — generate one with: openssl rand -base64 48`,
+      )
+    }
+    console.warn(
+      `⚠ ${secretVar} is shorter than 32 characters. It is usable for local development only; ` +
+        'production boots will refuse to start until a strong random secret is configured.',
+    )
+  }
+
   return env
 }

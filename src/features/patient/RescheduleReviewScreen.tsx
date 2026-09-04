@@ -65,7 +65,7 @@ export function RescheduleReviewScreen() {
 
   if (isLoading) {
     return (
-      <AppLayout title="Reschedule" subtitle="Loading...">
+      <AppLayout title="Reschedule">
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <GGCard padding="48px" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '13px', color: C.textSub }}>Loading appointment…</div>
@@ -77,7 +77,7 @@ export function RescheduleReviewScreen() {
 
   if (!apt) {
     return (
-      <AppLayout title="Reschedule" subtitle="Not found">
+      <AppLayout title="Reschedule">
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <GGCard padding="48px" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>
@@ -101,7 +101,7 @@ export function RescheduleReviewScreen() {
   if (confirmed || displayStatus === 'confirmed') {
     const d = new Date(apt.date)
     return (
-      <AppLayout title="Reschedule" subtitle="Confirmed">
+      <AppLayout title="Reschedule">
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <GGCard padding="40px" style={{ textAlign: 'center' }}>
             <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(34,201,138,0.12)', border: '2px solid rgba(34,201,138,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
@@ -132,7 +132,7 @@ export function RescheduleReviewScreen() {
 
   if (!apt.rescheduledAt || displayStatus !== 'pending') {
     return (
-      <AppLayout title="Reschedule" subtitle="">
+      <AppLayout title="Reschedule">
         <div style={{ maxWidth: 560, margin: '0 auto' }}>
           <GGCard padding="40px" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>
@@ -159,7 +159,7 @@ export function RescheduleReviewScreen() {
   const year = d.getFullYear()
 
   return (
-    <AppLayout title="Reschedule Proposed" subtitle={`From ${apt.provider}`}>
+    <AppLayout title="Reschedule Proposed">
       <div style={{ maxWidth: 560, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: '16px' }}>
 
         {/* Info banner */}

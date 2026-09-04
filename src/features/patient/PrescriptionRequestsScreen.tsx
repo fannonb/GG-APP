@@ -116,7 +116,7 @@ export function PrescriptionRequestsScreen() {
   return (
     <AppLayout
       title="Prescription Requests"
-      subtitle="Upload, review pharmacy quotes, approve payment, then pickup or delivery"
+      status={grouped.active.length > 0 ? `${grouped.active.length} active` : undefined}
       notifCount={0}
     >
       {isLoading && requests.length === 0 ? (

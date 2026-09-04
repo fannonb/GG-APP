@@ -57,7 +57,7 @@ export function TransactionHistoryScreen() {
     .reduce((sum, txn) => sum + txn.amount, 0)
 
   return (
-    <AppLayout title="Transaction History" subtitle="All balance-funded healthcare payments" notifCount={1}>
+    <AppLayout title="Transaction History" notifCount={1}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {/* Summary cards */}

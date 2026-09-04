@@ -159,7 +159,7 @@ export function AdminProvidersScreen() {
   const currSymbol = (p: AdminProvider) => COUNTRY_CURRENCIES[p.country] ?? 'Z$'
 
   return (
-    <AdminLayout title="Providers" subtitle="Manage registered healthcare service providers">
+    <AdminLayout title="Providers">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {/* Filters + Search — country handled by global top bar selector */}

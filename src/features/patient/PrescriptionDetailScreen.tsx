@@ -116,7 +116,7 @@ export function PrescriptionDetailScreen() {
 
   if (isLoading && !request) {
     return (
-      <AppLayout title="Prescription Request" subtitle="Loading…" back notifCount={0}>
+      <AppLayout title="Prescription Request" back notifCount={0}>
         <GGCard padding="24px"><div style={{ color: C.textSub, fontFamily: font.family }}>Loading prescription request…</div></GGCard>
       </AppLayout>
     )
@@ -124,7 +124,7 @@ export function PrescriptionDetailScreen() {
 
   if (!request) {
     return (
-      <AppLayout title="Prescription Request" subtitle="Not found" back notifCount={0}>
+      <AppLayout title="Prescription Request" back notifCount={0}>
         <GGCard padding="24px"><div style={{ color: C.textSub, fontFamily: font.family }}>This prescription request could not be found.</div></GGCard>
       </AppLayout>
     )
@@ -167,7 +167,7 @@ export function PrescriptionDetailScreen() {
   }
 
   return (
-    <AppLayout title={request.id} subtitle={`${request.provider ?? 'Pharmacy'} · ${request.for}`} back notifCount={0}>
+    <AppLayout title={request.id} back notifCount={0}>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: '20px', fontFamily: font.family }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <GGCard padding="24px">

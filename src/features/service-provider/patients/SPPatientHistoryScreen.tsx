@@ -61,14 +61,14 @@ export function SPPatientHistoryScreen() {
 
   if (isLoading) {
     return (
-      <SPLayout title="Patient Ledger" subtitle="Comprehensive patient directory, clinical visit ledger & billing breakdown">
+      <SPLayout title="Patient Records">
         <GGCard padding="32px">
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
               <circle cx="12" cy="12" r="10" stroke={C.border} strokeWidth="3" />
               <path d="M12 2A10 10 0 0 1 22 12" stroke={C.blue500} strokeWidth="3" strokeLinecap="round" />
             </svg>
-            Loading patient ledger...
+            Loading patient records...
           </div>
         </GGCard>
       </SPLayout>
@@ -76,7 +76,7 @@ export function SPPatientHistoryScreen() {
   }
 
   return (
-    <SPLayout title="Patient Ledger" subtitle="Comprehensive patient directory, clinical visit ledger & billing breakdown">
+    <SPLayout title="Patient Records">
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '14px' : '20px' }}>
         
         {/* KPI Summary Cards */}
@@ -162,7 +162,7 @@ export function SPPatientHistoryScreen() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Search patient ledger by name, phone..."
+                placeholder="Search patient records by name, phone..."
                 style={{
                   width: '100%',
                   padding: '10px 36px 10px 38px',
@@ -241,10 +241,10 @@ export function SPPatientHistoryScreen() {
                 </svg>
               </div>
               <div style={{ fontSize: '16px', fontWeight: 700, color: C.navy800, fontFamily: font.family }}>
-                {patients.length === 0 ? 'No patient ledger records found.' : 'No patients match your search criteria.'}
+                {patients.length === 0 ? 'No patient records found.' : 'No patients match your search criteria.'}
               </div>
               <div style={{ fontSize: '13px', color: C.textSub, fontFamily: font.family, marginTop: '6px', maxWidth: '400px', margin: '6px auto 16px' }}>
-                Try adjusting your search terms to find the patient ledger item.
+                Try adjusting your search terms to find the patient record.
               </div>
               {search && (
                 <GGButton variant="secondary" size="sm" onClick={() => setSearch('')}>

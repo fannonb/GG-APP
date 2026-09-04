@@ -7,6 +7,32 @@ export function getAppointmentDisplayStatus<T extends AppointmentStatusSource>(a
   return appointment.hasInvoice ? 'completed' : appointment.status
 }
 
+/** New or confirmed visits from today forward — the rolling clinic board. */
+export function isUpcomingScheduleItem<T extends AppointmentStatusSource & { date: string }>(
+  appointment: T,
+): boolean {
+  if (getDaysUntilAppointment(appointment.date) < 0) return false
+  const display = getAppointmentDisplayStatus(appointment)
+  return display === 'new' || display === 'confirmed'
+}
+
+export function getScheduleDayLabel(dateStr: string): string {
+  const days = getDaysUntilAppointment(dateStr)
+  if (days === 0) return 'Today'
+  if (days === 1) return 'Tomorrow'
+  return new Date(dateStr).toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
+export function appointmentHasRecordedVisit<T extends { visitId?: string; hasVisit?: boolean }>(
+  appointment: T,
+): boolean {
+  return Boolean(appointment.hasVisit || appointment.visitId)
+}
+
 export function getDaysUntilAppointment(dateStr: string): number {
   const today = new Date()
   today.setHours(0, 0, 0, 0)

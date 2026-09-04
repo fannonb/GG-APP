@@ -33,7 +33,7 @@ export function AdminLedgerAccessScreen() {
   const events = accessQuery.data ?? []
 
   return (
-    <AdminLayout title="Ledger Access" subtitle="Patient consent audits for health ledger unlocks and views">
+    <AdminLayout title="Ledger Access">
       <div style={{ maxWidth: 960, fontFamily: font.family }}>
         <GGCard padding="24px">
           <div style={{ fontSize: 15, fontWeight: 700, color: C.navy800, marginBottom: 4 }}>

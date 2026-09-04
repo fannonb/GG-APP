@@ -19,4 +19,28 @@ export class UpsertProviderPayoutAccountDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean
+
+  @IsOptional()
+  @IsIn(['paybill', 'till'])
+  mpesaType?: 'paybill' | 'till'
+
+  @IsOptional()
+  @IsString()
+  paybillNumber?: string
+
+  @IsOptional()
+  @IsString()
+  bankName?: string
+
+  @IsOptional()
+  @IsString()
+  branch?: string
+
+  @IsOptional()
+  @IsString()
+  branchCode?: string
+
+  @IsOptional()
+  @IsString()
+  swiftCode?: string
 }

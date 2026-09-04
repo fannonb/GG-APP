@@ -269,9 +269,10 @@ export function AdminSPAppsScreen() {
 
   const days = selected ? daysWaiting(selected.submitted) : 0
   const decided = selected?.status === 'rejected'
+  const pendingCount = apps.filter(a => a.status === 'pending' || a.status === 'info_requested').length
 
   return (
-    <AdminLayout title="SP Applications" subtitle="Review pending provider onboarding requests — approved providers appear in Providers">
+    <AdminLayout title="SP Applications" status={pendingCount > 0 ? `${pendingCount} to review` : undefined}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: font.family }}>
 
         {actionDone === 'approved' && approvedAppName && (

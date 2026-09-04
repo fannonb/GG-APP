@@ -205,7 +205,7 @@ export function AdminUsersScreen() {
   const currSymbol = (user: AdminUser) => COUNTRY_CURRENCIES[user.country] ?? 'Z$'
 
   return (
-    <AdminLayout title="Users" subtitle="Manage patient accounts, identity verification and credit settings">
+    <AdminLayout title="Users">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0', background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
           <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>

@@ -42,11 +42,6 @@ export function SPLedgerUnlockScreen() {
   return (
     <SPLayout
       title="Unlock Patient Ledger"
-      subtitle={
-        locationState?.patientName
-          ? `Enter the Ledger PIN for ${locationState.patientName}`
-          : "View a patient's treatment history with their consent"
-      }
       back
     >
       <div style={{ maxWidth: 560, margin: '0 auto', fontFamily: font.family }}>

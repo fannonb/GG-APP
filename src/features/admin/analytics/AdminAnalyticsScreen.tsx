@@ -83,7 +83,7 @@ export function AdminAnalyticsScreen() {
 
   if (isLoading && !analytics) {
     return (
-      <AdminLayout title="Analytics" subtitle="Platform performance, usage insights and trends">
+      <AdminLayout title="Analytics">
         <GGCard padding="28px">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', textAlign: 'center', color: C.textSub }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', border: `3px solid ${C.border}`, borderTopColor: C.blue500, animation: 'spin 0.8s linear infinite' }} />
@@ -97,7 +97,7 @@ export function AdminAnalyticsScreen() {
 
   if (isError && !analytics) {
     return (
-      <AdminLayout title="Analytics" subtitle="Platform performance, usage insights and trends">
+      <AdminLayout title="Analytics">
         <GGCard padding="28px" style={{ maxWidth: 640 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '16px', fontWeight: 800, color: C.text }}>Analytics unavailable</div>
@@ -117,7 +117,7 @@ export function AdminAnalyticsScreen() {
   }
 
   return (
-    <AdminLayout title="Analytics" subtitle="Platform performance, usage insights and trends">
+    <AdminLayout title="Analytics">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '14px' }}>
           {[

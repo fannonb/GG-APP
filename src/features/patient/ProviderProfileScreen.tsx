@@ -186,7 +186,7 @@ export function ProviderProfileScreen() {
 
   if (isLoading && !provider) {
     return (
-      <AppLayout title="Provider Profile" subtitle="Loading…" back notifCount={1}>
+      <AppLayout title="Provider Profile" back notifCount={1}>
         <GGCard padding="28px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>Loading provider profile…</div>
         </GGCard>
@@ -196,7 +196,7 @@ export function ProviderProfileScreen() {
 
   if (!provider) {
     return (
-      <AppLayout title="Provider Profile" subtitle="Not found" back notifCount={1}>
+      <AppLayout title="Provider Profile" back notifCount={1}>
         <GGCard padding="28px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>This provider could not be found.</div>
         </GGCard>
@@ -252,7 +252,7 @@ export function ProviderProfileScreen() {
   const [logoPopupOpen, setLogoPopupOpen] = useState(false)
 
   return (
-    <AppLayout title={provider.name} subtitle={displayAddress} back notifCount={1}>
+    <AppLayout title={provider.name} back notifCount={1}>
       {/* Logo popup */}
       {logoPopupOpen && provider.logoUrl && (
         <div

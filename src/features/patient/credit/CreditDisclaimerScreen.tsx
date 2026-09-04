@@ -18,7 +18,7 @@ export function CreditDisclaimerScreen() {
   const [agreed, setAgreed] = useState(false)
 
   return (
-    <AppLayout title="Apply for Balance" subtitle="Healthcare credit facility" back notifCount={1}>
+    <AppLayout title="Apply for Balance" back notifCount={1}>
       <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="36px">
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '24px' }}>

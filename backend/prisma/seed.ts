@@ -4,6 +4,14 @@ import { createCipheriv, randomBytes } from 'node:crypto'
 
 const prisma = new PrismaClient()
 
+// The seed contains demo credentials (Password1 etc.) and is only meant for
+// local development. Refuse to run against production so those credentials
+// can never be created in a live database (audit L7).
+if (process.env.NODE_ENV === 'production') {
+  console.error('[seed] Refusing to seed in production — demo credentials must never exist in a live database.')
+  process.exit(1)
+}
+
 function encrypt(value: string, hexKey: string) {
   const key = Buffer.from(hexKey, 'hex')
   const iv = randomBytes(12)

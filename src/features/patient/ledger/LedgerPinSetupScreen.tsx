@@ -3,31 +3,33 @@ import { useNavigate } from 'react-router-dom'
 import { GGButton, GGCard, GGInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
-import { useLedgerStatus, useSetupLedgerPinMutation } from '@/hooks/api'
+import { useLedgerStatus, useSetupLedgerPinMutation, useResetLedgerPinMutation } from '@/hooks/api'
 import { ROUTES } from '@/router/routes'
 
 export function LedgerPinSetupScreen() {
   const navigate = useNavigate()
   const statusQuery = useLedgerStatus()
   const setupPinMutation = useSetupLedgerPinMutation()
+  const resetPinMutation = useResetLedgerPinMutation()
   const isReset = statusQuery.data?.hasPin ?? false
 
-  const [form, setForm] = useState({ currentPin: '', pin: '', confirmPin: '' })
+  const [form, setForm] = useState({ currentPin: '', password: '', pin: '', confirmPin: '' })
   const [expiresInDays, setExpiresInDays] = useState<number | undefined>(undefined)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  const [forgotMode, setForgotMode] = useState(false)
 
   const title = isReset ? 'Change Ledger PIN' : 'Create Ledger PIN'
-  const subtitle = isReset
-    ? 'Changing your PIN revokes access for every provider'
-    : 'This PIN lets you consent to providers viewing your treatment history'
 
   const setField = <K extends keyof typeof form>(key: K, value: string) =>
     setForm(current => ({ ...current, [key]: value }))
 
   const validate = () => {
     const nextErrors: Record<string, string> = {}
-    if (isReset && form.currentPin.length < 4) {
+    if (isReset && !forgotMode && form.currentPin.length < 4) {
       nextErrors.currentPin = 'Enter your current ledger PIN'
+    }
+    if (forgotMode && !form.password.trim()) {
+      nextErrors.password = 'Confirm your account password to reset the ledger PIN'
     }
     if (!/^\d{4,6}$/.test(form.pin)) {
       nextErrors.pin = 'PIN must be 4 to 6 digits'
@@ -39,16 +41,27 @@ export function LedgerPinSetupScreen() {
     return Object.keys(nextErrors).length === 0
   }
 
+  const saving = setupPinMutation.isPending || resetPinMutation.isPending
+
   const handleSubmit = async () => {
     if (!validate()) return
 
     try {
-      await setupPinMutation.mutateAsync({
-        currentPin: isReset ? form.currentPin : undefined,
-        pin: form.pin,
-        confirmPin: form.confirmPin,
-        expiresInDays,
-      })
+      if (forgotMode) {
+        await resetPinMutation.mutateAsync({
+          password: form.password,
+          pin: form.pin,
+          confirmPin: form.confirmPin,
+          expiresInDays,
+        })
+      } else {
+        await setupPinMutation.mutateAsync({
+          currentPin: isReset ? form.currentPin : undefined,
+          pin: form.pin,
+          confirmPin: form.confirmPin,
+          expiresInDays,
+        })
+      }
       navigate(ROUTES.LEDGER, { state: { pinUpdated: true } })
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to save your ledger PIN.'
@@ -57,7 +70,7 @@ export function LedgerPinSetupScreen() {
   }
 
   return (
-    <AppLayout title={title} subtitle={subtitle} back>
+    <AppLayout title={title} back>
       <div style={{ maxWidth: 560, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="28px">
           <div style={{ padding: '14px 16px', background: C.blue100, borderRadius: radius.sm, border: '1px solid rgba(74,173,223,0.2)', fontSize: '13px', color: '#1A5D8A', lineHeight: 1.6, marginBottom: '18px' }}>
@@ -67,7 +80,7 @@ export function LedgerPinSetupScreen() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {isReset && (
+            {isReset && !forgotMode && (
               <div>
                 <GGInput
                   label="Current PIN"
@@ -78,6 +91,65 @@ export function LedgerPinSetupScreen() {
                   required
                 />
                 {errors.currentPin && <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: C.error }}>{errors.currentPin}</span>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(true)
+                    setErrors({})
+                    setField('currentPin', '')
+                  }}
+                  style={{
+                    marginTop: 8,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: C.blue500,
+                    cursor: 'pointer',
+                    fontFamily: font.family,
+                  }}
+                >
+                  Forgot PIN?
+                </button>
+              </div>
+            )}
+
+            {forgotMode && (
+              <div>
+                <div style={{ padding: '12px 14px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, fontSize: 13, color: C.textSub, lineHeight: 1.6, marginBottom: 12 }}>
+                  The old PIN cannot be recovered. Confirm your GG'APP account password, then choose a new Ledger PIN. This revokes any current provider access.
+                </div>
+                <GGInput
+                  label="Account password"
+                  type="password"
+                  value={form.password}
+                  onChange={event => setField('password', event.target.value)}
+                  placeholder="Enter your account password"
+                  required
+                />
+                {errors.password && <span style={{ display: 'block', marginTop: '4px', fontSize: '12px', color: C.error }}>{errors.password}</span>}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotMode(false)
+                    setErrors({})
+                    setField('password', '')
+                  }}
+                  style={{
+                    marginTop: 8,
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    fontSize: 13,
+                    fontWeight: 700,
+                    color: C.blue500,
+                    cursor: 'pointer',
+                    fontFamily: font.family,
+                  }}
+                >
+                  I remember my PIN
+                </button>
               </div>
             )}
 
@@ -157,10 +229,10 @@ export function LedgerPinSetupScreen() {
                 variant="primary"
                 size="md"
                 onClick={handleSubmit}
-                disabled={setupPinMutation.isPending || statusQuery.isLoading}
+                disabled={saving || statusQuery.isLoading}
                 style={{ flex: 1 }}
               >
-                {setupPinMutation.isPending ? 'Saving PIN...' : isReset ? 'Update PIN' : 'Create PIN'}
+                {saving ? 'Saving PIN...' : forgotMode || isReset ? 'Update PIN' : 'Create PIN'}
               </GGButton>
             </div>
           </div>

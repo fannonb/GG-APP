@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { GGButton, GGCard, GGBadge, GGDivider } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -26,7 +26,6 @@ function formatDate(iso: string) {
 
 export function HealthLedgerScreen() {
   const navigate = useNavigate()
-  const [beneficiaryFilter, setBeneficiaryFilter] = useState<string | undefined>(undefined)
   const statusQuery = useLedgerStatus()
   const ledgerQuery = useOwnLedger()
   const revokeGrantMutation = useRevokeLedgerGrantMutation()
@@ -34,6 +33,7 @@ export function HealthLedgerScreen() {
 
   const status = statusQuery.data
   const hasPin = status?.hasPin ?? false
+  const pinExpired = status?.pinExpired ?? false
   const activeGrants = status?.activeGrants ?? []
 
   const rawEntries = useMemo(() => ledgerQuery.data?.entries ?? [], [ledgerQuery.data?.entries])
@@ -60,41 +60,36 @@ export function HealthLedgerScreen() {
     return Array.from(map.values())
   }, [queryBeneficiaries, storeBeneficiaries, rawEntries])
 
-  // Client-side robust filtering logic
-  const filteredEntries = useMemo(() => {
-    if (!beneficiaryFilter) return rawEntries
-
-    if (beneficiaryFilter === 'self') {
-      return rawEntries.filter(entry => {
-        if (!entry.beneficiaryName) return true
-        const name = entry.beneficiaryName.toLowerCase()
-        return name === 'self' || name === 'me'
-      })
-    }
-
-    const selectedBen = beneficiaries.find(b => b.id === beneficiaryFilter)
-    const searchTarget = (selectedBen ? selectedBen.name : beneficiaryFilter).toLowerCase().trim()
-
-    return rawEntries.filter(entry => {
-      if (!entry.beneficiaryName) return false
-      const entryBenName = entry.beneficiaryName.toLowerCase()
-      return entryBenName.includes(searchTarget) || searchTarget.includes(entryBenName)
-    })
-  }, [rawEntries, beneficiaryFilter, beneficiaries])
+  const beneficiaryOptions = useMemo(
+    () => [
+      { id: undefined, label: 'Everyone' },
+      { id: 'self', label: 'Me only' },
+      ...beneficiaries.map(b => ({ id: b.id, label: b.name })),
+    ],
+    [beneficiaries],
+  )
 
   return (
     <AppLayout
       title="Health Ledger"
-      subtitle="Your complete treatment history across all providers"
+      status={
+        pinExpired
+          ? 'PIN expired'
+          : !hasPin
+            ? 'PIN not set'
+            : activeGrants.length > 0
+              ? `${activeGrants.length} active access`
+              : undefined
+      }
     >
-      <div style={{ maxWidth: 760, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ maxWidth: 1120, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 20 }}>
 
         <GGCard padding="24px">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ flex: 1, minWidth: 240 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 17, fontWeight: 700, color: C.navy800 }}>Ledger PIN</span>
-                {hasPin ? <GGBadge type="success">Active</GGBadge> : <GGBadge type="warning">Not set</GGBadge>}
+                {hasPin ? <GGBadge type="success">Active</GGBadge> : <GGBadge type="warning">{pinExpired ? 'Expired' : 'Not set'}</GGBadge>}
                 {hasPin && status?.pinExpiresAt && (
                   <GGBadge type="info">Expires {formatDate(status.pinExpiresAt)}</GGBadge>
                 )}
@@ -102,7 +97,9 @@ export function HealthLedgerScreen() {
               <p style={{ fontSize: 13.5, color: C.textSub, lineHeight: 1.7, margin: '10px 0 0' }}>
                 {hasPin
                   ? 'Share your PIN with a service provider to give them 24-hour access to your treatment history. Every access is logged and you can revoke it anytime.'
-                  : 'Create a PIN to control which service providers can view your treatment and diagnosis history across the platform.'}
+                  : pinExpired
+                    ? 'Your ledger PIN has expired. Providers can no longer unlock your treatment history until you create a new PIN.'
+                    : 'Create a PIN to control which service providers can view your treatment and diagnosis history across the platform.'}
               </p>
             </div>
             <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
@@ -170,44 +167,15 @@ export function HealthLedgerScreen() {
             </Link>
           </div>
 
-          {(beneficiaries.length > 0 || beneficiaryFilter) && (
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
-              {[
-                { id: undefined, label: 'Everyone' },
-                { id: 'self', label: 'Me only' },
-                ...beneficiaries.map(b => ({ id: b.id, label: b.name })),
-              ].map(option => {
-                const active = beneficiaryFilter === option.id
-                return (
-                  <button
-                    key={option.id ?? 'all'}
-                    type="button"
-                    onClick={() => setBeneficiaryFilter(option.id)}
-                    style={{
-                      padding: '7px 14px',
-                      borderRadius: radius.full,
-                      border: `1.5px solid ${active ? C.navy800 : C.border}`,
-                      background: active ? C.navy800 : '#fff',
-                      color: active ? '#fff' : C.textSub,
-                      fontSize: 12.5,
-                      fontWeight: 700,
-                      fontFamily: font.family,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    {option.label}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
           {ledgerQuery.isLoading ? (
             <GGCard>
               <div style={{ padding: 24, textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading your ledger...</div>
             </GGCard>
           ) : (
-            <LedgerTimeline entries={filteredEntries} />
+            <LedgerTimeline
+              entries={rawEntries}
+              beneficiaryOptions={beneficiaries.length > 0 ? beneficiaryOptions : []}
+            />
           )}
         </div>
 

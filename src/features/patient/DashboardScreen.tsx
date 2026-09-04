@@ -16,6 +16,7 @@ import { getCountryByCode } from '@/config/countries'
 import { FlagImg } from '@/components/FlagImg'
 import { NewUserDashboardScreen } from './NewUserDashboardScreen'
 import { DashboardAppointmentsCard } from '@/features/patient/components/DashboardAppointmentsCard'
+import { DashboardRecentActivity } from '@/features/patient/components/DashboardRecentActivity'
 import { getAppointmentDisplayStatus } from '@/utils/appointments'
 import { AdBannerStrip } from '@/components/AdBanner'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
@@ -194,7 +195,6 @@ export function DashboardScreen() {
     if (typeof window === 'undefined') return ''
     return window.sessionStorage.getItem(DISMISSED_LEDGER_ACCESS_KEY) ?? ''
   })
-  const unreadNotifCount = patientNotifs.filter(n => !n.read).length
 
   // Remount the banner strip every time the admin saves — version increments on every updateBanner call.
   const adVersion = useAdsStore(s => s.version)
@@ -204,7 +204,7 @@ export function DashboardScreen() {
 
   if (accountContextLoading) {
     return (
-      <AppLayout title="Dashboard" subtitle="Your healthcare overview" notifCount={unreadNotifCount}>
+      <AppLayout title="Dashboard">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading dashboard...
@@ -239,17 +239,22 @@ export function DashboardScreen() {
     })
 
   if (isNewAccount) {
-    return <NewUserDashboardScreen user={u} />
+    return <NewUserDashboardScreen user={u} appointments={dashboard.appointments} />
   }
 
   const currency = country?.currencySymbol ?? 'Z$'
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  const spentThisMonth = transactions
-    .filter(t => t.status !== 'failed' && new Date(t.date).getMonth() === new Date().getMonth())
-    .reduce((sum, t) => sum + t.amount, 0)
-  const spentThisMonthCount = transactions.filter(
-    t => t.status !== 'failed' && new Date(t.date).getMonth() === new Date().getMonth(),
-  ).length
+  const now = new Date()
+  const spentThisMonthTx = transactions.filter(t => {
+    if (t.status === 'failed') return false
+    const d = new Date(t.date)
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+  })
+  const spentThisMonth = spentThisMonthTx.reduce((sum, t) => sum + t.amount, 0)
+  const spentThisMonthCount = spentThisMonthTx.length
+  const hasUpcomingAppointments = appointments.length > 0
   const rescheduledAppointment = appointments.find(
     a => getAppointmentDisplayStatus(a) === 'pending' && !!a.rescheduledAt,
   )
@@ -473,8 +478,18 @@ export function DashboardScreen() {
     navigate(items[0]?.screen ?? ROUTES.FIND_SERVICE)
   }
 
+  const hasUnresolvedAction = Boolean(
+    pendingInvoice ||
+    rescheduledAppointment ||
+    pendingAppointment ||
+    prescriptionQuoteItems.length ||
+    prescriptionInvoiceItems.length ||
+    prescriptionReadyItems.length ||
+    creditUnderReview,
+  )
+
   return (
-    <AppLayout title="Dashboard" subtitle="Your healthcare overview" notifCount={unreadNotifCount}>
+    <AppLayout title="Dashboard">
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
 
         {/* Greeting */}
@@ -482,7 +497,7 @@ export function DashboardScreen() {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ fontSize: isMobile ? '20px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
-                Good morning, {getPatientFirstName(u)}
+                {greeting}, {getPatientFirstName(u)}
               </div>
               {country && (
                 <FlagImg
@@ -500,6 +515,96 @@ export function DashboardScreen() {
             </GGBadge>
           )}
         </div>
+
+        {pendingInvoice && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFF8E0)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3l6 10H2z" stroke="#fff" strokeWidth="1.3" fill="none" strokeLinejoin="round" /><line x1="8" y1="7.5" x2="8" y2="10" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" /><circle cx="8" cy="11.5" r="0.8" fill="#fff" /></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: '#8A4D00', fontFamily: font.family }}>
+                {pendingInvoiceCount} invoice{pendingInvoiceCount > 1 ? 's require' : ' requires'} your authorization
+              </div>
+              <div style={{ fontSize: '12px', color: '#A06000', marginTop: '2px', fontFamily: font.family }}>
+                {pendingInvoice.id} from {pendingInvoice.provider.name} — {formatCurrency(pendingInvoice.amount, currency)}
+              </div>
+            </div>
+            <GGButton
+              variant="warning"
+              size="sm"
+              onClick={() => navigate(route.patientInvoice(pendingInvoice.id))}
+              style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
+            >
+              Authorize Now
+            </GGButton>
+          </div>
+        )}
+
+        {rescheduledAppointment && rescheduledAppointmentDate && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: 'linear-gradient(90deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))', borderRadius: radius.lg, border: '1.5px solid rgba(124,58,237,0.28)', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><path d="M10 6v4l2.5 1.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#5B21B6', marginBottom: '2px', fontFamily: font.family }}>Reschedule proposal waiting</div>
+              <div style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.5, fontFamily: font.family }}>
+                <strong>{rescheduledAppointment.provider}</strong> proposed {rescheduledAppointmentDate} at {formatTime12h(rescheduledAppointment.time)} for {rescheduledAppointment.service}
+              </div>
+            </div>
+            <GGButton
+              variant="primary"
+              size="sm"
+              onClick={() => navigate(`/app/appointments/${rescheduledAppointment.id}/reschedule`)}
+              style={{ background: '#7C3AED', border: 'none', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
+            >
+              Review Reschedule
+            </GGButton>
+          </div>
+        )}
+
+        {pendingAppointment && pendingAppointmentDate && (
+          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFFAE8)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
+            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><line x1="10" y1="6" x2="10" y2="11" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="#fff"/></svg>
+            </div>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8A4D00', marginBottom: '2px', fontFamily: font.family }}>Appointment Pending Confirmation</div>
+              <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5, fontFamily: font.family }}>
+                <strong>{pendingAppointment.provider}</strong> - {pendingAppointmentDate} at {formatTime12h(pendingAppointment.time)} for {pendingAppointment.service}
+              </div>
+            </div>
+            <GGButton variant="warning" size="sm" onClick={() => navigate('/app/appointments')} style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}>
+              View Appointments
+            </GGButton>
+          </div>
+        )}
+
+        {!pendingInvoice && prescriptionInvoiceItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="invoice"
+            items={prescriptionInvoiceItems}
+            onAction={handlePrescriptionInvoiceAction}
+            onDismiss={handlePrescriptionInvoiceDismiss}
+          />
+        )}
+
+        {prescriptionQuoteItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="quote"
+            items={prescriptionQuoteItems}
+            onAction={handlePrescriptionQuoteAction}
+            onDismiss={handlePrescriptionQuoteDismiss}
+          />
+        )}
+
+        {prescriptionReadyItems.length > 0 && (
+          <PrescriptionStatusBanner
+            variant="ready"
+            items={prescriptionReadyItems}
+            onAction={handlePrescriptionReadyAction}
+            onDismiss={handlePrescriptionReadyDismiss}
+          />
+        )}
 
         {creditUnderReview && (
           <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.blue100}, #EAF6FD)`, borderRadius: radius.lg, border: `1.5px solid rgba(56,182,255,0.28)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
@@ -529,6 +634,10 @@ export function DashboardScreen() {
           />
         )}
 
+        {showLowBalancePrompt && (
+          <CreditLowBalancePrompt available={u.creditAvailable} countryCode={u.countryCode} />
+        )}
+
         {showLedgerAccessBanner && (
           <LedgerAccessBanner
             grants={activeLedgerGrants}
@@ -539,33 +648,6 @@ export function DashboardScreen() {
                 window.sessionStorage.setItem(DISMISSED_LEDGER_ACCESS_KEY, ledgerAccessFingerprint)
               }
             }}
-          />
-        )}
-
-        {prescriptionQuoteItems.length > 0 && (
-          <PrescriptionStatusBanner
-            variant="quote"
-            items={prescriptionQuoteItems}
-            onAction={handlePrescriptionQuoteAction}
-            onDismiss={handlePrescriptionQuoteDismiss}
-          />
-        )}
-
-        {prescriptionInvoiceItems.length > 0 && (
-          <PrescriptionStatusBanner
-            variant="invoice"
-            items={prescriptionInvoiceItems}
-            onAction={handlePrescriptionInvoiceAction}
-            onDismiss={handlePrescriptionInvoiceDismiss}
-          />
-        )}
-
-        {prescriptionReadyItems.length > 0 && (
-          <PrescriptionStatusBanner
-            variant="ready"
-            items={prescriptionReadyItems}
-            onAction={handlePrescriptionReadyAction}
-            onDismiss={handlePrescriptionReadyDismiss}
           />
         )}
 
@@ -646,89 +728,49 @@ export function DashboardScreen() {
           </div>
         ))}
 
-        {pendingInvoice && (
-          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFF8E0)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
-            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M8 3l6 10H2z" stroke="#fff" strokeWidth="1.3" fill="none" strokeLinejoin="round" /><line x1="8" y1="7.5" x2="8" y2="10" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" /><circle cx="8" cy="11.5" r="0.8" fill="#fff" /></svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: '#8A4D00', fontFamily: font.family }}>
-                {pendingInvoiceCount} invoice{pendingInvoiceCount > 1 ? 's require' : ' requires'} your authorization
-              </div>
-              <div style={{ fontSize: '12px', color: '#A06000', marginTop: '2px', fontFamily: font.family }}>
-                {pendingInvoice.id} from {pendingInvoice.provider.name} — {formatCurrency(pendingInvoice.amount, currency)}
-              </div>
-            </div>
-            <GGButton
-              variant="warning"
-              size="sm"
-              onClick={() => navigate(route.patientInvoice(pendingInvoice.id))}
-              style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
-            >
-              Authorize Now
-            </GGButton>
-          </div>
-        )}
-
-        {rescheduledAppointment && rescheduledAppointmentDate && (
-          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: 'linear-gradient(90deg, rgba(124,58,237,0.08), rgba(124,58,237,0.02))', borderRadius: radius.lg, border: '1.5px solid rgba(124,58,237,0.28)', display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
-            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: '#7C3AED', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><path d="M10 6v4l2.5 1.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#5B21B6', marginBottom: '2px', fontFamily: font.family }}>Reschedule proposal waiting</div>
-              <div style={{ fontSize: '13px', color: '#5B21B6', lineHeight: 1.5, fontFamily: font.family }}>
-                <strong>{rescheduledAppointment.provider}</strong> proposed {rescheduledAppointmentDate} at {formatTime12h(rescheduledAppointment.time)} for {rescheduledAppointment.service}
-              </div>
-            </div>
-            <GGButton
-              variant="primary"
-              size="sm"
-              onClick={() => navigate(`/app/appointments/${rescheduledAppointment.id}/reschedule`)}
-              style={{ background: '#7C3AED', border: 'none', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}
-            >
-              Review Reschedule
-            </GGButton>
-          </div>
-        )}
-
-        {showLowBalancePrompt && (
-          <CreditLowBalancePrompt available={u.creditAvailable} countryCode={u.countryCode} />
-        )}
-
-        {/* Pending action banner */}
-        {pendingAppointment && pendingAppointmentDate && (
-          <div style={{ padding: isMobile ? '14px 16px' : '18px 22px', background: `linear-gradient(90deg, ${C.warningBg}, #FFFAE8)`, borderRadius: radius.lg, border: `1.5px solid rgba(245,166,35,0.35)`, display: 'flex', gap: '14px', alignItems: 'center', flexWrap: 'wrap', fontFamily: font.family }}>
-            <div style={{ width: isMobile ? 38 : 44, height: isMobile ? 38 : 44, borderRadius: '50%', background: C.warning, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="8" stroke="#fff" strokeWidth="1.5"/><line x1="10" y1="6" x2="10" y2="11" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/><circle cx="10" cy="14" r="1" fill="#fff"/></svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: '#8A4D00', marginBottom: '2px', fontFamily: font.family }}>Appointment Pending Confirmation</div>
-              <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5, fontFamily: font.family }}>
-                <strong>{pendingAppointment.provider}</strong> - {pendingAppointmentDate} at {formatTime12h(pendingAppointment.time)} for {pendingAppointment.service}
-              </div>
-            </div>
-            <GGButton variant="warning" size="sm" onClick={() => navigate('/app/appointments')} style={{ background: C.warning, color: '#fff', flexShrink: 0, width: isMobile ? '100%' : 'auto' }}>
-              View Appointments
-            </GGButton>
-          </div>
-        )}
-
         {/* 3 stat tiles */}
         {(() => {
-          const nextApt = appointments.find(a => getAppointmentDisplayStatus(a) !== 'cancelled')
+          const nextApt = [...appointments]
+            .filter(a => getAppointmentDisplayStatus(a) !== 'cancelled')
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
           const nextAptStatus = nextApt ? getAppointmentDisplayStatus(nextApt) : null
           const nextAptDate = nextApt ? new Date(nextApt.date) : null
           const nextAptLabel = nextAptDate
             ? nextAptDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + formatTime12h(nextApt!.time)
             : 'No upcoming'
           const nextAptSub = nextApt ? nextApt.provider : 'Book via Find Service'
+          const openNextAppointment = () => {
+            if (!nextApt) {
+              navigate(ROUTES.FIND_SERVICE)
+              return
+            }
+            if (nextAptStatus === 'pending' && nextApt.rescheduledAt) {
+              navigate(`/app/appointments/${nextApt.id}/reschedule`)
+              return
+            }
+            navigate(ROUTES.APPOINTMENTS)
+          }
           return (
             <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '10px' : '12px', fontFamily: font.family }}>
-              {/* Available Balance */}
-              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, gridColumn: isMobile ? 'span 2' : 'auto', fontFamily: font.family }}>
+              {/* Healthcare credit */}
+              <button
+                type="button"
+                onClick={() => navigate(ROUTES.CREDIT_WALLET)}
+                style={{
+                  all: 'unset',
+                  display: 'block',
+                  padding: isMobile ? '14px 16px' : '20px 22px',
+                  background: '#fff',
+                  borderRadius: radius.lg,
+                  border: `1px solid ${C.border}`,
+                  gridColumn: isMobile ? 'span 2' : 'auto',
+                  fontFamily: font.family,
+                  cursor: 'pointer',
+                  boxSizing: 'border-box',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>Available Balance</div>
+                  <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>Healthcare credit</div>
                   {country && (
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '1px 6px', borderRadius: '20px', background: C.bg, border: `1px solid ${C.border}`, flexShrink: 0 }}>
                       <FlagImg code={country.code} size={12} />
@@ -737,23 +779,34 @@ export function DashboardScreen() {
                   )}
                 </div>
                 <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: C.blue500, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font.family }}>{formatCurrency(u.creditAvailable, currency)}</div>
-                <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>of {formatCurrency(u.creditLimit, currency)} limit</div>
-              </div>
+                <div style={{ fontSize: isMobile ? '11px' : '12px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>pays verified providers</div>
+              </button>
 
               {/* Spent This Month */}
               <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, fontFamily: font.family }}>
                 <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '6px', fontFamily: font.family }}>Spent This Month</div>
                 <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.04em', lineHeight: 1, fontFamily: font.family }}>{formatCurrency(spentThisMonth, currency)}</div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '6px', marginTop: '8px', flexWrap: 'wrap', fontFamily: font.family }}>
-                  <div style={{ fontSize: '11px', color: C.textSub, fontFamily: font.family }}>
-                    {spentThisMonthCount} payment{spentThisMonthCount === 1 ? '' : 's'}
-                  </div>
-                  <span onClick={() => navigate('/app/transactions')} style={{ fontSize: '11px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', fontFamily: font.family }}>History →</span>
+                <div style={{ fontSize: '11px', color: C.textSub, marginTop: '8px', fontFamily: font.family }}>
+                  {spentThisMonthCount} payment{spentThisMonthCount === 1 ? '' : 's'}
                 </div>
               </div>
 
               {/* Next Appointment */}
-              <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}`, cursor: 'pointer', fontFamily: font.family }}>
+              <button
+                type="button"
+                onClick={openNextAppointment}
+                style={{
+                  all: 'unset',
+                  display: 'block',
+                  padding: isMobile ? '14px 16px' : '20px 22px',
+                  background: '#fff',
+                  borderRadius: radius.lg,
+                  border: `1px solid ${C.border}`,
+                  cursor: 'pointer',
+                  fontFamily: font.family,
+                  boxSizing: 'border-box',
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                   <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>Next Appointment</div>
                   {nextApt && (
@@ -764,19 +817,29 @@ export function DashboardScreen() {
                 </div>
                 <div style={{ fontSize: isMobile ? '16px' : '20px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.03em', lineHeight: 1.1, fontFamily: font.family }}>{nextAptLabel}</div>
                 <div style={{ fontSize: '11px', color: C.textSub, marginTop: '6px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: font.family }}>{nextAptSub}</div>
-              </div>
+              </button>
             </div>
           )
         })()}
 
-        {/* Find a Service (60%) + Recent Transactions (40%) */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
-
+        {/* Find a Service & Recent Transactions — In One Balanced Row */}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : '1.15fr 1fr',
+            gap: isMobile ? '16px' : '20px',
+            alignItems: 'stretch',
+            fontFamily: font.family,
+          }}
+        >
           {/* Service grid */}
-          <GGCard padding={isMobile ? '16px' : '22px'}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>Find a Service</div>
-              <span onClick={() => navigate('/app/services')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}>See all →</span>
+          <GGCard padding={isMobile ? '16px' : '20px 22px'} style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>Find a Service</div>
+                <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>Book verified providers & specialties</div>
+              </div>
+              <button type="button" onClick={() => navigate('/app/services')} style={{ all: 'unset', fontSize: '13px', color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}>See all →</button>
             </div>
             <form
               onSubmit={e => {
@@ -789,16 +852,16 @@ export function DashboardScreen() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                marginBottom: '16px',
-                padding: '0 14px',
-                height: 44,
+                gap: '8px',
+                marginBottom: '12px',
+                padding: '0 12px',
+                height: 38,
                 borderRadius: radius.sm,
                 border: `1.5px solid ${C.border}`,
                 background: C.bg,
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
+              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
                 <circle cx="7" cy="7" r="4.5" stroke={C.textLight} strokeWidth="1.4" />
                 <line x1="10.5" y1="10.5" x2="13.5" y2="13.5" stroke={C.textLight} strokeWidth="1.4" strokeLinecap="round" />
               </svg>
@@ -813,7 +876,7 @@ export function DashboardScreen() {
                   border: 'none',
                   outline: 'none',
                   background: 'transparent',
-                  fontSize: '13px',
+                  fontSize: '12.5px',
                   fontFamily: font.family,
                   color: C.text,
                 }}
@@ -824,10 +887,10 @@ export function DashboardScreen() {
                   border: 'none',
                   background: C.blue500,
                   color: '#fff',
-                  fontSize: '12px',
+                  fontSize: '11.5px',
                   fontWeight: 700,
                   fontFamily: font.family,
-                  padding: '7px 14px',
+                  padding: '5px 12px',
                   borderRadius: radius.full,
                   cursor: 'pointer',
                   flexShrink: 0,
@@ -837,112 +900,88 @@ export function DashboardScreen() {
               </button>
             </form>
 
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: isMobile ? '8px' : '12px' }}>
-              {categories.map(cat => {
-                if (cat.id === 'global_specialists') {
-                  return (
-                    <div key={cat.id} onClick={() => navigate('/app/services')}
-                      style={{ 
-                        gridColumn: 'span 3',
-                        padding: isMobile ? '10px 14px' : '12px 18px', 
-                        borderRadius: radius.sm, 
-                        background: C.bg, 
-                        border: 'none',
-                        cursor: 'pointer', 
-                        display: 'flex', 
-                        flexDirection: 'row', 
-                        alignItems: 'center', 
-                        justifyContent: 'space-between',
-                        gap: '10px', 
-                        transition: 'all 0.18s ease'
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <div style={{ 
-                          width: isMobile ? '34px' : '38px', 
-                          height: isMobile ? '34px' : '38px', 
-                          borderRadius: '8px', 
-                          background: 'rgba(153, 157, 173, 0.12)', 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center', 
-                          color: C.textLight,
-                          flexShrink: 0,
-                        }}>
-                          {catIcons[cat.id]}
-                        </div>
-                        <div style={{ textAlign: 'left' }}>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, fontFamily: font.family }}>{cat.label}</div>
-                          <div style={{ fontSize: '10px', color: C.textSub, marginTop: '1px', fontFamily: font.family }}>International tertiary care</div>
-                        </div>
-                      </div>
-                      <span style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        fontSize: '9px',
-                        padding: '2px 7px',
-                        fontFamily: font.family,
-                        fontWeight: 700,
-                        borderRadius: radius.full,
-                        background: 'rgba(153, 157, 173, 0.12)',
-                        color: C.textLight,
-                        whiteSpace: 'nowrap'
-                      }}>
-                        Soon
-                      </span>
-                    </div>
-                  )
-                }
-
-                return (
-                  <div key={cat.id} onClick={() => navigate(`/app/services/${cat.id}`)}
-                    style={{ 
-                      padding: isMobile ? '12px 6px' : '18px 12px', 
-                      borderRadius: radius.sm, 
-                      background: C.bg, 
-                      border: 'none',
-                      cursor: 'pointer', 
-                      display: 'flex', 
-                      flexDirection: 'column', 
-                      alignItems: 'center', 
-                      gap: '6px', 
-                      transition: 'all 0.18s ease',
-                      fontFamily: font.family,
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', flex: 1 }}>
+              {categories.filter(cat => cat.id !== 'global_specialists').map(cat => (
+                <button
+                  key={cat.id}
+                  type="button"
+                  onClick={() => navigate(`/app/services/${cat.id}`)}
+                  style={{
+                    padding: '10px 6px',
+                    borderRadius: radius.sm,
+                    background: C.bg,
+                    border: 'none',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '4px',
+                    transition: 'all 0.16s ease',
+                    fontFamily: font.family,
+                  }}
+                  onMouseEnter={e => {
+                    e.currentTarget.style.background = C.blue100
+                  }}
+                  onMouseLeave={e => {
+                    e.currentTarget.style.background = C.bg
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '34px',
+                      height: '34px',
+                      borderRadius: '8px',
+                      background: 'rgba(56, 182, 255, 0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: C.blue500,
                     }}
                   >
-                    <div style={{ 
-                      width: isMobile ? '38px' : '44px', 
-                      height: isMobile ? '38px' : '44px', 
-                      borderRadius: '10px', 
-                      background: 'rgba(56, 182, 255, 0.08)', 
-                      display: 'flex', 
-                      alignItems: 'center', 
-                      justifyContent: 'center', 
-                      color: C.blue500,
-                      marginBottom: '2px',
-                    }}>
-                      {catIcons[cat.id]}
-                    </div>
-                    <span style={{ fontSize: isMobile ? '11px' : '13px', fontWeight: 700, color: C.text, textAlign: 'center', letterSpacing: '-0.01em', fontFamily: font.family }}>{cat.label}</span>
+                    {catIcons[cat.id]}
                   </div>
-                )
-              })}
+                  <span style={{ fontSize: '11.5px', fontWeight: 700, color: C.text, textAlign: 'center', letterSpacing: '-0.01em', fontFamily: font.family }}>{cat.label}</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Global Specialists subtle row */}
+            <div
+              style={{
+                marginTop: '8px',
+                padding: '7px 12px',
+                borderRadius: radius.sm,
+                background: C.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ width: 22, height: 22, borderRadius: '6px', background: 'rgba(153, 157, 173, 0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textLight }}>
+                  {catIcons['global_specialists']}
+                </div>
+                <div style={{ fontSize: '11.5px', fontWeight: 700, color: C.text, fontFamily: font.family }}>Global Specialists</div>
+              </div>
+              <span style={{ fontSize: '9px', padding: '2px 6px', fontFamily: font.family, fontWeight: 700, borderRadius: radius.full, background: 'rgba(153, 157, 173, 0.12)', color: C.textLight }}>
+                Soon
+              </span>
             </div>
           </GGCard>
 
-          {/* Upcoming Appointments */}
-          <DashboardAppointmentsCard
-            appointments={appointments.filter(a => {
-              const status = getAppointmentDisplayStatus(a)
-              return status !== 'completed' && status !== 'cancelled'
-            })}
-          />
+          {/* Recent transactions card */}
+          <DashboardRecentActivity transactions={transactions} currency={currency} />
         </div>
 
-        {/* Sponsored banner strip */}
-        <AdBannerStrip key={adVersion} countryName={country?.name} />
+        {hasUpcomingAppointments && (
+          <DashboardAppointmentsCard appointments={appointments} />
+        )}
 
-        <HealthNewsSection articles={healthNews ?? dashboard.news} />
+        {!hasUnresolvedAction && <AdBannerStrip key={adVersion} countryName={country?.name} />}
+
+        {!hasUnresolvedAction && <HealthNewsSection articles={healthNews ?? dashboard.news} />}
       </div>
     </AppLayout>
   )

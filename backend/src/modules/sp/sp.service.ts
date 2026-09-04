@@ -45,6 +45,7 @@ import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '
 import { ReferenceService } from '../../common/services/reference.service'
 import { MailService } from '../../common/services/mail.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
+import { AuthService } from '../auth/auth.service'
 
 @Injectable()
 export class SpService {
@@ -53,6 +54,7 @@ export class SpService {
   private readonly referenceService: ReferenceService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly mailService: MailService
+  private readonly authService: AuthService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -60,12 +62,14 @@ export class SpService {
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(MailService) mailService: MailService,
+    @Inject(AuthService) authService: AuthService,
   ) {
     this.prisma = prisma
     this.redis = redis
     this.referenceService = referenceService
     this.fieldEncryption = fieldEncryption
     this.mailService = mailService
+    this.authService = authService
   }
 
   async getDashboard(userId: string) {
@@ -434,6 +438,11 @@ export class SpService {
             id: true,
           },
         },
+        visits: {
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+        },
       },
     })
 
@@ -470,6 +479,11 @@ export class SpService {
           select: {
             id: true,
           },
+        },
+        visits: {
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         },
       },
     })
@@ -517,6 +531,11 @@ export class SpService {
             select: {
               id: true,
             },
+          },
+          visits: {
+            select: { id: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
       }),
@@ -637,6 +656,11 @@ export class SpService {
             select: {
               id: true,
             },
+          },
+          visits: {
+            select: { id: true },
+            orderBy: { createdAt: 'desc' },
+            take: 1,
           },
         },
       }),
@@ -1006,6 +1030,17 @@ export class SpService {
       appointment.status !== AppointmentStatus.COMPLETED
     ) {
       throw new BadRequestException('Only confirmed or completed appointments can be invoiced')
+    }
+
+    const recordedVisit = await this.prisma.providerVisit.findFirst({
+      where: {
+        providerId: provider.id,
+        appointmentId: appointment.id,
+      },
+      select: { id: true },
+    })
+    if (!recordedVisit) {
+      throw new BadRequestException('Record the visit before uploading an invoice')
     }
 
     const existingForAppointment = await this.prisma.invoice.findFirst({
@@ -1533,13 +1568,33 @@ export class SpService {
     const providerCategories =
       dto.category === undefined ? null : this.mapProviderCategories(dto.category)
 
+    const email = dto.email?.toLowerCase().trim()
+    const phone = dto.phone?.trim()
+
+    if (email) {
+      const existingEmail = await this.prisma.user.findUnique({ where: { email } })
+      if (existingEmail && existingEmail.id !== userId) {
+        throw new BadRequestException('An account already exists for that email address')
+      }
+    }
+
+    if (provider.authUserId && (email || phone !== undefined)) {
+      await this.prisma.user.update({
+        where: { id: provider.authUserId },
+        data: {
+          ...(email ? { email } : {}),
+          ...(phone !== undefined ? { phone: phone || null } : {}),
+        },
+      })
+    }
+
     const updated = await this.prisma.provider.update({
       where: { id: provider.id },
       data: {
         about: dto.about ?? undefined,
         description: dto.about ?? undefined,
         address: dto.address ?? undefined,
-        phone: dto.phone ?? undefined,
+        phone: phone ?? undefined,
         country: dto.country ?? undefined,
         tags: serviceNames ?? undefined,
         languages: dto.languages ?? undefined,
@@ -1574,17 +1629,18 @@ export class SpService {
     return this.mapProviderProfile(updated)
   }
 
-  async getSettings(userId: string) {
+  async getSettings(userId: string, currentJti?: string) {
     const provider = await this.resolveProvider(userId)
-    const [preferences, sessions] = await Promise.all([
+    const [preferences, sessions, payoutAccounts] = await Promise.all([
       this.getOrCreateNotificationPreferences(provider.id),
-      this.getSessions(userId),
+      this.getSessions(userId, currentJti),
+      this.ensureSolePayoutAccount(provider.id, provider.payoutAccounts),
     ])
 
     return {
       profile: this.mapProviderProfile(provider),
       notificationPreferences: this.mapNotificationPreferences(preferences),
-      payoutAccounts: provider.payoutAccounts.map(account => this.mapPayoutAccount(account)),
+      payoutAccounts: payoutAccounts.map(account => this.mapPayoutAccount(account)),
       sessions,
     }
   }
@@ -1641,73 +1697,41 @@ export class SpService {
     }
   }
 
-  async getSessions(userId: string) {
-    const sessions = await this.prisma.providerSessionAudit.findMany({
-      where: {
-        userId,
-        revokedAt: null,
-      },
-      orderBy: { lastSeenAt: 'desc' },
-    })
-
-    return sessions.map((session, index) => ({
-      id: session.id,
-      sessionId: session.sessionId,
-      device: session.deviceLabel,
-      location: session.locationLabel ?? 'Unknown location',
-      active: index === 0,
-      time: index === 0 ? 'Active now' : session.lastSeenAt.toISOString(),
-      lastSeenAt: session.lastSeenAt.toISOString(),
-    }))
+  async getSessions(userId: string, currentJti?: string) {
+    return this.authService.listSessions(userId, currentJti)
   }
 
   async revokeSession(userId: string, sessionId: string) {
-    const session = await this.prisma.providerSessionAudit.findFirst({
-      where: {
-        userId,
-        OR: [{ id: sessionId }, { sessionId }],
-      },
-    })
-
-    if (!session) {
-      throw new NotFoundException('Session not found')
-    }
-
-    await this.redis.del(`refresh-token:${session.sessionId}`)
-    await this.prisma.providerSessionAudit.update({
-      where: { id: session.id },
-      data: { revokedAt: new Date() },
-    })
-
-    return {
-      message: 'Session revoked successfully.',
-    }
+    return this.authService.revokeSession(userId, sessionId)
   }
 
   async getPayoutAccounts(userId: string) {
     const provider = await this.resolveProvider(userId)
-    return provider.payoutAccounts.map(account => this.mapPayoutAccount(account))
+    const accounts = await this.ensureSolePayoutAccount(provider.id, provider.payoutAccounts)
+    return accounts.map(account => this.mapPayoutAccount(account))
   }
 
   async createPayoutAccount(userId: string, dto: UpsertProviderPayoutAccountDto) {
     const provider = await this.resolveProvider(userId)
-    const accounts = provider.payoutAccounts
-    const shouldBeDefault = dto.isDefault ?? accounts.length === 0
 
-    if (shouldBeDefault) {
-      await this.clearDefaultPayoutAccounts(provider.id)
-    }
+    // Providers keep a single active payout destination. Saving replaces any previous one.
+    const account = await this.prisma.$transaction(async tx => {
+      await tx.providerPayoutAccount.deleteMany({
+        where: { providerId: provider.id },
+      })
 
-    const account = await this.prisma.providerPayoutAccount.create({
-      data: {
-        providerId: provider.id,
-        method: this.mapPayoutMethod(dto.method),
-        accountNumber: dto.accountNumber,
-        accountName: dto.accountName,
-        country: dto.country,
-        isDefault: shouldBeDefault,
-        status: ProviderPayoutAccountStatus.ACTIVE,
-      },
+      return tx.providerPayoutAccount.create({
+        data: {
+          providerId: provider.id,
+          method: this.mapPayoutMethod(dto.method),
+          accountNumber: dto.accountNumber,
+          accountName: dto.accountName,
+          country: dto.country,
+          isDefault: true,
+          status: ProviderPayoutAccountStatus.ACTIVE,
+          ...this.mapPayoutDetailsFromDto(dto),
+        },
+      })
     })
 
     return this.mapPayoutAccount(account)
@@ -1730,25 +1754,33 @@ export class SpService {
       throw new NotFoundException('Payout account not found')
     }
 
-    if (dto.isDefault) {
-      await this.clearDefaultPayoutAccounts(provider.id)
-    }
+    const updated = await this.prisma.$transaction(async tx => {
+      await tx.providerPayoutAccount.deleteMany({
+        where: {
+          providerId: provider.id,
+          id: { not: account.id },
+        },
+      })
 
-    const updated = await this.prisma.providerPayoutAccount.update({
-      where: { id: account.id },
-      data: {
-        method: this.mapPayoutMethod(dto.method),
-        accountNumber: dto.accountNumber,
-        accountName: dto.accountName,
-        country: dto.country,
-        isDefault: dto.isDefault ?? account.isDefault,
-      },
+      return tx.providerPayoutAccount.update({
+        where: { id: account.id },
+        data: {
+          method: this.mapPayoutMethod(dto.method),
+          accountNumber: dto.accountNumber,
+          accountName: dto.accountName,
+          country: dto.country,
+          isDefault: true,
+          status: ProviderPayoutAccountStatus.ACTIVE,
+          ...this.mapPayoutDetailsFromDto(dto),
+        },
+      })
     })
 
     return this.mapPayoutAccount(updated)
   }
 
   async setDefaultPayoutAccount(userId: string, payoutAccountId: string) {
+    // Legacy endpoint: promoting an account makes it the sole active destination.
     const provider = await this.resolveProvider(userId)
     const account = await this.prisma.providerPayoutAccount.findFirst({
       where: {
@@ -1761,10 +1793,17 @@ export class SpService {
       throw new NotFoundException('Payout account not found')
     }
 
-    await this.clearDefaultPayoutAccounts(provider.id)
-    const updated = await this.prisma.providerPayoutAccount.update({
-      where: { id: account.id },
-      data: { isDefault: true },
+    const updated = await this.prisma.$transaction(async tx => {
+      await tx.providerPayoutAccount.deleteMany({
+        where: {
+          providerId: provider.id,
+          id: { not: account.id },
+        },
+      })
+      return tx.providerPayoutAccount.update({
+        where: { id: account.id },
+        data: { isDefault: true, status: ProviderPayoutAccountStatus.ACTIVE },
+      })
     })
 
     return this.mapPayoutAccount(updated)
@@ -1839,9 +1878,14 @@ export class SpService {
 
   /** True only when pharmacy is the provider's sole category — not just one of several. */
   private isPharmacyOnlyProvider(provider: { category: ProviderCategory; categories: string[] }) {
-    if (provider.category !== ProviderCategory.PHARMACY) return false
-    const extras = provider.categories.filter(category => category !== ProviderCategory.PHARMACY)
-    return extras.length === 0
+    const all = Array.from(
+      new Set(
+        [provider.category, ...(provider.categories ?? [])]
+          .map(value => String(value).trim().toUpperCase())
+          .filter(Boolean),
+      ),
+    )
+    return all.length > 0 && all.every(value => value === ProviderCategory.PHARMACY)
   }
 
   private async resolveProviderAppointment<
@@ -1881,6 +1925,11 @@ export class SpService {
           select: {
             id: true,
           },
+        },
+        visits: {
+          select: { id: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         },
       },
       orderBy: { requestedAt: 'desc' },
@@ -2114,6 +2163,7 @@ export class SpService {
     phone: string
     country: string | null
     status: ProviderOpenStatus
+    lifecycleStatus?: ProviderLifecycleStatus
     languages: Prisma.JsonValue | null
     tags: Prisma.JsonValue | null
     establishedYear: number | null
@@ -2125,6 +2175,7 @@ export class SpService {
     logoUrl?: string | null
     services?: Array<{ name: string }>
   }) {
+    const lifecycleStatus = provider.lifecycleStatus ?? ProviderLifecycleStatus.ACTIVE
     return {
       id: provider.id,
       name: provider.name,
@@ -2139,6 +2190,7 @@ export class SpService {
       address: provider.address,
       country: provider.country ?? '',
       status: provider.status === ProviderOpenStatus.OPEN ? 'open' : 'closed',
+      verified: lifecycleStatus === ProviderLifecycleStatus.ACTIVE,
       languages: Array.isArray(provider.languages) ? provider.languages : [],
       tags: Array.isArray(provider.tags)
         ? provider.tags
@@ -2168,6 +2220,39 @@ export class SpService {
     }
   }
 
+  private mapPayoutDetailsFromDto(dto: UpsertProviderPayoutAccountDto) {
+    if (dto.method === 'mpesa') {
+      return {
+        mpesaType: dto.mpesaType ?? null,
+        paybillNumber: dto.mpesaType === 'paybill' ? (dto.paybillNumber ?? null) : null,
+        bankName: null,
+        branch: null,
+        branchCode: null,
+        swiftCode: null,
+      }
+    }
+
+    if (dto.method === 'bank') {
+      return {
+        mpesaType: null,
+        paybillNumber: null,
+        bankName: dto.bankName?.trim() || null,
+        branch: dto.branch?.trim() || null,
+        branchCode: dto.branchCode?.trim() || null,
+        swiftCode: dto.swiftCode?.trim() || null,
+      }
+    }
+
+    return {
+      mpesaType: null,
+      paybillNumber: null,
+      bankName: null,
+      branch: null,
+      branchCode: null,
+      swiftCode: null,
+    }
+  }
+
   private mapPayoutAccount(account: {
     id: string
     method: ProviderPayoutMethod
@@ -2176,6 +2261,12 @@ export class SpService {
     country: string
     isDefault: boolean
     status: ProviderPayoutAccountStatus
+    mpesaType?: string | null
+    paybillNumber?: string | null
+    bankName?: string | null
+    branch?: string | null
+    branchCode?: string | null
+    swiftCode?: string | null
   }) {
     return {
       id: account.id,
@@ -2185,6 +2276,15 @@ export class SpService {
       country: account.country,
       isDefault: account.isDefault,
       status: account.status === ProviderPayoutAccountStatus.ACTIVE ? 'active' : 'inactive',
+      mpesaType:
+        account.mpesaType === 'paybill' || account.mpesaType === 'till'
+          ? account.mpesaType
+          : undefined,
+      paybillNumber: account.paybillNumber ?? undefined,
+      bankName: account.bankName ?? undefined,
+      branch: account.branch ?? undefined,
+      branchCode: account.branchCode ?? undefined,
+      swiftCode: account.swiftCode ?? undefined,
     }
   }
 
@@ -2223,6 +2323,9 @@ export class SpService {
     invoices: Array<{
       id: string
     }>
+    visits?: Array<{
+      id: string
+    }>
   }) {
     const patientName = appointment.patient.patientProfile
       ? `${appointment.patient.patientProfile.firstName} ${appointment.patient.patientProfile.lastName}`.trim()
@@ -2244,6 +2347,8 @@ export class SpService {
       status: this.mapSpAppointmentStatus(effectiveStatus),
       attachments: Array.isArray(appointment.attachments) ? appointment.attachments : [],
       hasInvoice: appointment.invoices.length > 0,
+      visitId: appointment.visits?.[0]?.id,
+      hasVisit: (appointment.visits?.length ?? 0) > 0,
       forSelf: appointment.forSelf,
       beneficiary: appointment.beneficiary
         ? {
@@ -2928,13 +3033,38 @@ export class SpService {
     }
   }
 
-  private async clearDefaultPayoutAccounts(providerId: number) {
-    await this.prisma.providerPayoutAccount.updateMany({
-      where: {
-        providerId,
-        isDefault: true,
-      },
-      data: { isDefault: false },
-    })
+  /** Providers may only keep one active payout destination. Extra rows are removed. */
+  private async ensureSolePayoutAccount<
+    T extends { id: string; isDefault: boolean; createdAt: Date },
+  >(providerId: number, accounts: T[]): Promise<T[]> {
+    if (accounts.length <= 1) {
+      if (accounts.length === 1 && !accounts[0].isDefault) {
+        await this.prisma.providerPayoutAccount.update({
+          where: { id: accounts[0].id },
+          data: { isDefault: true },
+        })
+        return [{ ...accounts[0], isDefault: true }]
+      }
+      return accounts
+    }
+
+    const preferred =
+      accounts.find(account => account.isDefault) ??
+      [...accounts].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0]
+
+    await this.prisma.$transaction([
+      this.prisma.providerPayoutAccount.deleteMany({
+        where: {
+          providerId,
+          id: { not: preferred.id },
+        },
+      }),
+      this.prisma.providerPayoutAccount.update({
+        where: { id: preferred.id },
+        data: { isDefault: true, status: ProviderPayoutAccountStatus.ACTIVE },
+      }),
+    ])
+
+    return [{ ...preferred, isDefault: true }]
   }
 }

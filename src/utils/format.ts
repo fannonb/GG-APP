@@ -4,7 +4,7 @@ import {
   parseISO,
   isValid,
 } from 'date-fns'
-import { COUNTRIES, getCountryByName } from '@/config/countries'
+import { COUNTRIES, getCountryByName, getCountryDial } from '@/config/countries'
 
 function toDate(date: string | Date): Date {
   const d = typeof date === 'string' ? parseISO(date) : date
@@ -47,7 +47,9 @@ export function formatPhone(
   }
   const resolvedCountry = country ?? (address ? resolveCountry(address) : undefined)
   const cfg = resolvedCountry ? getCountryByName(resolvedCountry) : undefined
-  const display = cfg?.dial ? `${cfg.dial} ${raw}` : raw
+  const dial = cfg?.dial ?? (resolvedCountry ? getCountryDial(resolvedCountry) : undefined)
+  const cleaned = raw.replace(/^0+/, '')
+  const display = dial ? `${dial} ${cleaned}` : raw
   return { display, tel: display.replace(/[\s\-(). ]/g, '') }
 }
 

@@ -8,7 +8,6 @@ import { ROUTES, LOGO } from '@/router/routes'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useLoginMutation } from '@/hooks/api'
 import { ApiError } from '@/api/types'
-import { ADMIN_PORTAL_TOKEN } from '@/api/config'
 
 const ACCENT = '#F5A623'
 const DARK = '#0A1628'
@@ -32,11 +31,12 @@ export function AdminLoginScreen() {
     loginMutation.error instanceof ApiError ? loginMutation.error.message : null
 
   const onSubmit = handleSubmit(values => {
-    loginMutation.mutate({ ...values, role: 'admin', portalToken: ADMIN_PORTAL_TOKEN })
+    loginMutation.mutate({ ...values, role: 'admin' })
   })
 
   const emailField = register('email')
   const passwordField = register('password')
+  const portalTokenField = register('portalToken')
   const emailValue = watch('email') ?? ''
 
   return (
@@ -112,6 +112,17 @@ export function AdminLoginScreen() {
               onBlur={emailField.onBlur}
               inputRef={emailField.ref}
               error={errors.email?.message}
+              required
+            />
+            <GGInput
+              label="Portal Key"
+              placeholder="Enter the admin portal key"
+              type={showPw ? 'text' : 'password'}
+              name={portalTokenField.name}
+              onChange={portalTokenField.onChange}
+              onBlur={portalTokenField.onBlur}
+              inputRef={portalTokenField.ref}
+              error={errors.portalToken?.message}
               required
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

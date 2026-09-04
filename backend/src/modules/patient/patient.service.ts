@@ -1636,30 +1636,32 @@ export class PatientService {
             where: { id: invoice.prescriptionRequestId },
             select: { id: true, status: true, fulfillmentMode: true, reference: true },
           })
-          if (
-            rx &&
-            (rx.status === PrescriptionRequestStatus.QUOTED ||
-              rx.status === PrescriptionRequestStatus.SUBMITTED)
-          ) {
-            await tx.prescriptionRequest.update({
-              where: { id: rx.id },
-              data: {
-                status: PrescriptionRequestStatus.ACCEPTED,
-                acceptedAt: new Date(),
-              },
-            })
+          if (rx) {
+            if (
+              rx.status === PrescriptionRequestStatus.QUOTED ||
+              rx.status === PrescriptionRequestStatus.SUBMITTED
+            ) {
+              await tx.prescriptionRequest.update({
+                where: { id: rx.id },
+                data: {
+                  status: PrescriptionRequestStatus.ACCEPTED,
+                  acceptedAt: new Date(),
+                },
+              })
+            }
 
             if (invoice.provider.authUserId) {
-              const approvalLabel =
-                rx.fulfillmentMode === 'DELIVERY'
-                  ? 'approved delivery'
-                  : 'approved preparation'
+              const isDelivery = rx.fulfillmentMode === 'DELIVERY'
               await tx.notification.create({
                 data: {
                   userId: invoice.provider.authUserId,
                   type: NotificationType.PRESCRIPTION,
-                  title: 'Patient Approved Order',
-                  body: `${invoice.billedToName} ${approvalLabel} for ${rx.reference}. You can now prepare the medication.`,
+                  title: isDelivery
+                    ? 'Prescription Paid — Ready for Delivery'
+                    : 'Prescription Paid — Ready for Pickup',
+                  body: isDelivery
+                    ? `${invoice.billedToName} paid for ${rx.reference}. Prepare medication and mark it ready for delivery.`
+                    : `${invoice.billedToName} paid for ${rx.reference}. Prepare medication and mark it ready for pickup.`,
                   screen: `/sp/prescriptions/${rx.reference}`,
                 },
               })
@@ -2126,7 +2128,14 @@ export class PatientService {
   }
 
   private mapNotificationType(type: NotificationType) {
-    return type.toLowerCase() as 'payment' | 'invoice' | 'appointment' | 'credit' | 'system' | 'prescription'
+    return type.toLowerCase() as
+      | 'payment'
+      | 'invoice'
+      | 'appointment'
+      | 'credit'
+      | 'system'
+      | 'prescription'
+      | 'ledger'
   }
 
   private mapInvoice(invoice: {

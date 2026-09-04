@@ -156,7 +156,7 @@ export function SPInvoiceDetailScreen() {
 
   if (isLoading && !inv) {
     return (
-      <SPLayout title="Invoice Detail" subtitle="Loading invoice...">
+      <SPLayout title="Invoice Detail">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading invoice details...
@@ -168,7 +168,7 @@ export function SPInvoiceDetailScreen() {
 
   if (!inv) {
     return (
-      <SPLayout title="Invoice Detail" subtitle="Invoice not found">
+      <SPLayout title="Invoice Detail">
         <GGCard padding="24px">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
@@ -527,7 +527,7 @@ export function SPInvoiceDetailScreen() {
   )
 
   return (
-    <SPLayout title={inv.id} subtitle={`${inv.patient} · ${formatDate(inv.issueDate)}`}>
+    <SPLayout title={inv.id}>
       {showAttachment && (
         <AttachmentModal
           pdfName={pdfName}

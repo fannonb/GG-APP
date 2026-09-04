@@ -220,7 +220,7 @@ export function AdminPaymentsScreen() {
   }
 
   return (
-    <AdminLayout title="Payments" subtitle="Platform-wide payment tracking and financial overview">
+    <AdminLayout title="Payments">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
 
         {paymentItems.length > 0 && (

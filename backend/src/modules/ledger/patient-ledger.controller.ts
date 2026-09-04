@@ -18,6 +18,7 @@ import { RolesGuard } from '../../common/guards/roles.guard'
 import type { AuthenticatedUser } from '../../common/types/authenticated-user.type'
 import { LedgerService } from './ledger.service'
 import { SetupLedgerPinDto } from './dto/setup-ledger-pin.dto'
+import { ResetLedgerPinDto } from './dto/reset-ledger-pin.dto'
 import { GetLedgerQueryDto } from './dto/ledger-query.dto'
 
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -28,6 +29,11 @@ export class PatientLedgerController {
 
   constructor(@Inject(LedgerService) ledgerService: LedgerService) {
     this.ledgerService = ledgerService
+  }
+
+  @Post('pin/reset')
+  resetPin(@CurrentUser() user: AuthenticatedUser, @Body() dto: ResetLedgerPinDto) {
+    return this.ledgerService.resetPin(user.sub, dto)
   }
 
   @Post('pin')

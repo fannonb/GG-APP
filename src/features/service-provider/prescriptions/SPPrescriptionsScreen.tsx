@@ -32,6 +32,26 @@ const STATUS_BADGE: Record<PrescriptionRequestStatus, 'warning' | 'info' | 'open
   rejected: 'error',
 }
 
+function DeliveryLineIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <rect x="1" y="3" width="15" height="13" />
+      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+      <circle cx="5.5" cy="18.5" r="2.5" />
+      <circle cx="18.5" cy="18.5" r="2.5" />
+    </svg>
+  )
+}
+
+function PickupLineIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+      <polyline points="9 22 9 12 15 12 15 22" />
+    </svg>
+  )
+}
+
 type StatusFilterTab = 'all' | 'action_needed' | 'in_progress' | 'ready' | 'completed' | 'closed'
 
 function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
@@ -48,6 +68,16 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
     patientCountry?.name,
     request.deliveryAddress,
   )
+
+  const isPaid = request.invoiceStatus === 'paid' || request.invoiceStatus === 'authorized'
+  const isReadyForPickup =
+    request.fulfillmentMode === 'pickup' &&
+    isPaid &&
+    (request.status === 'accepted' || request.status === 'preparing')
+  const isReadyForDelivery =
+    request.fulfillmentMode === 'delivery' &&
+    isPaid &&
+    (request.status === 'accepted' || request.status === 'preparing')
 
   return (
     <div
@@ -67,7 +97,15 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
         textAlign: 'left',
         padding: isMobile ? '14px 14px' : '18px 20px',
         borderRadius: radius.lg,
-        border: `1.5px solid ${hovered ? C.blue500 : isActionNeeded ? 'rgba(56, 182, 255, 0.4)' : C.border}`,
+        border: `1.5px solid ${
+          hovered
+            ? C.blue500
+            : isReadyForPickup || isReadyForDelivery
+              ? '#10B981'
+              : isActionNeeded
+                ? 'rgba(56, 182, 255, 0.4)'
+                : C.border
+        }`,
         background: hovered ? 'linear-gradient(180deg, #FFFFFF 0%, #F5FAFF 100%)' : C.surface,
         cursor: 'pointer',
         display: 'flex',
@@ -79,24 +117,8 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
         transition: 'all 0.15s ease',
         transform: hovered ? 'translateY(-1px)' : 'none',
         position: 'relative',
-        overflow: 'hidden',
       }}
     >
-      {/* Accent edge highlight for action needed */}
-      {isActionNeeded && (
-        <div
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: 0,
-            bottom: 0,
-            width: '4px',
-            background: C.blue500,
-            borderRadius: '4px 0 0 4px',
-          }}
-        />
-      )}
-
       {/* Main Content Area */}
       <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '12px' : '16px', minWidth: 0, flex: 1 }}>
         {/* Prescription Icon Avatar */}
@@ -146,6 +168,40 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
             <GGBadge type={STATUS_BADGE[request.status]}>
               {STATUS_LABELS[request.status]}
             </GGBadge>
+
+            {isReadyForPickup && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  color: '#047857',
+                  background: '#D1FAE5',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  padding: '2px 8px',
+                  borderRadius: radius.full,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                Paid · Mark Ready for Pickup
+              </span>
+            )}
+
+            {isReadyForDelivery && (
+              <span
+                style={{
+                  fontSize: '10px',
+                  fontWeight: 800,
+                  color: '#047857',
+                  background: '#D1FAE5',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  padding: '2px 8px',
+                  borderRadius: radius.full,
+                  letterSpacing: '0.02em',
+                }}
+              >
+                Paid · Mark Ready for Delivery
+              </span>
+            )}
           </div>
 
           <div style={{ fontSize: '12px', color: C.textSub, display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', fontFamily: font.family }}>
@@ -176,20 +232,12 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
             >
               {isDelivery ? (
                 <>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <rect x="1" y="3" width="15" height="13" />
-                    <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                    <circle cx="5.5" cy="18.5" r="2.5" />
-                    <circle cx="18.5" cy="18.5" r="2.5" />
-                  </svg>
+                  <DeliveryLineIcon size={11} />
                   Delivery
                 </>
               ) : (
                 <>
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    <polyline points="9 22 9 12 15 12 15 22" />
-                  </svg>
+                  <PickupLineIcon size={11} />
                   Pickup
                 </>
               )}
@@ -248,7 +296,40 @@ function PrescriptionCard({ request }: { request: PrescriptionRequest }) {
           borderTop: isMobile ? `1px solid ${C.border}` : 'none',
         }}
       >
-        {request.quotedAmount != null ? (
+        {isReadyForPickup || isReadyForDelivery ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
+              <div style={{ fontSize: '10px', fontWeight: 700, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.family }}>
+                Paid in Full
+              </div>
+              <div style={{ fontSize: isMobile ? '14px' : '15px', fontWeight: 800, color: '#065F46', fontFamily: font.family }}>
+                {formatCurrency(totalAmount)}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={e => {
+                e.stopPropagation()
+                navigate(route.spPrescription(request.id))
+              }}
+              style={{
+                border: 'none',
+                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                color: '#FFFFFF',
+                padding: '6px 12px',
+                borderRadius: radius.sm,
+                fontSize: '11px',
+                fontWeight: 800,
+                fontFamily: font.family,
+                cursor: 'pointer',
+                boxShadow: '0 2px 6px rgba(16, 185, 129, 0.3)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {isReadyForPickup ? 'Mark Ready for Pickup →' : 'Mark Ready for Delivery →'}
+            </button>
+          </div>
+        ) : request.quotedAmount != null ? (
           <div style={{ textAlign: isMobile ? 'left' : 'right' }}>
             <div style={{ fontSize: '10px', fontWeight: 600, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.family }}>
               Quoted Total
@@ -314,6 +395,15 @@ export function SPPrescriptionsScreen() {
     }
   }, [data])
 
+  const paidWaitingForPickup = useMemo(() => {
+    return data.filter(
+      r =>
+        r.fulfillmentMode === 'pickup' &&
+        (r.invoiceStatus === 'paid' || r.invoiceStatus === 'authorized') &&
+        (r.status === 'accepted' || r.status === 'preparing'),
+    )
+  }, [data])
+
   // Filtered List
   const filteredRequests = useMemo(() => {
     return data.filter(request => {
@@ -349,10 +439,87 @@ export function SPPrescriptionsScreen() {
   return (
     <SPLayout
       title="Prescription Requests"
-      subtitle="Accept, quote, prepare, and fulfill patient prescriptions"
+      status={metrics.actionNeeded > 0 ? `${metrics.actionNeeded} to quote` : undefined}
     >
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '24px', fontFamily: font.family }}>
-        
+
+        {/* Paid Ready for Pickup Alert Banner */}
+        {paidWaitingForPickup.length > 0 && (
+          <div
+            style={{
+              padding: '16px 20px',
+              borderRadius: radius.lg,
+              border: '1.5px solid rgba(16, 185, 129, 0.4)',
+              background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 182, 255, 0.10) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '16px',
+              flexWrap: 'wrap',
+              boxShadow: '0 3px 12px rgba(16, 185, 129, 0.12)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: 1, minWidth: 220 }}>
+              <div
+                style={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: '10px',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  color: '#FFFFFF',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                }}
+              >
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                  <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                  <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+              </div>
+              <div>
+                <div style={{ fontSize: '14px', fontWeight: 800, color: '#065F46', marginBottom: 2 }}>
+                  {paidWaitingForPickup.length === 1
+                    ? '1 Prescription Paid · Ready to Mark for Pickup'
+                    : `${paidWaitingForPickup.length} Prescriptions Paid · Ready to Mark for Pickup`}
+                </div>
+                <div style={{ fontSize: '12px', color: '#047857', lineHeight: 1.5 }}>
+                  {paidWaitingForPickup.length === 1
+                    ? `${paidWaitingForPickup[0].patient || 'Patient'} has paid for order ${paidWaitingForPickup[0].id}. Prepare the medication and mark it ready for pickup.`
+                    : `${paidWaitingForPickup.length} prescription orders have been paid. Prepare medications and mark them ready for patient pickup.`}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusTab('in_progress')
+                  setFulfillmentFilter('pickup')
+                }}
+                style={{
+                  padding: '8px 14px',
+                  borderRadius: radius.sm,
+                  border: 'none',
+                  background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 800,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                  fontFamily: font.family,
+                }}
+              >
+                View Paid Orders →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* KPI Metrics Dashboard Cards */}
         <div
           style={{
@@ -537,15 +704,15 @@ export function SPPrescriptionsScreen() {
                 padding: '4px',
                 borderRadius: radius.md,
                 border: `1px solid ${C.border}`,
-                gap: '2px',
+                gap: '3px',
                 width: isMobile ? '100%' : 'auto',
                 boxSizing: 'border-box',
               }}
             >
               {[
                 { key: 'all', label: 'All Modes' },
-                { key: 'delivery', label: '🚚 Delivery' },
-                { key: 'pickup', label: '🏪 Pickup' },
+                { key: 'delivery', label: 'Delivery', icon: <DeliveryLineIcon size={14} /> },
+                { key: 'pickup', label: 'Pickup', icon: <PickupLineIcon size={14} /> },
               ].map(item => {
                 const active = fulfillmentFilter === item.key
                 return (
@@ -555,21 +722,26 @@ export function SPPrescriptionsScreen() {
                     onClick={() => setFulfillmentFilter(item.key as typeof fulfillmentFilter)}
                     style={{
                       flex: isMobile ? 1 : 'none',
-                      padding: '8px 12px',
+                      padding: '7px 13px',
                       borderRadius: radius.sm,
                       border: 'none',
                       background: active ? C.navy800 : 'transparent',
                       color: active ? '#FFFFFF' : C.textSub,
-                      fontSize: '12px',
+                      fontSize: '12.5px',
                       fontWeight: 700,
                       fontFamily: font.family,
                       cursor: 'pointer',
                       transition: 'all 0.15s ease',
                       textAlign: 'center',
                       whiteSpace: 'nowrap',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
                     }}
                   >
-                    {item.label}
+                    {item.icon}
+                    <span>{item.label}</span>
                   </button>
                 )
               })}
@@ -604,29 +776,31 @@ export function SPPrescriptionsScreen() {
                   style={{
                     padding: isMobile ? '6px 12px' : '8px 16px',
                     borderRadius: radius.full,
-                    border: `1px solid ${active ? C.blue500 : C.border}`,
-                    background: active ? C.blue500 : C.surface,
-                    color: active ? C.navy800 : C.textSub,
-                    fontSize: '12px',
+                    border: `1.5px solid ${active ? C.navy800 : C.border}`,
+                    background: active ? C.navy800 : C.surface,
+                    color: active ? '#FFFFFF' : C.textSub,
+                    fontSize: '12.5px',
                     fontWeight: 700,
                     fontFamily: font.family,
                     cursor: 'pointer',
                     whiteSpace: 'nowrap',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '6px',
+                    gap: '8px',
+                    boxShadow: active ? '0 2px 8px rgba(9, 28, 68, 0.22)' : 'none',
                     transition: 'all 0.15s ease',
                     flexShrink: 0,
                   }}
                 >
-                  {t.label}
+                  <span>{t.label}</span>
                   <span
                     style={{
-                      fontSize: '10px',
-                      padding: '2px 6px',
+                      fontSize: '10.5px',
+                      fontWeight: 800,
+                      padding: '2px 7px',
                       borderRadius: radius.full,
-                      background: active ? C.navy800 : C.bg,
-                      color: active ? '#FFFFFF' : C.textSub,
+                      background: active ? 'rgba(56, 182, 255, 0.28)' : '#F1F5F9',
+                      color: active ? C.blue400 : C.textSub,
                       fontFamily: font.family,
                     }}
                   >
@@ -639,7 +813,7 @@ export function SPPrescriptionsScreen() {
         </div>
 
         {/* Prescription List Body */}
-        {isLoading ? (
+      {isLoading ? (
           <GGCard padding="32px">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px', color: C.textSub, fontFamily: font.family }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
@@ -648,9 +822,9 @@ export function SPPrescriptionsScreen() {
               </svg>
               <span style={{ fontSize: '14px', fontWeight: 600 }}>Loading prescription requests…</span>
             </div>
-          </GGCard>
-        ) : data.length === 0 ? (
-          <GGCard padding="32px" style={{ textAlign: 'center' }}>
+        </GGCard>
+      ) : data.length === 0 ? (
+        <GGCard padding="32px" style={{ textAlign: 'center' }}>
             <div style={{ width: 48, height: 48, borderRadius: '50%', background: C.blue100, color: C.navy800, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px auto' }}>
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2z" />
@@ -663,13 +837,13 @@ export function SPPrescriptionsScreen() {
             </div>
             <div style={{ fontSize: '13px', color: C.textSub, maxWidth: '380px', margin: '0 auto', lineHeight: 1.5, fontFamily: font.family }}>
               When patients select your pharmacy profile and submit prescription requests for quotes or fulfillment, they will appear here.
-            </div>
-          </GGCard>
+          </div>
+        </GGCard>
         ) : filteredRequests.length === 0 ? (
           <GGCard padding="28px" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '6px', fontFamily: font.family }}>
               No matching prescriptions found
-            </div>
+              </div>
             <div style={{ fontSize: '13px', color: C.textSub, marginBottom: '14px', fontFamily: font.family }}>
               Try adjusting your search query or filter selection.
             </div>
@@ -696,13 +870,13 @@ export function SPPrescriptionsScreen() {
             </button>
           </GGCard>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
             {filteredRequests.map(request => (
               <PrescriptionCard key={request.id} request={request} />
-            ))}
-          </div>
-        )}
-      </div>
+                ))}
+            </div>
+          )}
+        </div>
     </SPLayout>
   )
 }

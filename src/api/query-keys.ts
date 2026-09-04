@@ -1,6 +1,7 @@
 export const queryKeys = {
   auth: {
     session: ['auth', 'session'] as const,
+    sessions: ['auth', 'sessions'] as const,
   },
   patient: {
     profile: (mode: string) => ['patient', 'profile', mode] as const,

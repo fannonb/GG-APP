@@ -4,7 +4,7 @@ import { GGCard, GGButton, GGBadge } from '@/design-system'
 import { C, font, radius, shadow } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
-import { formatCurrency } from '@/utils/format'
+import { formatCurrency, formatTime12h } from '@/utils/format'
 import { getCountryByCode } from '@/config/countries'
 import { AdBannerStrip } from '@/components/AdBanner'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
@@ -13,20 +13,20 @@ import { DashboardAppointmentsCard } from '@/features/patient/components/Dashboa
 import { PrescriptionStatusBanner } from '@/components/PrescriptionStatusBanner'
 import { ROUTES, route } from '@/router/routes'
 import {
-  useAuthStore,
   deriveOnboardingStepStatus,
   isOnboardingComplete,
   ONBOARDING_STEP_COUNT,
 } from '@/store/auth.store'
 import { useAdsStore } from '@/store/ads.store'
-import { EMPTY_PATIENT, getPatientFirstName } from '@/features/patient/patientAccount'
+import { EMPTY_PATIENT, derivePatientOnboardingCompletedSteps, getPatientFirstName } from '@/features/patient/patientAccount'
 import { useMarkPatientNotificationReadMutation, usePatientInvoices, usePatientPrescriptionRequests } from '@/hooks/api'
 import { useNotificationsStore } from '@/store/notifications.store'
 import {
   buildPrescriptionQuoteBannerItems,
   isSyntheticPrescriptionBannerId,
 } from '@/utils/prescription-notifications'
-import type { Patient } from '@/types/user.types'
+import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import type { Appointment, Patient } from '@/types/user.types'
 
 const SEEN_PRESCRIPTION_QUOTE_KEY = 'ggapp.seenPrescriptionQuoteNotifications'
 
@@ -72,7 +72,7 @@ const catIcons: Record<string, React.ReactNode> = {
 const SETUP_STEP_DEFS = [
   { n: 1, label: 'Create Account',         desc: 'Personal details, email and password registered.',             cta: null,               ctaPath: null },
   { n: 2, label: 'Verify Email',           desc: 'Your email address has been confirmed.',                       cta: null,               ctaPath: null },
-  { n: 3, label: 'Set Payment PIN',        desc: 'A 4–6 digit PIN required before you can authorise payments.',  cta: 'Set Up PIN →',     ctaPath: null },
+  { n: 3, label: 'Set Payment PIN',        desc: 'A 4-digit PIN required before you can authorise payments.',  cta: 'Set Up PIN →',     ctaPath: null },
   { n: 4, label: 'Apply for Credit',       desc: 'Submit your application so funds can be loaded to your wallet.', cta: 'Apply Now →',      ctaPath: '/app/credit/disclaimer' },
   { n: 5, label: 'Book First Appointment', desc: 'Find a verified provider near you and book your first visit.', cta: 'Browse Providers →', ctaPath: '/app/services' },
 ] as const
@@ -80,14 +80,15 @@ const SETUP_STEP_DEFS = [
 // ─── Component ────────────────────────────────────────────────────────────────
 interface NewUserDashboardScreenProps {
   user?: Patient
+  appointments?: Appointment[]
 }
 
 export function NewUserDashboardScreen({
   user = EMPTY_PATIENT,
+  appointments = [],
 }: NewUserDashboardScreenProps) {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
-  const { onboardingCompletedSteps, completeOnboardingStep } = useAuthStore()
   const adVersion = useAdsStore(s => s.version)
   const u = user
   const country = getCountryByCode(u.countryCode)
@@ -111,10 +112,7 @@ export function NewUserDashboardScreen({
   })
   const pendingInvoice = pendingInvoices[0]
   const pendingInvoiceCount = pendingInvoices.length
-  const effectiveCompletedSteps =
-    u.hasPaymentPin && !onboardingCompletedSteps.includes(3)
-      ? [...onboardingCompletedSteps, 3]
-      : onboardingCompletedSteps
+  const effectiveCompletedSteps = derivePatientOnboardingCompletedSteps(u, appointments.length)
 
   const hour     = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -126,7 +124,40 @@ export function NewUserDashboardScreen({
   }))
   const doneCount = setupSteps.filter(s => s.status === 'done').length
   const onboardingComplete = isOnboardingComplete(effectiveCompletedSteps)
-  const pinStepDone = u.hasPaymentPin || onboardingCompletedSteps.includes(3)
+  const pinStepDone = u.hasPaymentPin
+  const upcomingAppointments = appointments.filter(a => {
+    const status = getAppointmentDisplayStatus(a)
+    return status !== 'completed' && status !== 'cancelled'
+  })
+  const nextApt = [...upcomingAppointments]
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())[0]
+  const nextAptStatus = nextApt ? getAppointmentDisplayStatus(nextApt) : null
+  const nextAptLabel = nextApt
+    ? new Date(nextApt.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' · ' + formatTime12h(nextApt.time)
+    : 'None booked'
+  const hasUnresolvedAction = Boolean(!pinStepDone || pendingInvoice || prescriptionQuoteItems.length)
+  const showSetupColumn = !onboardingComplete
+  const showAppointmentsColumn = onboardingComplete && upcomingAppointments.length > 0
+  const showRightColumn = showSetupColumn || showAppointmentsColumn
+  const categoryColumns = isMobile ? 2 : showRightColumn ? 2 : 3
+
+  const creditTile = (() => {
+    if (u.creditStatus === 'approved') {
+      return {
+        value: formatCurrency(u.creditAvailable, currency),
+        sub: 'pays verified providers',
+        path: ROUTES.CREDIT_WALLET,
+        muted: false,
+      }
+    }
+    if (u.creditStatus === 'pending') {
+      return { value: 'Under review', sub: 'View application status', path: ROUTES.CREDIT_STATUS, muted: true }
+    }
+    if (u.creditStatus === 'rejected') {
+      return { value: 'Not approved', sub: 'Review application', path: ROUTES.CREDIT_STATUS, muted: true }
+    }
+    return { value: 'Not applied', sub: 'Apply for healthcare credit →', path: '/app/credit/disclaimer', muted: true }
+  })()
 
   const markPrescriptionQuoteSeen = (id: string) => {
     setSeenPrescriptionQuoteIds(prev => {
@@ -166,12 +197,11 @@ export function NewUserDashboardScreen({
       })
       return
     }
-    completeOnboardingStep(stepN)
     if (ctaPath) navigate(ctaPath)
   }
 
   return (
-    <AppLayout title="Dashboard" subtitle="Get started with GG'APP" notifCount={1}>
+    <AppLayout title="Dashboard">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {/* ── 1. Greeting ─────────────────────────────────────────────────── */}
@@ -198,9 +228,13 @@ export function NewUserDashboardScreen({
 
         {/* ── 2. Stat tiles ────────────────────────────────────────────────── */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '12px' }}>
-          <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm, gridColumn: isMobile ? 'span 2' : 'auto' }}>
+          <button
+            type="button"
+            onClick={() => navigate(creditTile.path)}
+            style={{ all: 'unset', display: 'block', padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm, gridColumn: isMobile ? 'span 2' : 'auto', cursor: 'pointer', boxSizing: 'border-box', fontFamily: font.family }}
+          >
             <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-              <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Available Balance</div>
+              <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Healthcare credit</div>
               {country && (
                 <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '1px 6px', borderRadius: '20px', background: C.bg, border: `1px solid ${C.border}`, flexShrink: 0 }}>
                   <FlagImg code={country.code} size={12} />
@@ -208,23 +242,32 @@ export function NewUserDashboardScreen({
                 </div>
               )}
             </div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: C.textLight, letterSpacing: '-0.03em', lineHeight: 1 }}>Not Applied</div>
-            <div style={{ marginTop: '8px' }}>
-              <span onClick={() => navigate('/app/credit/disclaimer')} style={{ fontSize: '12px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>Apply for credit →</span>
-            </div>
-          </div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: creditTile.muted ? C.textLight : C.blue500, letterSpacing: '-0.03em', lineHeight: 1 }}>{creditTile.value}</div>
+            <div style={{ fontSize: '12px', color: creditTile.muted ? C.blue500 : C.textSub, marginTop: '8px', fontWeight: creditTile.muted ? 600 : 400 }}>{creditTile.sub}</div>
+          </button>
           <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm }}>
             <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Spent This Month</div>
             <div style={{ fontSize: isMobile ? '24px' : '28px', fontWeight: 800, color: C.textLight, letterSpacing: '-0.04em', lineHeight: 1 }}>—</div>
             <div style={{ fontSize: '12px', color: C.textLight, marginTop: '6px' }}>No transactions yet</div>
           </div>
-          <div style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px' }}>Next Appointment</div>
-            <div style={{ fontSize: '22px', fontWeight: 800, color: C.textLight, letterSpacing: '-0.03em', lineHeight: 1 }}>None booked</div>
-            <div style={{ marginTop: '8px' }}>
-              <span onClick={() => navigate('/app/services')} style={{ fontSize: '12px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>Find a service →</span>
+          <button
+            type="button"
+            onClick={() => navigate(nextApt ? ROUTES.APPOINTMENTS : '/app/services')}
+            style={{ all: 'unset', display: 'block', padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm, cursor: 'pointer', boxSizing: 'border-box', fontFamily: font.family }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Next Appointment</div>
+              {nextApt && (
+                <span style={{ fontSize: '9px', fontWeight: 700, padding: '1px 6px', borderRadius: '20px', color: nextAptStatus === 'confirmed' ? C.success : C.warning, background: nextAptStatus === 'confirmed' ? C.successBg : C.warningBg }}>
+                  {nextAptStatus === 'confirmed' ? 'Confirmed' : 'Pending'}
+                </span>
+              )}
             </div>
-          </div>
+            <div style={{ fontSize: '22px', fontWeight: 800, color: nextApt ? C.navy800 : C.textLight, letterSpacing: '-0.03em', lineHeight: 1 }}>{nextAptLabel}</div>
+            <div style={{ fontSize: '12px', color: nextApt ? C.textSub : C.blue500, marginTop: '8px', fontWeight: nextApt ? 400 : 600 }}>
+              {nextApt ? nextApt.provider : 'Find a service →'}
+            </div>
+          </button>
         </div>
 
         {/* ── 3. Action banner — Set Payment PIN ───────────────────────────── */}
@@ -239,7 +282,7 @@ export function NewUserDashboardScreen({
             </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: '13px', fontWeight: 700, color: '#8A4D00', marginBottom: '2px' }}>Action Required: Set Your Payment PIN</div>
-              <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5 }}>Create a 4–6 digit PIN — required before you can authorise any healthcare payment.</div>
+              <div style={{ fontSize: '13px', color: '#8A4D00', lineHeight: 1.5 }}>Create a 4-digit PIN — required before you can authorise any healthcare payment.</div>
             </div>
             <GGButton
               variant="warning"
@@ -280,22 +323,21 @@ export function NewUserDashboardScreen({
         )}
 
         {/* ── 4. Service grid + Getting Started stepper ────────────────────── */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '3fr 2fr', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile || !showRightColumn ? '1fr' : '3fr 2fr', gap: '20px' }}>
 
           {/* Service grid */}
           <GGCard padding="22px">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Find a Service</div>
-              <span onClick={() => navigate('/app/services')} style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>See all →</span>
+              <button type="button" onClick={() => navigate('/app/services')} style={{ all: 'unset', fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer' }}>See all →</button>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(3,1fr)', gap: '12px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: `repeat(${categoryColumns}, 1fr)`, gap: '12px' }}>
               {categories.map(cat => {
                 if (cat.isComingSoon) {
                   return (
-                    <div key={cat.id} onClick={() => navigate('/app/services')}
-                      style={{ gridColumn: isMobile ? 'span 2' : 'span 3', padding: '12px 18px', borderRadius: radius.sm, background: C.bg, cursor: 'pointer', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '12px', transition: 'all 0.18s ease' }}
-                      onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = shadow.sm }}
-                      onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}>
+                    <div key={cat.id}
+                      style={{ gridColumn: `span ${categoryColumns}`, padding: '12px 18px', borderRadius: radius.sm, background: C.bg, cursor: 'default', display: 'flex', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                         <div style={{ width: 38, height: 38, borderRadius: '8px', background: 'rgba(153,157,173,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.textLight }}>{catIcons[cat.id]}</div>
                         <div><div style={{ fontSize: '13px', fontWeight: 700, color: C.text }}>{cat.label}</div><div style={{ fontSize: '11px', color: C.textSub, marginTop: '1px' }}>International tertiary care & medical tourism</div></div>
@@ -305,21 +347,22 @@ export function NewUserDashboardScreen({
                   )
                 }
                 return (
-                  <div key={cat.id} onClick={() => navigate(`/app/services/${cat.id}`)}
-                    style={{ padding: '18px 12px', borderRadius: radius.sm, background: C.bg, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', transition: 'all 0.18s ease' }}
+                  <button key={cat.id} type="button" onClick={() => navigate(`/app/services/${cat.id}`)}
+                    style={{ all: 'unset', padding: '18px 12px', borderRadius: radius.sm, background: C.bg, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', transition: 'all 0.18s ease', fontFamily: font.family }}
                     onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = shadow.sm }}
                     onMouseLeave={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = 'none' }}>
                     <div style={{ width: 44, height: 44, borderRadius: '10px', background: 'rgba(56,182,255,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.blue500 }}>{catIcons[cat.id]}</div>
                     <span style={{ fontSize: '13px', fontWeight: 700, color: C.text, textAlign: 'center' }}>{cat.label}</span>
-                  </div>
+                  </button>
                 )
               })}
             </div>
           </GGCard>
 
-          {onboardingComplete ? (
-            <DashboardAppointmentsCard appointments={[]} emptyVariant="first-time" />
-          ) : (
+          {showAppointmentsColumn && (
+            <DashboardAppointmentsCard appointments={upcomingAppointments} emptyVariant="first-time" />
+          )}
+          {showSetupColumn && (
           /* Getting Started — vertical stepper */
           <GGCard padding="24px">
             {/* Header */}
@@ -404,12 +447,13 @@ export function NewUserDashboardScreen({
                         {step.desc}
                       </div>
                       {step.cta && step.status !== 'pending' && (
-                        <span
+                        <button
+                          type="button"
                           onClick={() => handleStepAction(step.n, step.ctaPath)}
-                          style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700, color: isAction ? '#D97706' : C.blue500, cursor: 'pointer', marginTop: '6px' }}>
+                          style={{ all: 'unset', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 700, color: isAction ? '#D97706' : C.blue500, cursor: 'pointer', marginTop: '6px', fontFamily: font.family }}>
                           {step.cta}
                           <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5h6M5.5 2.5L8 5l-2.5 2.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                        </span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -420,9 +464,9 @@ export function NewUserDashboardScreen({
           )}
         </div>
 
-        <AdBannerStrip key={adVersion} countryName={country?.name} />
+        {!hasUnresolvedAction && <AdBannerStrip key={adVersion} countryName={country?.name} />}
 
-        <HealthNewsSection />
+        {!hasUnresolvedAction && <HealthNewsSection />}
 
       </div>
     </AppLayout>

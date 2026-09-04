@@ -46,6 +46,7 @@ export function SPRecordVisitScreen() {
   const [temp, setTemp] = useState('')
   const [glucose, setGlucose] = useState('')
   const [sats, setSats] = useState('')
+  const [serviceOptions, setServiceOptions] = useState<string[]>(() => [...COMMON_SERVICES])
   const [services, setServices] = useState<string[]>([])
   const [customService, setCustomService] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -58,9 +59,15 @@ export function SPRecordVisitScreen() {
     )
   }
 
+  const removeServiceOption = (service: string) => {
+    setServiceOptions(current => current.filter(item => item !== service))
+    setServices(current => current.filter(item => item !== service))
+  }
+
   const addCustomService = () => {
     const value = customService.trim()
     if (!value) return
+    setServiceOptions(current => (current.includes(value) ? current : [...current, value]))
     setServices(current => (current.includes(value) ? current : [...current, value]))
     setCustomService('')
   }
@@ -139,7 +146,7 @@ export function SPRecordVisitScreen() {
   }
 
   return (
-    <SPLayout title="Record Visit" subtitle={ctx.patientName}>
+    <SPLayout title="Record Visit">
       <button
         onClick={() => navigate(-1)}
         style={{
@@ -241,109 +248,71 @@ export function SPRecordVisitScreen() {
               Services Rendered
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginBottom: '14px' }}>
-              {COMMON_SERVICES.map(service => {
+              {serviceOptions.map(service => {
                 const active = services.includes(service)
+                const isCustom = !COMMON_SERVICES.includes(service)
                 return (
-                  <button
+                  <div
                     key={service}
-                    type="button"
-                    onClick={() => toggleService(service)}
-                    aria-pressed={active}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '6px',
-                      padding: active ? '7px 10px 7px 14px' : '7px 14px',
+                      gap: '4px',
+                      padding: '5px 6px 5px 12px',
                       borderRadius: radius.full,
                       border: `1.5px solid ${active ? C.blue500 : C.border}`,
                       background: active ? C.blue100 : '#fff',
                       color: active ? C.blue500 : C.textSub,
                       fontSize: '12px',
                       fontWeight: active ? 700 : 500,
-                      cursor: 'pointer',
                       fontFamily: font.family,
                     }}
                   >
-                    {service}
-                    {active && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        aria-label={`Remove ${service}`}
-                        onClick={event => {
-                          event.stopPropagation()
-                          toggleService(service)
-                        }}
-                        onKeyDown={event => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault()
-                            event.stopPropagation()
-                            toggleService(service)
-                          }
-                        }}
-                        style={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          width: 16,
-                          height: 16,
-                          borderRadius: '50%',
-                          background: 'rgba(74,173,223,0.25)',
-                          color: '#1A5D8A',
-                          fontSize: '12px',
-                          lineHeight: 1,
-                          fontWeight: 700,
-                        }}
-                      >
-                        ×
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-              {services
-                .filter(service => !COMMON_SERVICES.includes(service))
-                .map(service => (
-                  <button
-                    key={service}
-                    type="button"
-                    onClick={() => toggleService(service)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      padding: '7px 10px 7px 14px',
-                      borderRadius: radius.full,
-                      border: `1.5px solid ${C.blue500}`,
-                      background: C.blue100,
-                      color: C.blue500,
-                      fontSize: '12px',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      fontFamily: font.family,
-                    }}
-                  >
-                    {service}
-                    <span
-                      aria-hidden
+                    <button
+                      type="button"
+                      onClick={() => toggleService(service)}
+                      aria-pressed={active}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        padding: 0,
+                        margin: 0,
+                        cursor: 'pointer',
+                        color: 'inherit',
+                        font: 'inherit',
+                        fontWeight: 'inherit',
+                      }}
+                    >
+                      {service}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeServiceOption(service)}
+                      aria-label={`Remove ${service} from list`}
+                      title={isCustom ? 'Remove custom service' : 'Remove from list'}
                       style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        width: 16,
-                        height: 16,
+                        width: 18,
+                        height: 18,
                         borderRadius: '50%',
-                        background: 'rgba(74,173,223,0.25)',
-                        color: '#1A5D8A',
-                        fontSize: '12px',
+                        border: 'none',
+                        background: active ? 'rgba(74,173,223,0.25)' : C.bg,
+                        color: active ? '#1A5D8A' : C.textSub,
+                        fontSize: '13px',
                         lineHeight: 1,
                         fontWeight: 700,
+                        cursor: 'pointer',
+                        padding: 0,
+                        flexShrink: 0,
                       }}
                     >
                       ×
-                    </span>
-                  </button>
-                ))}
+                    </button>
+                  </div>
+                )
+              })}
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <div style={{ flex: 1 }}>
@@ -365,7 +334,7 @@ export function SPRecordVisitScreen() {
             </div>
             {services.length > 0 && (
               <div style={{ marginTop: '10px', fontSize: '12px', color: C.textSub, fontFamily: font.family }}>
-                {services.length} selected · click a service or × to remove
+                {services.length} selected · click a service to toggle · × removes it from the list
               </div>
             )}
           </GGCard>
@@ -483,7 +452,7 @@ export function SPRecordVisitScreen() {
                 </div>
               )}
               <div style={{ fontSize: '11px', color: C.textLight, lineHeight: 1.5, fontFamily: font.family }}>
-                If this visit was not opened from a confirmed or completed appointment, you can still save the record and pick the invoice appointment in the next screen.
+                After you save, you can upload the invoice. A visit record is required before billing.
               </div>
             </div>
           </GGCard>

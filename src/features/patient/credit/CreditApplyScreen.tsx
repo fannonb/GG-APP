@@ -166,7 +166,7 @@ export function CreditApplyScreen() {
     && Number(form.income) > 0 && selectedPartner
 
   return (
-    <AppLayout title="Balance Application" subtitle="Apply for your healthcare balance" back notifCount={1}>
+    <AppLayout title="Balance Application" back notifCount={1}>
       <div style={{ maxWidth: 900, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
         <FinancePartnerSelector
           partners={FINANCE_PARTNERS}

@@ -45,8 +45,11 @@ async function bootstrap() {
         callback(null, true)
         return
       }
-      // Local Expo / Vite dev servers on any port.
+      // Local Expo / Vite dev servers on any port — development only. In
+      // production these private-network origins are rejected; allowed
+      // origins must come from CORS_ORIGIN instead.
       if (
+        config.app.nodeEnv !== 'production' &&
         /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+)(:\d+)?$/i.test(origin)
       ) {
         callback(null, true)

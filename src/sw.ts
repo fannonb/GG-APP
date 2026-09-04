@@ -119,6 +119,15 @@ self.addEventListener('fetch', event => {
   event.respondWith(cacheFallbackNetwork(request, RUNTIME_CACHE).catch(() => caches.match('/index.html') as Promise<Response>))
 })
 
+// The app posts this message on logout so authenticated API responses
+// cached for offline reads don't leak to the next user of the device.
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'CLEAR_RUNTIME_CACHE') return
+  event.waitUntil(
+    caches.delete(RUNTIME_CACHE).then(() => caches.open(RUNTIME_CACHE)),
+  )
+})
+
 self.addEventListener('push', event => {
   const payload = event.data?.json?.() ?? {}
   const title = payload.title ?? "GG'APP"

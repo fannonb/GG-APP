@@ -51,7 +51,7 @@ export interface NewsItem {
   status?: 'draft' | 'published' | 'archived'
 }
 
-export type NotificationType = 'payment' | 'invoice' | 'appointment' | 'credit' | 'system' | 'prescription'
+export type NotificationType = 'payment' | 'invoice' | 'appointment' | 'credit' | 'system' | 'prescription' | 'ledger'
 
 export interface Notification {
   id: string

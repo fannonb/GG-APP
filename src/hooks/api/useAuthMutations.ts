@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/auth.store'
 import { useNotificationsStore } from '@/store/notifications.store'
 import { useUserStore } from '@/store/user.store'
 import { queryClient } from '@/lib/query-client'
+import { idbQueryPersister } from '@/lib/query-persister'
 import { PORTAL_HOME, ROUTES } from '@/router/routes'
 import type { GoogleAuthPayload, GoogleAuthResult, LoginPayload, RegisterPatientPayload, RegisterSPPayload } from '@/api/types'
 import { ApiError } from '@/api/types'
@@ -130,6 +131,10 @@ export function useLogoutMutation() {
       resetUser()
       useNotificationsStore.setState({ patientNotifs: [], panelOpen: false })
       queryClient.clear()
+      // Remove the persisted query cache explicitly — queryClient.clear()
+      // does not delete the IndexedDB copy, so without this the previous
+      // user's cached PHI could be restored by the next login on this device.
+      void idbQueryPersister.removeClient()
       navigate(ROUTES.LOGIN)
     },
   })

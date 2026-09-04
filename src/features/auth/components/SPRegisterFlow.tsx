@@ -11,15 +11,21 @@ import { LocationPickerInput } from './LocationPickerInput'
 import type { LocationSuggestion } from './LocationPickerInput'
 import { PasswordStrength } from './PasswordStrength'
 
-const STEPS = ['Practice Details', 'Services & Hours', 'Documents & Payment']
+const STEPS = ['Practice & account', 'Services & hours', 'Verification & payout']
+const STEP_BLURBS = [
+  'Practice details, contact information, location, and password.',
+  'Provider categories, license number, and operating hours.',
+  'Supporting documents, payout method, then submit for review.',
+]
 const SERVICE_TYPES = [
   'Hospital',
   'Pharmacy',
   'Laboratory',
   'Clinic',
-  'General Practitioner',
-  'Specialist',
+  'Doctor',
 ]
+const FOCUS = C.blue500
+const FOCUS_SHADOW = 'rgba(56,182,255,0.14)'
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
 type Day = (typeof DAYS)[number]
@@ -58,73 +64,66 @@ const DEFAULT_HOURS: Record<Day, DayHours> = {
   Sun: { open: false, from: '', to: '' },
 }
 
-function StepDots({ step }: { step: number }) {
+function StepProgress({ step }: { step: number }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '24px' }}>
-      {STEPS.map((title, index) => (
-        <div
-          key={title}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            flex: index < STEPS.length - 1 ? 1 : 0,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-            <div
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: index <= step ? '#10B981' : C.border,
-                color: '#fff',
-                fontSize: '12px',
-                fontWeight: 700,
-                fontFamily: font.family,
-                transition: 'background 0.3s ease',
-              }}
-            >
-              {index + 1}
-            </div>
-            <span
-              style={{
-                fontSize: '10px',
-                fontWeight: index === step ? 700 : 500,
-                color: index === step ? '#10B981' : C.textSub,
-                whiteSpace: 'nowrap',
-                fontFamily: font.family,
-                transition: 'color 0.3s ease',
-              }}
-            >
-              {title}
-            </span>
-          </div>
-          {index < STEPS.length - 1 && (
-            <div
-              style={{
-                flex: 1,
-                height: 2,
-                background: index < step ? '#10B981' : C.border,
-                margin: '-14px 8px 0',
-                transition: 'background 0.3s ease',
-              }}
-            />
-          )}
-        </div>
-      ))}
+    <div style={{ marginBottom: 20 }}>
+      <div
+        style={{
+          fontSize: 12,
+          fontWeight: 700,
+          color: C.blue500,
+          fontFamily: font.family,
+          letterSpacing: '0.02em',
+          marginBottom: 4,
+        }}
+      >
+        Step {step + 1} of {STEPS.length}
+      </div>
+      <div
+        style={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: C.text,
+          fontFamily: font.family,
+          letterSpacing: '-0.02em',
+          marginBottom: 4,
+        }}
+      >
+        {STEPS[step]}
+      </div>
+      <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.45, marginBottom: 12 }}>
+        {STEP_BLURBS[step]}
+      </div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {STEPS.map((_, i) => (
+          <div
+            key={i}
+            style={{
+              flex: 1,
+              height: 3,
+              borderRadius: 999,
+              background: i <= step ? C.blue500 : C.border,
+              transition: 'background 0.2s ease',
+            }}
+          />
+        ))}
+      </div>
     </div>
   )
 }
 
-export function SPRegisterFlow() {
+interface SPRegisterFlowProps {
+  onStarted?: () => void
+}
+
+export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
   const registerSPMutation = useRegisterSPMutation()
   const [step, setStep] = useState(0)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
   const [form, setForm] = useState<FormState>({
     practiceName: '',
     email: '',
@@ -144,6 +143,7 @@ export function SPRegisterFlow() {
   })
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
+    onStarted?.()
     setForm(current => ({ ...current, [key]: value }))
   }
 
@@ -226,12 +226,46 @@ export function SPRegisterFlow() {
     }
   }
 
-  const focusColor = '#10B981'
-  const focusShadow = 'rgba(16,185,129,0.12)'
+  const focusColor = FOCUS
+  const focusShadow = FOCUS_SHADOW
+
+  const showToggle = (visible: boolean, onToggle: () => void) => (
+    <span
+      onClick={onToggle}
+      style={{
+        fontSize: 12,
+        color: focusColor,
+        fontWeight: 600,
+        cursor: 'pointer',
+        userSelect: 'none',
+      }}
+    >
+      {visible ? 'Hide' : 'Show'}
+    </span>
+  )
+
+  const continueFromStep0 = () => {
+    const password = form.password
+    let nextPasswordError: string | null = null
+
+    if (password.length < 8) {
+      nextPasswordError = 'Password must be at least 8 characters'
+    } else if (!/[A-Z]/.test(password)) {
+      nextPasswordError = 'Include at least one uppercase letter'
+    } else if (!/[0-9]/.test(password)) {
+      nextPasswordError = 'Include at least one number'
+    }
+
+    setPasswordError(nextPasswordError)
+    if (nextPasswordError) return
+
+    onStarted?.()
+    setStep(1)
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <StepDots step={step} />
+      <StepProgress step={step} />
 
       {submitError && (
         <div
@@ -283,34 +317,41 @@ export function SPRegisterFlow() {
           <CountryPhoneInput
             required
             countryCode={form.country}
-            onCountryChange={code => setForm(current => ({ ...current, country: code as CountryCode, phone: '' }))}
+            onCountryChange={code => {
+              onStarted?.()
+              setForm(current => ({ ...current, country: code as CountryCode, phone: '' }))
+            }}
             digits={form.phone}
             onDigitsChange={digits => setField('phone', digits)}
           />
-          <LocationPickerInput required value={form.location} onChange={location => setField('location', location)} />
+          <LocationPickerInput
+            required
+            value={form.location}
+            onChange={location => setField('location', location)}
+          />
           <GGInput
             label="Password"
-            type="password"
+            type={showPassword ? 'text' : 'password'}
             placeholder="Minimum 8 characters"
             value={form.password}
-            onChange={event => setField('password', event.target.value)}
+            onChange={event => {
+              setPasswordError(null)
+              setField('password', event.target.value)
+            }}
             required
+            error={passwordError ?? undefined}
             focusColor={focusColor}
             focusShadow={focusShadow}
+            rightEl={showToggle(showPassword, () => setShowPassword(v => !v))}
           />
           <PasswordStrength password={form.password} />
           <GGButton
-            variant="success"
+            variant="primary"
             size="md"
             fullWidth
-            onClick={() => setStep(1)}
-            style={{
-              background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-              boxShadow: '0 4px 14px rgba(16,185,129,0.2)',
-              border: 'none',
-            }}
+            onClick={continueFromStep0}
           >
-            Continue {'->'}
+            Continue
           </GGButton>
         </>
       )}
@@ -335,13 +376,14 @@ export function SPRegisterFlow() {
                 return (
                   <button
                     key={service}
+                    type="button"
                     onClick={() => toggleService(service)}
                     style={{
                       padding: '8px 16px',
                       borderRadius: '9999px',
-                      border: `1.5px solid ${active ? '#10B981' : C.border}`,
-                      background: active ? 'rgba(16,185,129,0.08)' : C.bg,
-                      color: active ? '#097951' : C.textSub,
+                      border: `1.5px solid ${active ? C.blue500 : C.border}`,
+                      background: active ? C.blue100 : C.bg,
+                      color: active ? C.navy800 : C.textSub,
                       fontSize: '13px',
                       fontWeight: active ? 700 : 500,
                       cursor: 'pointer',
@@ -411,12 +453,12 @@ export function SPRegisterFlow() {
                         type="checkbox"
                         checked={value.open}
                         onChange={() => toggleDay(day)}
-                        style={{ accentColor: '#10B981', width: 14, height: 14 }}
+                        style={{ accentColor: C.blue500, width: 14, height: 14 }}
                       />
                       <span
                         style={{
                           fontSize: '12px',
-                          color: value.open ? '#10B981' : C.textSub,
+                          color: value.open ? C.blue500 : C.textSub,
                           fontWeight: 600,
                           fontFamily: font.family,
                         }}
@@ -469,17 +511,12 @@ export function SPRegisterFlow() {
               Back
             </GGButton>
             <GGButton
-              variant="success"
+              variant="primary"
               size="md"
               onClick={() => setStep(2)}
-              style={{
-                flex: 2,
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                boxShadow: '0 4px 14px rgba(16,185,129,0.2)',
-                border: 'none',
-              }}
+              style={{ flex: 2 }}
             >
-              Continue {'->'}
+              Continue
             </GGButton>
           </div>
         </>
@@ -487,6 +524,21 @@ export function SPRegisterFlow() {
 
       {step === 2 && (
         <>
+          <div
+            style={{
+              padding: '12px 14px',
+              background: C.bg,
+              borderRadius: radius.sm,
+              border: `1px solid ${C.border}`,
+              fontSize: 12,
+              color: C.textSub,
+              lineHeight: 1.55,
+              fontFamily: font.family,
+            }}
+          >
+            License documents and payout details are required for admin verification. Review typically completes within 2–3 business days.
+          </div>
+
           <div>
             <div
               style={{
@@ -562,14 +614,15 @@ export function SPRegisterFlow() {
               ] as const).map(([value, label]) => (
                 <button
                   key={value}
+                  type="button"
                   onClick={() => setField('paymentMethod', value)}
                   style={{
                     flex: 1,
                     padding: '10px',
                     borderRadius: radius.sm,
-                    border: `1.5px solid ${form.paymentMethod === value ? '#10B981' : C.border}`,
-                    background: form.paymentMethod === value ? 'rgba(16,185,129,0.08)' : C.bg,
-                    color: form.paymentMethod === value ? '#097951' : C.textSub,
+                    border: `1.5px solid ${form.paymentMethod === value ? C.blue500 : C.border}`,
+                    background: form.paymentMethod === value ? C.blue100 : C.bg,
+                    color: form.paymentMethod === value ? C.navy800 : C.textSub,
                     fontSize: '13px',
                     fontWeight: form.paymentMethod === value ? 700 : 500,
                     cursor: 'pointer',
@@ -627,17 +680,17 @@ export function SPRegisterFlow() {
           <div
             style={{
               padding: '12px 14px',
-              background: 'rgba(16,185,129,0.08)',
+              background: C.bg,
               borderRadius: radius.sm,
-              border: '1px solid rgba(16,185,129,0.2)',
+              border: `1px solid ${C.border}`,
               fontSize: '12px',
-              color: '#097951',
+              color: C.textSub,
               lineHeight: 1.6,
               fontFamily: font.family,
             }}
           >
-            By registering, you confirm all submitted information is accurate and that your practice
-            holds a valid medical licence.
+            By submitting, you confirm the information is accurate and that your practice holds a
+            valid medical licence. Outcome: application submitted for review — not instant access.
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
@@ -645,18 +698,13 @@ export function SPRegisterFlow() {
               Back
             </GGButton>
             <GGButton
-              variant="success"
+              variant="primary"
               size="md"
               onClick={() => void handleSubmit()}
-              style={{
-                flex: 2,
-                background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                boxShadow: '0 4px 14px rgba(16,185,129,0.2)',
-                border: 'none',
-              }}
+              style={{ flex: 2 }}
               disabled={registerSPMutation.isPending}
             >
-              {registerSPMutation.isPending ? 'Submitting...' : 'Submit Application ->'}
+              {registerSPMutation.isPending ? 'Submitting…' : 'Submit application'}
             </GGButton>
           </div>
         </>

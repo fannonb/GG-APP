@@ -7,6 +7,11 @@ export interface AuthSession {
   refreshToken: string
   role: UserRole
   expiresAt: number
+  /** Logical session id (matches the access token's `jti`). */
+  sessionId?: string
+  /** True when the server placed the refresh token in an httpOnly cookie —
+   * the body `refreshToken` is then empty and must not be persisted. */
+  cookieSession?: boolean
 }
 
 export interface LoginPayload {
@@ -24,6 +29,7 @@ export interface RegisterPatientPayload {
   country: string
   phone: string
   dob: string
+  gender?: string
   nationalId: string
   /** Required unless googleIdToken is supplied. */
   password?: string
@@ -278,6 +284,8 @@ export interface ProviderProfileResponse {
   address: string
   country: string
   status: 'open' | 'closed'
+  /** True when the provider account is active (approved and not suspended). */
+  verified?: boolean
   languages: string[]
   tags: string[]
   establishedYear: number | null
@@ -301,6 +309,9 @@ export interface ProviderSessionInfo {
   sessionId: string
   device: string
   location: string
+  ipAddress?: string
+  /** True when this is the session the current request belongs to. */
+  current?: boolean
   active: boolean
   time: string
   lastSeenAt: string
@@ -331,6 +342,7 @@ export interface ProviderSettingsResponse {
 
 export interface UpdateProviderProfilePayload {
   about?: string
+  email?: string
   languages?: string[]
   tags?: string[]
   address?: string

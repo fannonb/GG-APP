@@ -44,7 +44,7 @@ export function InvoiceListScreen() {
   const firstPendingInvoice = pendingInvoices[0]
 
   return (
-    <AppLayout title="Invoices" subtitle="Review and authorize pending invoices" notifCount={isNew ? 0 : pendingCount}>
+    <AppLayout title="Invoices" status={!isNew && pendingCount > 0 ? `${pendingCount} to authorize` : undefined} notifCount={isNew ? 0 : pendingCount}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
         {!isNew && pendingCount > 0 && (
           <div style={{ padding: '14px 20px', background: `linear-gradient(90deg, ${C.warningBg}, #FFF8E0)`, borderRadius: radius.sm, border: `1px solid rgba(245,166,35,0.25)`, display: 'flex', alignItems: 'center', gap: '14px' }}>

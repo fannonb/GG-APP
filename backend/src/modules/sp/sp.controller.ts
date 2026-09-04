@@ -165,7 +165,7 @@ export class SpController {
 
   @Get('settings')
   getSettings(@CurrentUser() user: AuthenticatedUser) {
-    return this.spService.getSettings(user.sub)
+    return this.spService.getSettings(user.sub, user.jti)
   }
 
   @Patch('settings/notifications')
@@ -186,7 +186,7 @@ export class SpController {
 
   @Get('settings/sessions')
   getSessions(@CurrentUser() user: AuthenticatedUser) {
-    return this.spService.getSessions(user.sub)
+    return this.spService.getSessions(user.sub, user.jti)
   }
 
   @Post('settings/sessions/:id/revoke')

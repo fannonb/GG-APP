@@ -1,20 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGAvatar, GGButton, GGCard } from '@/design-system'
-import { C, font, radius } from '@/design-system/tokens'
+import { C, font } from '@/design-system/tokens'
 import { PaymentAlertBanner } from '@/components/PaymentAlertBanner'
-import { useSPNotifications, useSPPayments, useSPSettings } from '@/hooks/api'
+import { useSPDashboard, useSPNotifications, useSPPayments } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
 import { SPLayout } from '@/layouts/sp/SPLayout'
-import { ROUTES } from '@/router/routes'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
 
 export function SPPaymentsScreen() {
   const navigate = useNavigate()
   const { data: payments = [], isLoading: paymentsLoading } = useSPPayments()
+  const { data: dashboard } = useSPDashboard()
   const { data: notifications = [] } = useSPNotifications()
-  const { data: settings, isLoading: settingsLoading } = useSPSettings()
   const markNotificationRead = useMarkSPNotificationReadMutation()
   const [page, setPage] = useState(1)
   const pageSize = 8
@@ -32,11 +31,10 @@ export function SPPaymentsScreen() {
   const currentPage = Math.min(page, totalPages)
   const start = (currentPage - 1) * pageSize
   const visiblePayments = payments.slice(start, start + pageSize)
-  const defaultAccount = settings?.payoutAccounts.find(account => account.isDefault) ?? settings?.payoutAccounts[0]
 
-  if (paymentsLoading || settingsLoading) {
+  if (paymentsLoading) {
     return (
-      <SPLayout title="Payments" subtitle="Earnings and disbursement history">
+      <SPLayout title="Payments">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading payments...
@@ -47,7 +45,7 @@ export function SPPaymentsScreen() {
   }
 
   return (
-    <SPLayout title="Payments" subtitle="Earnings and disbursement history">
+    <SPLayout title="Payments">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {paymentItems.length > 0 && (
           <PaymentAlertBanner
@@ -65,8 +63,10 @@ export function SPPaymentsScreen() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {[
-            { label: 'Total Received', value: formatCurrency(paymentSummary.totalReceived), color: C.blue500 },
-            { label: 'Payment Records', value: String(paymentSummary.paymentCount), color: C.text },
+            { label: 'All-time earnings', value: formatCurrency(dashboard?.sp.totalEarnings ?? paymentSummary.totalReceived), helper: 'Authorized lifetime', color: C.text },
+            { label: 'Total Received', value: formatCurrency(paymentSummary.totalReceived), helper: 'Disbursement records', color: C.blue500 },
+            { label: 'Unique patients', value: String(dashboard?.sp.totalPatients ?? 0), helper: 'Patients served', color: C.text },
+            { label: 'Payment Records', value: String(paymentSummary.paymentCount), helper: 'All disbursements', color: C.text },
           ].map(item => (
             <GGCard key={item.label} padding="18px">
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: font.family }}>
@@ -74,6 +74,9 @@ export function SPPaymentsScreen() {
               </div>
               <div style={{ fontSize: '28px', fontWeight: 800, color: item.color, marginTop: '8px', letterSpacing: '-0.04em', fontFamily: font.family }}>
                 {item.value}
+              </div>
+              <div style={{ fontSize: '12px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>
+                {item.helper}
               </div>
             </GGCard>
           ))}
@@ -128,40 +131,6 @@ export function SPPaymentsScreen() {
                 Next
               </GGButton>
             </div>
-          </div>
-        </GGCard>
-
-        <GGCard padding="20px" style={{ background: C.bg }}>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '12px', fontFamily: font.family }}>
-            Default Payout Account
-          </div>
-          {defaultAccount ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
-              {[
-                { label: 'Method', value: defaultAccount.method },
-                { label: 'Account Number', value: defaultAccount.accountNumber },
-                { label: 'Account Name', value: defaultAccount.accountName },
-                { label: 'Country', value: defaultAccount.country },
-              ].map(item => (
-                <div key={item.label} style={{ padding: '12px 14px', background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}` }}>
-                  <div style={{ fontSize: '11px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, fontFamily: font.family }}>
-                    {item.label}
-                  </div>
-                  <div style={{ fontSize: '14px', color: C.text, fontWeight: 700, marginTop: '4px', fontFamily: font.family }}>
-                    {item.value}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div style={{ fontSize: '13px', color: C.textSub, fontFamily: font.family }}>
-              No payout account configured yet.
-            </div>
-          )}
-          <div style={{ marginTop: '14px' }}>
-            <GGButton variant="secondary" size="sm" onClick={() => navigate(ROUTES.SP_SETTINGS, { state: { tab: 'account' } })}>
-              Update Payment Details
-            </GGButton>
           </div>
         </GGCard>
       </div>

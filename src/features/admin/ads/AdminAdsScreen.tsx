@@ -259,7 +259,7 @@ export function AdminAdsScreen() {
   })
 
   return (
-    <AdminLayout title="Advertising" subtitle="Upload and manage patient-facing banner ads">
+    <AdminLayout title="Advertising">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: font.family }}>
 
         {/* Dimension guide */}

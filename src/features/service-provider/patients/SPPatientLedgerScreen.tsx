@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { GGBadge, GGButton, GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -20,12 +20,18 @@ function formatDateTime(iso: string) {
 export function SPPatientLedgerScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const [beneficiaryFilter, setBeneficiaryFilter] = useState<string | undefined>(undefined)
   const ledgerQuery = useSPPatientLedger(id)
 
-  const needsUnlock = ledgerQuery.error instanceof ApiError && ledgerQuery.error.status === 403
+  const needsUnlock =
+    (ledgerQuery.error instanceof ApiError && ledgerQuery.error.status === 403) ||
+    ((ledgerQuery.error as unknown as { status?: number })?.status === 403) ||
+    ((ledgerQuery.error as unknown as { statusCode?: number })?.statusCode === 403) ||
+    (ledgerQuery.error instanceof Error && ledgerQuery.error.message.toLowerCase().includes('ledger pin'))
   const rawEntries = useMemo(() => ledgerQuery.data?.entries ?? [], [ledgerQuery.data?.entries])
-  const queryBeneficiaries = useMemo(() => ledgerQuery.data?.patient.beneficiaries ?? [], [ledgerQuery.data?.patient.beneficiaries])
+  const queryBeneficiaries = useMemo(
+    () => ledgerQuery.data?.patient.beneficiaries ?? [],
+    [ledgerQuery.data?.patient.beneficiaries],
+  )
 
   const beneficiaries = useMemo(() => {
     const map = new Map<string, { id: string; name: string; relation?: string }>()
@@ -42,40 +48,24 @@ export function SPPatientLedgerScreen() {
     return Array.from(map.values())
   }, [queryBeneficiaries, rawEntries])
 
-  const filteredEntries = useMemo(() => {
-    if (!beneficiaryFilter) return rawEntries
-
-    if (beneficiaryFilter === 'self') {
-      return rawEntries.filter(entry => {
-        if (!entry.beneficiaryName) return true
-        const name = entry.beneficiaryName.toLowerCase()
-        return name === 'self' || name === 'me'
-      })
-    }
-
-    const selectedBen = beneficiaries.find(b => b.id === beneficiaryFilter)
-    const searchTarget = (selectedBen ? selectedBen.name : beneficiaryFilter).toLowerCase().trim()
-
-    return rawEntries.filter(entry => {
-      if (!entry.beneficiaryName) return false
-      const entryBenName = entry.beneficiaryName.toLowerCase()
-      return entryBenName.includes(searchTarget) || searchTarget.includes(entryBenName)
-    })
-  }, [rawEntries, beneficiaryFilter, beneficiaries])
+  const beneficiaryOptions = useMemo(
+    () => [
+      { id: undefined, label: 'Everyone' },
+      { id: 'self', label: 'Patient only' },
+      ...beneficiaries.map(b => ({
+        id: b.id,
+        label: b.relation ? `${b.name} (${b.relation})` : b.name,
+      })),
+    ],
+    [beneficiaries],
+  )
 
   return (
-    <SPLayout
-      title="Patient Health Ledger"
-      subtitle="Cross-provider treatment & diagnosis history"
-      back
-    >
-      <div style={{ maxWidth: 820, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 20 }}>
-
+    <SPLayout title="Patient Health Ledger" back>
+      <div style={{ maxWidth: 1120, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {ledgerQuery.isLoading && (
           <GGCard>
-            <div style={{ padding: 24, textAlign: 'center', color: C.textSub, fontSize: 14 }}>
-              Loading ledger...
-            </div>
+            <div style={{ padding: 24, textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading ledger...</div>
           </GGCard>
         )}
 
@@ -132,61 +122,39 @@ export function SPPatientLedgerScreen() {
 
         {ledgerQuery.data && (
           <>
-            <GGCard padding="20px 24px">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                <div>
-                  <div style={{ fontSize: 17, fontWeight: 700, color: C.navy800 }}>
-                    {ledgerQuery.data.patient.name}
-                  </div>
-                  {ledgerQuery.data.grant && (
-                    <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 4 }}>
-                      Access expires {formatDateTime(ledgerQuery.data.grant.expiresAt)}
+            <div
+              style={{
+                position: 'sticky',
+                top: 0,
+                zIndex: 8,
+                background: C.bg,
+                paddingBottom: 4,
+              }}
+            >
+              <GGCard padding="16px 20px">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <div style={{ fontSize: 17, fontWeight: 800, color: C.navy800 }}>{ledgerQuery.data.patient.name}</div>
+                      <GGBadge type="success">Ledger unlocked</GGBadge>
                     </div>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <GGBadge type="success">Ledger unlocked</GGBadge>
+                    <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 4 }}>
+                      {beneficiaries.length > 0
+                        ? `Patient + ${beneficiaries.length} ${beneficiaries.length === 1 ? 'beneficiary' : 'beneficiaries'}`
+                        : 'Patient only'}
+                      {ledgerQuery.data.grant ? ` · Access until ${formatDateTime(ledgerQuery.data.grant.expiresAt)}` : ''}
+                    </div>
+                  </div>
                   <GGButton variant="outline" size="sm" onClick={() => navigate(route.spPatient(id!))}>
                     Patient profile
                   </GGButton>
                 </div>
-              </div>
-            </GGCard>
-
-            {beneficiaries.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                {[
-                  { id: undefined, label: 'Everyone' },
-                  { id: 'self', label: 'Patient only' },
-                  ...beneficiaries.map(b => ({ id: b.id, label: b.relation ? `${b.name} (${b.relation})` : b.name })),
-                ].map(option => {
-                  const active = beneficiaryFilter === option.id
-                  return (
-                    <button
-                      key={option.id ?? 'all'}
-                      type="button"
-                      onClick={() => setBeneficiaryFilter(option.id)}
-                      style={{
-                        padding: '7px 14px',
-                        borderRadius: radius.full,
-                        border: `1.5px solid ${active ? C.navy800 : C.border}`,
-                        background: active ? C.navy800 : '#fff',
-                        color: active ? '#fff' : C.textSub,
-                        fontSize: 12.5,
-                        fontWeight: 700,
-                        fontFamily: font.family,
-                        cursor: 'pointer',
-                      }}
-                    >
-                      {option.label}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+              </GGCard>
+            </div>
 
             <LedgerTimeline
-              entries={filteredEntries}
+              entries={rawEntries}
+              beneficiaryOptions={beneficiaries.length > 0 ? beneficiaryOptions : []}
               emptyMessage="No treatment history recorded for this patient yet."
             />
 

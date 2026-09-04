@@ -66,6 +66,8 @@ export interface Appointment {
   address: string
   duration: string
   hasInvoice?: boolean
+  visitId?: string
+  hasVisit?: boolean
   cancellationReason?: string | null
   cancellationNote?: string | null
 }

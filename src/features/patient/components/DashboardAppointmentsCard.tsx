@@ -33,48 +33,49 @@ export function DashboardAppointmentsCard({
           </div>
           <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Appointments</div>
         </div>
-        <span
+        <button
+          type="button"
           onClick={() => navigate('/app/appointments')}
-          style={{ fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          style={{ all: 'unset', fontSize: '13px', color: C.blue500, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
         >
           View all →
-        </span>
+        </button>
       </div>
 
       {appointments.length === 0 ? (
         emptyVariant === 'first-time' ? (
-          <div style={{ padding: '28px 16px', textAlign: 'center' }}>
-            <div style={{
-              width: 56, height: 56, borderRadius: '16px', margin: '0 auto 14px',
-              background: 'linear-gradient(145deg, rgba(56,182,255,0.12), rgba(56,182,255,0.04))',
-              border: '1px solid rgba(56,182,255,0.18)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-                <rect x="3" y="5" width="26" height="24" rx="4" stroke={C.blue500} strokeWidth="1.6"/>
-                <path d="M3 12h26M10 2v6M22 2v6" stroke={C.blue500} strokeWidth="1.6" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+          <div style={{ padding: '16px 8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
               No appointments yet
             </div>
-            <div style={{ fontSize: '13px', color: C.textSub, marginTop: '6px', lineHeight: 1.55, maxWidth: 260, marginInline: 'auto' }}>
-              Find a verified provider near you and book your first visit.
+            <div style={{ fontSize: '12px', color: C.textSub, marginTop: '6px', lineHeight: 1.5 }}>
+              Find a verified provider and book your first visit.
             </div>
-            <div style={{ marginTop: '18px' }}>
+            <div style={{ marginTop: '12px' }}>
               <GGButton variant="primary" size="sm" onClick={() => navigate('/app/services')}>
-                Book First Appointment →
+                Book first appointment
               </GGButton>
             </div>
           </div>
         ) : (
-          <div style={{ padding: '32px 0', textAlign: 'center' }}>
-            <svg width="36" height="36" viewBox="0 0 32 32" fill="none" style={{ margin: '0 auto 12px', display: 'block' }}>
-              <rect x="3" y="5" width="26" height="24" rx="4" stroke={C.border} strokeWidth="1.6"/>
-              <path d="M3 12h26M10 2v6M22 2v6" stroke={C.border} strokeWidth="1.6" strokeLinecap="round"/>
-            </svg>
-            <div style={{ fontSize: '14px', fontWeight: 600, color: C.textSub }}>No upcoming appointments</div>
-            <div style={{ fontSize: '12px', color: C.textLight, marginTop: '5px' }}>Book via Find Service</div>
+          <div style={{ padding: '8px 0 4px', textAlign: 'center' }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: C.textSub }}>No upcoming appointments</div>
+            <button
+              type="button"
+              onClick={() => navigate('/app/services')}
+              style={{
+                marginTop: 8,
+                background: 'none',
+                border: 'none',
+                padding: 0,
+                fontSize: '12px',
+                color: C.blue500,
+                fontWeight: 700,
+                cursor: 'pointer',
+              }}
+            >
+              Book via Find Service →
+            </button>
           </div>
         )
       ) : (
@@ -126,6 +127,7 @@ export function DashboardAppointmentsCard({
             return (
               <button
                 key={apt.id}
+                type="button"
                 onClick={handleClick}
                 style={{
                   all: 'unset',

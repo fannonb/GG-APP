@@ -13,7 +13,7 @@ export interface SpProfileCompletion {
   isComplete: boolean
   pendingLabels: string[]
   sections: Record<SpProfileSectionId, SpProfileSectionStatus>
-  settingsTab: 'profile' | 'account'
+  settingsTab: 'profile' | 'payouts'
 }
 
 function isFilled(value?: string | null) {
@@ -70,7 +70,7 @@ export function getSpProfileCompletion(
     .filter(section => !section.complete)
     .map(section => section.label)
 
-  const settingsTab = sections.payout.complete ? 'profile' : 'account'
+  const settingsTab = sections.payout.complete ? 'profile' : 'payouts'
 
   return {
     isComplete: pendingLabels.length === 0,

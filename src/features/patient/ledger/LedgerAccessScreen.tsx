@@ -41,7 +41,6 @@ export function LedgerAccessScreen() {
   return (
     <AppLayout
       title="Ledger Access Log"
-      subtitle="Every provider who has unlocked or viewed your health ledger"
       back
     >
       <div style={{ maxWidth: 760, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 20 }}>

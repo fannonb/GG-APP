@@ -9,5 +9,6 @@ export const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID ?? ''
 
 export const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? ''
 
-/** Secret admin portal token sent with admin login requests. */
-export const ADMIN_PORTAL_TOKEN = import.meta.env.VITE_ADMIN_PORTAL_TOKEN ?? ''
+// No VITE_ADMIN_PORTAL_TOKEN here on purpose (audit H2): a token baked into
+// the shipped bundle is not a secret. The admin types the portal key at
+// sign-in and it is sent only in the login request.

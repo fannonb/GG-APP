@@ -28,12 +28,18 @@ export function configuration() {
       accessTtl: process.env.JWT_ACCESS_TTL ?? '15m',
       refreshTtl: process.env.JWT_REFRESH_TTL ?? '30d',
       adminRefreshTtl: process.env.ADMIN_REFRESH_TTL ?? '60m',
+      // When true, web clients (X-Client: web) receive their refresh token in
+      // an httpOnly SameSite=Lax cookie instead of the JSON body, so the
+      // 30-day session handle never touches localStorage. Body-returned tokens
+      // are unchanged for native clients. Requires the API and web app to be
+      // on the same registrable domain (e.g. app. + api. example.com).
+      cookieMode: process.env.SESSION_COOKIE_MODE === 'true',
     },
     portal: {
       // Secret admin portal path/token. The path is used only by the frontend;
       // the token must be sent with admin login requests (X-Admin-Portal header).
-      adminPath: process.env.ADMIN_PORTAL_PATH ?? '',
-      adminToken: process.env.ADMIN_PORTAL_TOKEN ?? '',
+      adminPath: process.env.ADMIN_PORTAL_PATH ?? '/admin',
+      adminToken: process.env.ADMIN_PORTAL_TOKEN || (process.env.NODE_ENV === 'development' ? 'gg-admin-2026' : ''),
     },
     security: {
       fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY ?? '',
@@ -54,6 +60,12 @@ export function configuration() {
       googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
       googleMobileClientId: process.env.GOOGLE_CLIENT_ID_MOBILE ?? '',
       googleCallbackUrl: process.env.GOOGLE_CALLBACK_URL ?? '',
+      // Defense-in-depth: server-side allowlist of OAuth redirect URIs.
+      // Empty = validation disabled (Google's own console config still applies).
+      allowedRedirectUris: (process.env.GOOGLE_ALLOWED_REDIRECT_URIS ?? '')
+        .split(',')
+        .map(uri => uri.trim())
+        .filter(Boolean),
     },
     notifications: {
       vapidPublicKey: process.env.VAPID_PUBLIC_KEY ?? '',

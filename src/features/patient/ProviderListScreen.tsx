@@ -128,7 +128,12 @@ export function ProviderListScreen() {
   const locationActive = locState === 'active'
 
   return (
-    <AppLayout title={`${catName}s Near You`} subtitle={`${providers.length} verified providers found`} back notifCount={1}>
+    <AppLayout
+      title={`${catName}s Near You`}
+      status={providers.length > 0 ? `${providers.length} verified` : undefined}
+      back
+      notifCount={1}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: font.family }}>
         {(locState === 'idle' || locState === 'loading') && (
           <LocationBanner loading={locState === 'loading'} onAllow={() => requestLocation(true)} onSkip={skipLocation} />

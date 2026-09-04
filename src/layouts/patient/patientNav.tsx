@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react'
-import { ROUTES, route } from '@/router/routes'
+import { ROUTES } from '@/router/routes'
 import { C } from '@/design-system/tokens'
 
 export interface PatientNavItem {
@@ -13,8 +13,8 @@ export const PATIENT_NAV: PatientNavItem[] = [
   { id: 'dashboard',    label: 'Dashboard',      path: ROUTES.DASHBOARD },
   { id: 'services',     label: 'Find Service',   path: ROUTES.FIND_SERVICE, matchPaths: [ROUTES.FIND_SERVICE, ROUTES.BOOKING] },
   { id: 'appointments', label: 'Appointments',   path: ROUTES.APPOINTMENTS },
-  { id: 'prescriptions', label: 'Prescriptions', path: route.providerList('pharmacy'), matchPaths: [route.providerList('pharmacy'), ROUTES.PRESCRIPTION_REQUESTS] },
-  { id: 'credit',       label: 'Wallet',         path: ROUTES.CREDIT_WALLET },
+  { id: 'prescriptions', label: 'Prescriptions', path: ROUTES.PRESCRIPTION_REQUESTS, matchPaths: [ROUTES.PRESCRIPTION_REQUESTS] },
+  { id: 'credit',       label: 'Credit',         path: ROUTES.CREDIT_WALLET },
   { id: 'invoices',     label: 'Invoices',       path: ROUTES.INVOICE_LIST },
   { id: 'transactions', label: 'Transactions',   path: ROUTES.TRANSACTIONS },
   { id: 'ledger',       label: 'Health Ledger',  path: ROUTES.LEDGER },
@@ -27,8 +27,8 @@ export function isPatientNavActive(pathname: string, item: PatientNavItem) {
 }
 
 export function PatientNavIcon({ id, active }: { id: string; active: boolean }) {
-  const col = active ? C.blue500 : 'currentColor'
-  const op = active ? 1 : 0.6
+  const col = active ? C.navy800 : 'rgba(255,255,255,0.75)'
+  const op = 1
 
   const icons: Record<string, ReactElement> = {
     dashboard: (

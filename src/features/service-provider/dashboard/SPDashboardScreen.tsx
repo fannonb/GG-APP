@@ -9,20 +9,23 @@ import { AppointmentReminderBanner } from '@/components/AppointmentReminderBanne
 import { RejectedInvoiceAlertBanner } from '@/components/RejectedInvoiceAlertBanner'
 import { PaymentAlertBanner } from '@/components/PaymentAlertBanner'
 import { PrescriptionDecisionBanner } from '@/components/PrescriptionDecisionBanner'
+import { PrescriptionReadyAlertBanner } from '@/components/PrescriptionReadyAlertBanner'
 import { SPActionBanner } from '@/components/SPActionBanner'
-import { useHealthNews, useSPDashboard } from '@/hooks/api'
+import { useHealthNews, useMarkPrescriptionReadyMutation, useSPDashboard } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
 import {
+  buildPrescriptionReadyForPickupBannerItems,
   getUnreadCancelledAppointmentItems,
   getUnreadPrescriptionAcceptedItems,
   getUnreadPrescriptionDeclinedItems,
   getUnreadRescheduleAcceptedItems,
   getUnreadNewReviewItems,
+  type PrescriptionReadyForPickupBannerItem,
 } from '@/utils/sp-notifications'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route, ROUTES } from '@/router/routes'
-import { getAppointmentDisplayStatus, getAppointmentUrgency } from '@/utils/appointments'
+import { getAppointmentDisplayStatus, isUpcomingScheduleItem } from '@/utils/appointments'
 import {
   useAuthStore,
 } from '@/store/auth.store'
@@ -53,6 +56,7 @@ function saveSeenCancelledAppts(ids: Set<string>) {
 
 const SEEN_PRESCRIPTION_ACCEPTED_KEY = 'ggapp.spSeenPrescriptionAcceptedNotifications'
 const SEEN_PRESCRIPTION_DECLINED_KEY = 'ggapp.spSeenPrescriptionDeclinedNotifications'
+const SEEN_PRESCRIPTION_PAID_KEY = 'ggapp.spSeenPrescriptionPaidNotifications'
 const SEEN_RESCHEDULE_ACCEPTED_KEY = 'ggapp.spSeenRescheduleAcceptedNotifications'
 const SEEN_NEW_REVIEW_KEY = 'ggapp.spSeenNewReviewNotifications'
 
@@ -89,6 +93,7 @@ export function SPDashboardScreen() {
   const { data: healthNews } = useHealthNews()
   const { buildSetupSteps, onboardingComplete, profileSettingsTab } = useSpOnboardingProgress()
   const markNotificationRead = useMarkSPNotificationReadMutation()
+  const markPrescriptionReady = useMarkPrescriptionReadyMutation()
   const [seenCancelledApptIds, setSeenCancelledApptIds] = useState<Set<string>>(
     () => loadSeenCancelledAppts(),
   )
@@ -98,29 +103,29 @@ export function SPDashboardScreen() {
   const [seenPrescriptionDeclinedIds, setSeenPrescriptionDeclinedIds] = useState<Set<string>>(
     () => loadSeenIds(SEEN_PRESCRIPTION_DECLINED_KEY),
   )
+  const [seenPrescriptionPaidIds, setSeenPrescriptionPaidIds] = useState<Set<string>>(
+    () => loadSeenIds(SEEN_PRESCRIPTION_PAID_KEY),
+  )
   const [seenRescheduleAcceptedIds, setSeenRescheduleAcceptedIds] = useState<Set<string>>(
     () => loadSeenIds(SEEN_RESCHEDULE_ACCEPTED_KEY),
   )
   const [seenNewReviewIds, setSeenNewReviewIds] = useState<Set<string>>(
     () => loadSeenIds(SEEN_NEW_REVIEW_KEY),
   )
-  const [btnHover1, setBtnHover1] = useState(false)
-  const [btnHover2, setBtnHover2] = useState(false)
 
-  const upcomingAppointments = useMemo(
+  const allAppointments = data?.appointments ?? []
+
+  const upcomingSchedule = useMemo(
     () =>
-      (data?.appointments ?? [])
-        .filter(appointment => {
-          const status = getAppointmentDisplayStatus(appointment)
-          return status === 'new' || status === 'confirmed'
-        })
+      allAppointments
+        .filter(isUpcomingScheduleItem)
         .sort((a, b) => {
           const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime()
           if (dateCompare !== 0) return dateCompare
           return a.time.localeCompare(b.time)
         })
-        .slice(0, 5),
-    [data],
+        .slice(0, 8),
+    [allAppointments],
   )
 
   const prescriptionRequests = data?.prescriptionRequests ?? []
@@ -130,19 +135,18 @@ export function SPDashboardScreen() {
     [prescriptionRequests],
   )
 
-  const newRequestAppointment = useMemo(
-    () => upcomingAppointments.find(appointment => getAppointmentDisplayStatus(appointment) === 'new'),
-    [upcomingAppointments],
-  )
-
-  const upcomingConfirmedAppointment = useMemo(
+  const newRequestAppointments = useMemo(
     () =>
-      upcomingAppointments.find(appointment => {
-        if (getAppointmentDisplayStatus(appointment) !== 'confirmed') return false
-        return getAppointmentUrgency(appointment.date) !== null
-      }),
-    [upcomingAppointments],
+      allAppointments
+        .filter(appointment => getAppointmentDisplayStatus(appointment) === 'new')
+        .sort((a, b) => {
+          const dateCompare = new Date(a.date).getTime() - new Date(b.date).getTime()
+          if (dateCompare !== 0) return dateCompare
+          return a.time.localeCompare(b.time)
+        }),
+    [allAppointments],
   )
+  const newRequestAppointment = newRequestAppointments[0] ?? null
 
   const recentPayments = useMemo(() => (data?.payments ?? []).slice(0, 5), [data])
   const unreadCount = useMemo(
@@ -156,7 +160,7 @@ export function SPDashboardScreen() {
 
   if (isLoading || !data) {
     return (
-      <SPLayout title="Dashboard" subtitle="Today at a glance">
+      <SPLayout title="Dashboard">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading provider dashboard...
@@ -166,7 +170,7 @@ export function SPDashboardScreen() {
     )
   }
 
-  const { sp, patients, invoices, isPharmacy, isPharmacyOnly } = data
+  const { sp, invoices, isPharmacy, isPharmacyOnly } = data
   const countryConfig = getCountryByName(sp?.country || '')
   const rejectedInvoices = invoices.filter(invoice => invoice.status === 'rejected')
   const rejectedInvoiceItems = rejectedInvoices.map(invoice => ({
@@ -281,6 +285,41 @@ export function SPDashboardScreen() {
     navigate(target?.startsWith('/sp/') ? target : ROUTES.SP_INVOICES)
   }
 
+  const prescriptionReadyForPickupItems = useMemo(() => {
+    return buildPrescriptionReadyForPickupBannerItems(
+      data?.notifications ?? [],
+      data?.prescriptionRequests ?? [],
+      seenPrescriptionPaidIds,
+    )
+  }, [data?.notifications, data?.prescriptionRequests, seenPrescriptionPaidIds])
+
+  const markPrescriptionPaidSeen = (id: string) => {
+    setSeenPrescriptionPaidIds(prev => {
+      if (prev.has(id)) return prev
+      const next = new Set(prev)
+      next.add(id)
+      saveSeenIds(SEEN_PRESCRIPTION_PAID_KEY, next)
+      return next
+    })
+    if (!id.startsWith('rx-')) {
+      markNotificationRead.mutate(id)
+    }
+  }
+
+  const handlePrescriptionReadyDismiss = (items: PrescriptionReadyForPickupBannerItem[]) => {
+    items.forEach(item => markPrescriptionPaidSeen(item.id))
+  }
+
+  const handleMarkPrescriptionReady = async (item: PrescriptionReadyForPickupBannerItem) => {
+    await markPrescriptionReady.mutateAsync(item.prescriptionId)
+    markPrescriptionPaidSeen(item.id)
+  }
+
+  const handleViewPrescriptionReady = (item: PrescriptionReadyForPickupBannerItem) => {
+    markPrescriptionPaidSeen(item.id)
+    navigate(item.screen || route.spPrescription(item.prescriptionId))
+  }
+
   const setupSteps = buildSetupSteps(SETUP_STEP_DEFS)
   const doneCount = setupSteps.filter(step => step.status === 'done').length
   const handleStepAction = (stepN: number, ctaPath: string | null) => {
@@ -302,289 +341,121 @@ export function SPDashboardScreen() {
     day: 'numeric',
   })
 
-  const stats = [
-    { label: 'Total Earnings', value: formatCurrency(sp.totalEarnings), helper: 'All time' },
-    { label: 'This Month', value: formatCurrency(sp.monthlyEarnings), helper: 'Authorized this month' },
-    { label: 'Patients', value: String(sp.totalPatients), helper: 'Unique patients served' },
-  ]
+  const primaryKind =
+    rejectedInvoiceItems.length > 0
+      ? 'rejected'
+      : !isPharmacyOnly && newRequestAppointment
+        ? 'new-request'
+        : newPrescriptionRequest
+          ? 'new-prescription'
+          : null
+
+  const handleCancelledApptAction = (items: { id: string; screen?: string }[]) => {
+    items.forEach(item => markCancelledApptSeen(item.id))
+    const target = items[0]?.screen
+    navigate(target?.startsWith('/sp/') ? target : ROUTES.SP_APPOINTMENTS)
+  }
+
+  const handleCancelledApptDismiss = (items: { id: string }[]) => {
+    items.forEach(item => markCancelledApptSeen(item.id))
+  }
+
+  const handlePrescriptionAcceptedDismiss = (items: { id: string }[]) => {
+    items.forEach(item => markPrescriptionAcceptedSeen(item.id))
+  }
+
+  const handlePrescriptionDeclinedDismiss = (items: { id: string }[]) => {
+    items.forEach(item => markPrescriptionDeclinedSeen(item.id))
+  }
+
+  const handleRescheduleAcceptedDismiss = (items: { id: string }[]) => {
+    items.forEach(item => markRescheduleAcceptedSeen(item.id))
+  }
+
+  const handleNewReviewDismiss = (items: { id: string }[]) => {
+    items.forEach(item => markNewReviewSeen(item.id))
+  }
 
   return (
-    <SPLayout title="Dashboard" subtitle="Today at a glance" notifCount={unreadCount}>
+    <SPLayout title="Dashboard" notifCount={unreadCount}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
-        {/* Hero Card */}
-        <GGCard
-          padding="0"
+        <div
           style={{
-            background: 'linear-gradient(140deg, #091C44 0%, #12244F 52%, #050E22 100%)',
-            color: '#FFFFFF',
-            border: '1px solid rgba(56, 182, 255, 0.22)',
-            position: 'relative',
-            overflow: 'hidden',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: '16px',
+            fontFamily: font.family,
           }}
         >
-          {/* Background atmosphere glow */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: `
-                radial-gradient(circle at 88% -10%, rgba(56, 182, 255, 0.30) 0%, transparent 58%),
-                radial-gradient(circle at 6% 130%, rgba(56, 182, 255, 0.10) 0%, transparent 46%)
-              `,
-              pointerEvents: 'none',
-            }}
-          />
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <div
+                style={{
+                  fontSize: isMobile ? '20px' : '28px',
+                  fontWeight: 800,
+                  color: C.text,
+                  letterSpacing: '-0.04em',
+                  fontFamily: font.family,
+                }}
+              >
+                {greeting}, {sp.name}
+              </div>
+              {countryConfig && (
+                <FlagImg
+                  code={countryConfig.code}
+                  size={isMobile ? 16 : 20}
+                  style={{ borderRadius: '3px' }}
+                />
+              )}
+            </div>
+            <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>
+              {today}
+            </div>
 
-          <div style={{ position: 'relative', zIndex: 1, padding: isMobile ? '20px 18px' : '28px 32px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '20px', alignItems: isMobile ? 'stretch' : 'center', flexDirection: isMobile ? 'column' : 'row' }}>
-              <div style={{ minWidth: 0 }}>
-                <div
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+              {(sp.categories && sp.categories.length > 0 ? sp.categories : [sp.type]).map(categoryLabel => (
+                <span
+                  key={categoryLabel}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: '6px',
-                    background: 'rgba(56, 182, 255, 0.12)',
-                    border: '1px solid rgba(56, 182, 255, 0.30)',
+                    fontSize: '12px',
+                    fontWeight: 700,
+                    color: C.navy800,
+                    background: C.blue100,
                     padding: '4px 12px',
                     borderRadius: radius.full,
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    color: '#8ADCFF',
-                    marginBottom: '10px',
-                    letterSpacing: '0.02em',
-                    textTransform: 'uppercase',
+                    border: '1px solid rgba(56, 182, 255, 0.3)',
                     fontFamily: font.family,
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8ADCFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                  {today}
-                </div>
-
-                <div style={{ fontSize: isMobile ? '22px' : '30px', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.2, color: '#FFFFFF', fontFamily: font.family }}>
-                  {greeting}, <span style={{ color: '#38B6FF' }}>{sp.name}</span>
-                </div>
-
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
-                  {(sp.categories && sp.categories.length > 0 ? sp.categories : [sp.type]).map(categoryLabel => (
-                    <span
-                      key={categoryLabel}
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        fontSize: '11px',
-                        fontWeight: 700,
-                        color: '#8ADCFF',
-                        background: 'rgba(56,182,255,0.14)',
-                        padding: '4px 10px',
-                        borderRadius: radius.sm,
-                        border: '1px solid rgba(56,182,255,0.32)',
-                        fontFamily: font.family,
-                      }}
-                    >
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8ADCFF" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" /></svg>
-                      {categoryLabel}
-                    </span>
-                  ))}
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      color: '#E6F5FF',
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      padding: '4px 10px',
-                      borderRadius: radius.sm,
-                      border: '1px solid rgba(255, 255, 255, 0.16)',
-                      fontFamily: font.family,
-                    }}
-                  >
-                    {countryConfig && (
-                      <FlagImg
-                        code={countryConfig.code}
-                        size={14}
-                        style={{ borderRadius: '2px', display: 'inline-block' }}
-                      />
-                    )}
-                    {sp.country}
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
-                {!isPharmacyOnly && (
-                  <button
-                    type="button"
-                    onMouseEnter={() => setBtnHover1(true)}
-                    onMouseLeave={() => setBtnHover1(false)}
-                    onClick={() => navigate(ROUTES.SP_APPOINTMENTS)}
-                    style={{
-                      flex: isMobile ? 1 : 'none',
-                      justifyContent: 'center',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 16px',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      fontFamily: font.family,
-                      borderRadius: radius.sm,
-                      border: '1px solid rgba(255, 255, 255, 0.28)',
-                      background: btnHover1 ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                      color: '#FFFFFF',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2" /><line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" /><line x1="3" y1="10" x2="21" y2="10" /></svg>
-                    Appointments
-                  </button>
-                )}
-                {isPharmacy && (
-                  <button
-                    type="button"
-                    onMouseEnter={() => setBtnHover1(true)}
-                    onMouseLeave={() => setBtnHover1(false)}
-                    onClick={() => navigate(ROUTES.SP_PRESCRIPTIONS)}
-                    style={{
-                      flex: isMobile ? 1 : 'none',
-                      justifyContent: 'center',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 16px',
-                      fontSize: '13px',
-                      fontWeight: 700,
-                      fontFamily: font.family,
-                      borderRadius: radius.sm,
-                      border: '1px solid rgba(255, 255, 255, 0.28)',
-                      background: btnHover1 ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                      color: '#FFFFFF',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
-                    Prescriptions
-                  </button>
-                )}
-                {!isPharmacyOnly && (
-                  <button
-                    type="button"
-                    onMouseEnter={() => setBtnHover2(true)}
-                    onMouseLeave={() => setBtnHover2(false)}
-                    onClick={() => navigate(ROUTES.SP_INVOICE_UPLOAD)}
-                    style={{
-                      flex: isMobile ? 1 : 'none',
-                      justifyContent: 'center',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '10px 16px',
-                      fontSize: '13px',
-                      fontWeight: 800,
-                      fontFamily: font.family,
-                      borderRadius: radius.sm,
-                      border: 'none',
-                      background: btnHover2 ? '#0D99FF' : '#38B6FF',
-                      color: '#FFFFFF',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s ease',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></svg>
-                    Upload Invoice
-                  </button>
-                )}
-              </div>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: C.blue500 }} />
+                  {categoryLabel}
+                </span>
+              ))}
             </div>
           </div>
-        </GGCard>
+        </div>
 
-        {rejectedInvoiceItems.length > 0 && (
+        {primaryKind === 'rejected' && (
           <RejectedInvoiceAlertBanner
             items={rejectedInvoiceItems}
             onAction={item => navigate(route.spInvoice(item.id))}
           />
         )}
 
-        {paymentItems.length > 0 && (
-          <PaymentAlertBanner
-            audience="sp"
-            items={paymentItems}
-            onAction={handlePaymentBannerAction}
+        {primaryKind === 'new-request' && newRequestAppointment && (
+          <AppointmentReminderBanner
+            appointment={newRequestAppointment}
+            variant="new-request"
+            onView={() => navigate(route.spAppointment(newRequestAppointment.id))}
           />
         )}
 
-          <PrescriptionDecisionBanner
-            variant="accepted"
-            items={prescriptionAcceptedItems}
-            onAction={handlePrescriptionAcceptedAction}
-            onDismiss={items => items.forEach(item => markPrescriptionAcceptedSeen(item.id))}
-          />
-
-          <PrescriptionDecisionBanner
-            variant="declined"
-            items={prescriptionDeclinedItems}
-            onAction={handlePrescriptionDeclinedAction}
-            onDismiss={items => items.forEach(item => markPrescriptionDeclinedSeen(item.id))}
-          />
-
-        <SPActionBanner
-          items={cancelledApptItems}
-          title={count => count > 1 ? `${count} appointments cancelled by patients` : 'Appointment cancelled by patient'}
-          actionLabel="View Appointments →"
-          onAction={items => {
-            items.forEach(item => markCancelledApptSeen(item.id))
-            const target = items[0]?.screen
-            navigate(target?.startsWith('/sp/') ? target : ROUTES.SP_APPOINTMENTS)
-          }}
-          onDismiss={items => items.forEach(item => markCancelledApptSeen(item.id))}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-              <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
-              <path d="M2 8.5h18M7 2v3M15 2v3" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M7.5 11.5h7M11 8v7" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" transform="rotate(45 11 11.5)"/>
-            </svg>
-          }
-        />
-
-        <SPActionBanner
-          items={rescheduleAcceptedItems}
-          title={count => count > 1 ? `${count} reschedules accepted` : 'Reschedule accepted'}
-          actionLabel="View Appointment →"
-          onAction={handleRescheduleAcceptedAction}
-          onDismiss={items => items.forEach(item => markRescheduleAcceptedSeen(item.id))}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-              <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
-              <path d="M2 8.5h18M7 2v3M15 2v3" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/>
-              <path d="M7 13l2.5 2.5 5.5-5" stroke="#fff" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-            </svg>
-          }
-        />
-
-        <SPActionBanner
-          items={newReviewItems}
-          title={count => count > 1 ? `${count} new patient reviews` : 'New patient review'}
-          actionLabel="View Review →"
-          onAction={handleNewReviewAction}
-          onDismiss={items => items.forEach(item => markNewReviewSeen(item.id))}
-          icon={
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-              <path d="M11 2.5l2.6 5.3 5.8.85-4.2 4.1 1 5.75L11 15.7l-5.2 2.8 1-5.75-4.2-4.1 5.8-.85z" stroke="#fff" strokeWidth="1.4" strokeLinejoin="round"/>
-            </svg>
-          }
-        />
-
-        {newPrescriptionRequest && (
+        {primaryKind === 'new-prescription' && newPrescriptionRequest && (
           <div
             style={{
               padding: isMobile ? '14px 16px' : '18px 22px',
@@ -598,6 +469,22 @@ export function SPDashboardScreen() {
               fontFamily: font.family,
             }}
           >
+            <div style={{
+              width: isMobile ? 38 : 46,
+              height: isMobile ? 38 : 46,
+              borderRadius: '12px',
+              background: '#F59E0B',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              boxShadow: '0 3px 10px rgba(245,158,11,0.35)',
+            }}>
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <rect x="4" y="2" width="14" height="18" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
+                <path d="M8 7h6M8 11h6M8 15h3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            </div>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E', marginBottom: '3px' }}>
                 New prescription upload
@@ -610,54 +497,131 @@ export function SPDashboardScreen() {
               variant="primary"
               size="sm"
               onClick={() => navigate(route.spPrescription(newPrescriptionRequest.id))}
+              style={{
+                background: '#F59E0B',
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(245,158,11,0.30)',
+                flexShrink: 0,
+                width: isMobile ? '100%' : 'auto',
+              }}
             >
               Review Prescription →
             </GGButton>
           </div>
         )}
 
-        {!isPharmacyOnly && newRequestAppointment && (
-          <AppointmentReminderBanner
-            appointment={newRequestAppointment}
-            variant="new-request"
-            onView={() => navigate(route.spAppointment(newRequestAppointment.id))}
+        {prescriptionReadyForPickupItems.length > 0 && (
+          <PrescriptionReadyAlertBanner
+            items={prescriptionReadyForPickupItems}
+            onMarkReady={handleMarkPrescriptionReady}
+            onView={handleViewPrescriptionReady}
+            onDismiss={handlePrescriptionReadyDismiss}
           />
         )}
 
-        {!isPharmacyOnly && upcomingConfirmedAppointment && (
-          <AppointmentReminderBanner
-            appointment={upcomingConfirmedAppointment}
-            variant="upcoming"
-            onView={() => navigate(route.spAppointment(upcomingConfirmedAppointment.id))}
+        {paymentItems.length > 0 && (
+          <PaymentAlertBanner
+            audience="sp"
+            items={paymentItems}
+            onAction={handlePaymentBannerAction}
           />
         )}
 
-        {/* Stats Section */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(auto-fit, minmax(200px, 1fr))', gap: isMobile ? '10px' : '12px' }}>
-          {stats.map((stat, idx) => (
-            <GGCard
-              key={stat.label}
-              padding={isMobile ? '14px 16px' : '20px'}
-              style={{ gridColumn: isMobile && idx === 0 ? 'span 2' : 'auto' }}
-            >
-              <div style={{ fontSize: '11px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontFamily: font.family }}>
-                {stat.label}
-              </div>
-              <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
-                {stat.value}
-              </div>
-              <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>{stat.helper}</div>
-            </GGCard>
-          ))}
-        </div>
+        {prescriptionAcceptedItems.length > 0 && (
+          <PrescriptionDecisionBanner
+            variant="accepted"
+            items={prescriptionAcceptedItems}
+            onAction={handlePrescriptionAcceptedAction}
+            onDismiss={handlePrescriptionAcceptedDismiss}
+          />
+        )}
+
+        {prescriptionDeclinedItems.length > 0 && (
+          <PrescriptionDecisionBanner
+            variant="declined"
+            items={prescriptionDeclinedItems}
+            onAction={handlePrescriptionDeclinedAction}
+            onDismiss={handlePrescriptionDeclinedDismiss}
+          />
+        )}
+
+        {cancelledApptItems.length > 0 && (
+          <SPActionBanner
+            items={cancelledApptItems}
+            title={count => count > 1 ? `${count} appointments cancelled` : 'Appointment cancelled'}
+            actionLabel="View appointments"
+            icon={
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
+                <path d="M2 8.5h18M7 2v3M15 2v3" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/>
+                <path d="M8.5 9l5 5M13.5 9l-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/>
+              </svg>
+            }
+            onAction={handleCancelledApptAction}
+            onDismiss={handleCancelledApptDismiss}
+          />
+        )}
+
+        {rescheduleAcceptedItems.length > 0 && (
+          <SPActionBanner
+            items={rescheduleAcceptedItems}
+            title={count => count > 1 ? `${count} reschedules accepted` : 'Reschedule accepted'}
+            actionLabel="View appointment"
+            icon={
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <circle cx="11" cy="11" r="8" stroke="#fff" strokeWidth="1.5"/>
+                <path d="M11 7v4l2.5 1.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
+              </svg>
+            }
+            onAction={handleRescheduleAcceptedAction}
+            onDismiss={handleRescheduleAcceptedDismiss}
+          />
+        )}
+
+        {newReviewItems.length > 0 && (
+          <SPActionBanner
+            items={newReviewItems}
+            title={count => count > 1 ? `${count} new patient reviews` : 'New patient review'}
+            actionLabel="View review"
+            icon={
+              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
+                <path d="M11 3.5l2.1 4.3 4.7.7-3.4 3.3.8 4.7L11 14.3 6.8 16.5l.8-4.7-3.4-3.3 4.7-.7L11 3.5z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
+              </svg>
+            }
+            onAction={handleNewReviewAction}
+            onDismiss={handleNewReviewDismiss}
+          />
+        )}
+
+        <button
+          type="button"
+          onClick={() => navigate(ROUTES.SP_PAYMENTS)}
+          style={{
+            all: 'unset',
+            display: 'block',
+            cursor: 'pointer',
+            boxSizing: 'border-box',
+          }}
+        >
+          <GGCard padding={isMobile ? '14px 16px' : '20px'}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontFamily: font.family }}>
+              This Month
+            </div>
+            <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
+              {formatCurrency(sp.monthlyEarnings)}
+            </div>
+            <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>
+              Authorized this month · View payments
+            </div>
+          </GGCard>
+        </button>
 
         <SPDashboardWorkspace
-          upcomingAppointments={upcomingAppointments}
+          upcomingSchedule={upcomingSchedule}
           prescriptionRequests={prescriptionRequests}
           showAppointments={!isPharmacyOnly}
-          showPrescriptions={Boolean(isPharmacy || sp.isPharmacy)}
+          showPrescriptions={Boolean(isPharmacyOnly || isPharmacy || sp.isPharmacy)}
           recentPayments={recentPayments}
-          patientsCount={patients.length}
           onboardingComplete={onboardingComplete}
           setupSteps={setupSteps}
           doneCount={doneCount}

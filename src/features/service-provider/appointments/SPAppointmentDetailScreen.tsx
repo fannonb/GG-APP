@@ -9,7 +9,7 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { useAttachmentPreviewUrl } from '@/hooks/useAttachmentPreviewUrl'
 import { ROUTES } from '@/router/routes'
 import { formatDate, formatPhone } from '@/utils/format'
-import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import { appointmentHasRecordedVisit, getAppointmentDisplayStatus } from '@/utils/appointments'
 import { downloadInvoiceAttachment, isImageAttachmentUrl } from '@/utils/invoice-attachment'
 import type { Appointment, Attachment } from '@/types/appointment.types'
 
@@ -174,7 +174,7 @@ export function SPAppointmentDetailScreen() {
 
   if (isLoading && !apt) {
     return (
-      <SPLayout title="Appointment Detail" subtitle="Loading appointment...">
+      <SPLayout title="Appointment Detail">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading appointment details...
@@ -186,7 +186,7 @@ export function SPAppointmentDetailScreen() {
 
   if (!apt) {
     return (
-      <SPLayout title="Appointment Detail" subtitle="Appointment not found">
+      <SPLayout title="Appointment Detail">
         <GGCard padding="24px">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
@@ -204,6 +204,7 @@ export function SPAppointmentDetailScreen() {
   const displayStatus = getAppointmentDisplayStatus(apt)
   const s = statusMap[displayStatus] ?? statusMap.new
   const isInvoiceUploaded = !!apt.hasInvoice
+  const hasRecordedVisit = appointmentHasRecordedVisit(apt)
   const isUpdatingStatus = updateAppointmentStatusMutation.isPending
   const isRescheduling = rescheduleAppointmentMutation.isPending
   const isActionBusy = isUpdatingStatus || isRescheduling
@@ -448,14 +449,18 @@ export function SPAppointmentDetailScreen() {
               </GGButton>
             </>}
             {displayStatus === 'confirmed' && <>
-              <GGButton variant="success" size="md" fullWidth onClick={() => navigate('/sp/visits/record', { state: { ctx: { patientId: apt.patientId, patientName: apt.patient, appointmentId: apt.id, conditions: apt.medicalHistory, allergies: apt.allergies } } })}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4.5 7h5M7 4.5v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
-                Record Visit
-              </GGButton>
-              <GGButton variant="primary" size="md" fullWidth onClick={() => navigate('/sp/invoices/upload', { state: { prefill: { appointmentId: apt.id, patientId: apt.patientId, patientName: apt.patient } } })}>
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="0.5" width="11" height="13" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-                Upload Invoice
-              </GGButton>
+              {!hasRecordedVisit && (
+                <GGButton variant="success" size="md" fullWidth onClick={() => navigate('/sp/visits/record', { state: { ctx: { patientId: apt.patientId, patientName: apt.patient, appointmentId: apt.id, conditions: apt.medicalHistory, allergies: apt.allergies } } })}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="1.5" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4.5 7h5M7 4.5v5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>
+                  Record Visit
+                </GGButton>
+              )}
+              {hasRecordedVisit && !isInvoiceUploaded && (
+                <GGButton variant="primary" size="md" fullWidth onClick={() => navigate(ROUTES.SP_INVOICE_UPLOAD, { state: { prefill: { appointmentId: apt.id, patientId: apt.patientId, patientName: apt.patient, visitId: apt.visitId } } })}>
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="0.5" width="11" height="13" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                  Upload Invoice
+                </GGButton>
+              )}
               <GGButton
                 variant="secondary"
                 size="md"
@@ -477,10 +482,16 @@ export function SPAppointmentDetailScreen() {
         <GGCard padding="20px">
           <SectionLabel>Actions</SectionLabel>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '9px' }}>
-            <GGButton variant="primary" size="md" fullWidth onClick={() => navigate('/sp/invoices/upload', { state: { prefill: { appointmentId: apt.id, patientId: apt.patientId, patientName: apt.patient } } })}>
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="0.5" width="11" height="13" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
-              Upload Invoice
-            </GGButton>
+            {!hasRecordedVisit ? (
+              <GGButton variant="success" size="md" fullWidth onClick={() => navigate('/sp/visits/record', { state: { ctx: { patientId: apt.patientId, patientName: apt.patient, appointmentId: apt.id, conditions: apt.medicalHistory, allergies: apt.allergies } } })}>
+                Record Visit
+              </GGButton>
+            ) : (
+              <GGButton variant="primary" size="md" fullWidth onClick={() => navigate(ROUTES.SP_INVOICE_UPLOAD, { state: { prefill: { appointmentId: apt.id, patientId: apt.patientId, patientName: apt.patient, visitId: apt.visitId } } })}>
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1.5" y="0.5" width="11" height="13" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M4 4h6M4 7h6M4 10h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/></svg>
+                Upload Invoice
+              </GGButton>
+            )}
           </div>
         </GGCard>
       )}
@@ -558,7 +569,11 @@ export function SPAppointmentDetailScreen() {
   )
 
   return (
-    <SPLayout title="Appointment Detail" subtitle={`${apt.patient} · ${apt.id}`} notifCount={2}>
+    <SPLayout
+      title="Appointment Detail"
+      status={displayStatus === 'new' ? 'New request' : displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1)}
+      notifCount={2}
+    >
       {viewingAtt && (
         <AppointmentAttachmentModal
           attachment={viewingAtt}

@@ -29,23 +29,41 @@ function InfoRow({ label, val }: { label: string; val: React.ReactNode }) {
 
 function FulfillmentBanner({ request }: { request: PrescriptionRequest }) {
   const isDelivery = request.fulfillmentMode === 'delivery'
+  const isPaid = request.invoiceStatus === 'paid' || request.invoiceStatus === 'authorized'
+  const isReady = request.status === 'ready'
+  const isFulfilled = request.status === 'fulfilled'
+
+  let statusText = isDelivery
+    ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. Include delivery charges when accepting.`
+    : 'Patient will collect from your pharmacy after they approve preparation.'
+
+  if (isFulfilled) {
+    statusText = isDelivery ? 'Order successfully delivered.' : 'Order successfully collected by patient.'
+  } else if (isReady) {
+    statusText = isDelivery
+      ? 'Order is out for delivery. Confirm once delivered.'
+      : 'Order is ready at pharmacy. Confirm once patient collects.'
+  } else if (isPaid) {
+    statusText = isDelivery
+      ? 'Payment authorized. Package order and mark ready for delivery.'
+      : 'Payment authorized. Prepare medication and mark ready for pickup.'
+  }
+
   return (
     <div
       style={{
         padding: '14px 16px',
         borderRadius: radius.sm,
-        border: `1.5px solid ${isDelivery ? 'rgba(245,166,35,0.45)' : 'rgba(74,173,223,0.45)'}`,
-        background: isDelivery ? C.warningBg : C.blue100,
+        border: `1.5px solid ${isPaid ? 'rgba(16, 185, 129, 0.45)' : isDelivery ? 'rgba(245,166,35,0.45)' : 'rgba(74,173,223,0.45)'}`,
+        background: isPaid ? 'rgba(16, 185, 129, 0.08)' : isDelivery ? C.warningBg : C.blue100,
         marginBottom: '16px',
       }}
     >
-      <div style={{ fontSize: '13px', fontWeight: 800, color: isDelivery ? '#8A4D00' : '#1A5D8A', marginBottom: 4 }}>
-        {isDelivery ? 'Delivery requested' : 'Pickup requested'}
+      <div style={{ fontSize: '13px', fontWeight: 800, color: isPaid ? '#065F46' : isDelivery ? '#8A4D00' : '#1A5D8A', marginBottom: 4 }}>
+        {isDelivery ? 'Delivery requested' : 'Pickup requested'} {isPaid && '· Paid'}
       </div>
-      <div style={{ fontSize: '12px', color: isDelivery ? '#8A4D00' : '#1A5D8A', lineHeight: 1.55 }}>
-        {isDelivery
-          ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. Include delivery charges when accepting.`
-          : 'Patient will collect from your pharmacy after they approve preparation.'}
+      <div style={{ fontSize: '12px', color: isPaid ? '#047857' : isDelivery ? '#8A4D00' : '#1A5D8A', lineHeight: 1.55 }}>
+        {statusText}
       </div>
     </div>
   )
@@ -162,7 +180,7 @@ export function SPPrescriptionDetailScreen() {
 
   if (isLoading && !request) {
     return (
-      <SPLayout title="Prescription Request" subtitle="Loading…" back>
+      <SPLayout title="Prescription Request" back>
         <GGCard padding="24px"><div style={{ color: C.textSub }}>Loading prescription request…</div></GGCard>
       </SPLayout>
     )
@@ -170,7 +188,7 @@ export function SPPrescriptionDetailScreen() {
 
   if (!request) {
     return (
-      <SPLayout title="Prescription Request" subtitle="Not found" back>
+      <SPLayout title="Prescription Request" back>
         <GGCard padding="24px"><div style={{ color: C.textSub }}>This prescription request could not be found.</div></GGCard>
       </SPLayout>
     )
@@ -183,7 +201,10 @@ export function SPPrescriptionDetailScreen() {
   const canUploadInvoice = request.status === 'accepted' && !request.invoiceId
   const awaitingPatientApproval =
     request.status === 'accepted' && !!request.invoiceId && request.invoiceStatus === 'pending_auth'
+  const isPaid = request.invoiceStatus === 'paid' || request.invoiceStatus === 'authorized'
   const canMarkReady = request.status === 'accepted' || request.status === 'preparing'
+  const isReadyForPickup = request.fulfillmentMode === 'pickup' && isPaid && canMarkReady
+  const isReadyForDelivery = request.fulfillmentMode === 'delivery' && isPaid && canMarkReady
   const canFulfill = request.status === 'ready'
   const isDelivery = request.fulfillmentMode === 'delivery'
   const patientCountry = getCountryByCode(request.countryCode ?? '')
@@ -285,7 +306,7 @@ export function SPPrescriptionDetailScreen() {
   }
 
   return (
-    <SPLayout title={request.id} subtitle={`${request.patient ?? 'Patient'} · ${request.for}`} back>
+    <SPLayout title={request.id} back>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: '20px', fontFamily: font.family }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <GGCard padding="24px">
@@ -325,6 +346,136 @@ export function SPPrescriptionDetailScreen() {
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Request Details</div>
               <GGBadge type={request.status === 'rejected' ? 'error' : 'info'}>{request.status}</GGBadge>
             </div>
+
+            {isReadyForPickup && (
+              <div
+                style={{
+                  padding: '16px 18px',
+                  borderRadius: radius.md,
+                  border: '1.5px solid rgba(16, 185, 129, 0.45)',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 182, 255, 0.10) 100%)',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '14px',
+                  flexWrap: 'wrap',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.12)',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: 200 }}>
+                  <div
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                      <line x1="12" y1="22.08" x2="12" y2="12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46', marginBottom: 2 }}>
+                      Prescription Paid · Ready for Pickup
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#047857', lineHeight: 1.5 }}>
+                      Payment has been confirmed. Prepare medication and mark it ready for pickup so the patient can collect it.
+                    </div>
+                  </div>
+                </div>
+                <GGButton
+                  variant="primary"
+                  size="sm"
+                  loading={readyMutation.isPending}
+                  onClick={() => void handleReady()}
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    border: 'none',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  Mark Ready for Pickup
+                </GGButton>
+              </div>
+            )}
+
+            {isReadyForDelivery && (
+              <div
+                style={{
+                  padding: '16px 18px',
+                  borderRadius: radius.md,
+                  border: '1.5px solid rgba(16, 185, 129, 0.45)',
+                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 182, 255, 0.10) 100%)',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '14px',
+                  flexWrap: 'wrap',
+                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.12)',
+                }}
+              >
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: 200 }}>
+                  <div
+                    style={{
+                      width: 42,
+                      height: 42,
+                      borderRadius: '10px',
+                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    }}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="1" y="3" width="15" height="13" rx="1" />
+                      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
+                      <circle cx="5.5" cy="18.5" r="2.5" />
+                      <circle cx="18.5" cy="18.5" r="2.5" />
+                    </svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46', marginBottom: 2 }}>
+                      Prescription Paid · Ready for Delivery
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#047857', lineHeight: 1.5 }}>
+                      Payment has been confirmed. Prepare medication and mark it ready for delivery to dispatch.
+                    </div>
+                  </div>
+                </div>
+                <GGButton
+                  variant="primary"
+                  size="sm"
+                  loading={readyMutation.isPending}
+                  onClick={() => void handleReady()}
+                  style={{
+                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                    border: 'none',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                    fontWeight: 700,
+                    flexShrink: 0,
+                  }}
+                >
+                  Mark Ready for Delivery
+                </GGButton>
+              </div>
+            )}
+
             <FulfillmentBanner request={request} />
             <InfoRow label="Submitted" val={formatDate(request.submittedAt)} />
             <InfoRow label="For" val={request.for} />
@@ -511,7 +662,24 @@ export function SPPrescriptionDetailScreen() {
                 Patient approved. Prepare the medication, mark ready, then confirm {isDelivery ? 'delivery' : 'pickup'}.
               </div>
               {canMarkReady && (
-                <GGButton variant="secondary" size="md" fullWidth loading={readyMutation.isPending} onClick={() => void handleReady()} style={{ marginBottom: '10px' }}>
+                <GGButton
+                  variant={isPaid ? 'primary' : 'secondary'}
+                  size="md"
+                  fullWidth
+                  loading={readyMutation.isPending}
+                  onClick={() => void handleReady()}
+                  style={{
+                    marginBottom: '10px',
+                    ...(isPaid
+                      ? {
+                          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+                          border: 'none',
+                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
+                          fontWeight: 700,
+                        }
+                      : {}),
+                  }}
+                >
                   Mark Ready for {isDelivery ? 'Delivery' : 'Pickup'}
                 </GGButton>
               )}

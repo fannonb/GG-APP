@@ -22,7 +22,7 @@ export function PrescriptionConfirmScreen() {
   }
 
   return (
-    <AppLayout title="Prescription Sent" subtitle="Pending pharmacy review" back notifCount={1}>
+    <AppLayout title="Prescription Sent" status="Pending review" back notifCount={1}>
       <div style={{ maxWidth: 520, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="48px 40px" style={{ textAlign: 'center' }}>
           <div style={{ width: 80, height: 80, borderRadius: '50%', background: C.successBg, margin: '0 auto 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: `3px solid rgba(34,201,138,0.25)` }}>

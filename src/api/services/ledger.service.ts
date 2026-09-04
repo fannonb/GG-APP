@@ -1,6 +1,7 @@
 import { isMockApi } from '@/api/config'
 import { apiClient } from '@/api/client'
 import { mockDelay } from '@/api/mock/delay'
+import { ApiError } from '@/api/types'
 import {
   MOCK_LEDGER_ACCESS_LOG,
   MOCK_LEDGER_ENTRIES,
@@ -12,6 +13,7 @@ import type {
   LedgerResponse,
   LedgerStatusResponse,
   SetupLedgerPinPayload,
+  ResetLedgerPinPayload,
   UnlockLedgerPayload,
   UnlockLedgerResponse,
 } from '@/types/ledger.types'
@@ -34,6 +36,9 @@ function filterEntries(entries: typeof MOCK_LEDGER_ENTRIES, beneficiaryId?: stri
 }
 
 
+let mockPatientPin = '1234'
+const mockUnlockedPatients = new Set<string>()
+
 export const ledgerService = {
   async setupPin(payload: SetupLedgerPinPayload): Promise<{ configured: boolean; message: string }> {
     if (isMockApi) {
@@ -41,15 +46,40 @@ export const ledgerService = {
       if (payload.pin !== payload.confirmPin) {
         throw new Error('PIN confirmation does not match')
       }
+      mockPatientPin = payload.pin
+      mockUnlockedPatients.clear()
+      MOCK_LEDGER_STATUS.hasPin = true
       return { configured: true, message: 'Ledger PIN created successfully.' }
     }
     const { data } = await apiClient.post('/patient/ledger/pin', payload)
     return data
   },
 
+  async resetPin(payload: ResetLedgerPinPayload): Promise<{ configured: boolean; message: string }> {
+    if (isMockApi) {
+      await mockDelay(400)
+      if (!payload.password.trim()) {
+        throw new Error('Account password is required')
+      }
+      if (payload.pin !== payload.confirmPin) {
+        throw new Error('PIN confirmation does not match')
+      }
+      mockPatientPin = payload.pin
+      mockUnlockedPatients.clear()
+      MOCK_LEDGER_STATUS.hasPin = true
+      MOCK_LEDGER_STATUS.pinExpired = false
+      return { configured: true, message: 'Ledger PIN reset. Existing provider access has been revoked.' }
+    }
+    const { data } = await apiClient.post('/patient/ledger/pin/reset', payload)
+    return data
+  },
+
   async revokePin(): Promise<{ configured: boolean; message: string }> {
     if (isMockApi) {
       await mockDelay(300)
+      mockPatientPin = ''
+      mockUnlockedPatients.clear()
+      MOCK_LEDGER_STATUS.hasPin = false
       return { configured: false, message: 'Ledger PIN revoked. All provider access has been removed.' }
     }
     const { data } = await apiClient.delete('/patient/ledger/pin')
@@ -108,14 +138,16 @@ export const ledgerService = {
   async unlock(payload: UnlockLedgerPayload): Promise<UnlockLedgerResponse> {
     if (isMockApi) {
       await mockDelay(500)
-      if (payload.pin !== '1234') {
+      if (!mockPatientPin || payload.pin !== mockPatientPin) {
         throw new Error(
           'Unable to unlock the ledger. Check the Ledger PIN, then try again.',
         )
       }
+      const pId = payload.patientId ?? 'patient-1'
+      mockUnlockedPatients.add(pId)
       return {
         grantId: `grant-${Date.now()}`,
-        patientId: payload.patientId ?? 'patient-1',
+        patientId: pId,
         patientName: 'Rutendo Moyo',
         unlockedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
@@ -128,6 +160,12 @@ export const ledgerService = {
   async getLedger(patientId: string, beneficiaryId?: string): Promise<LedgerResponse> {
     if (isMockApi) {
       await mockDelay(300)
+      if (!mockUnlockedPatients.has(patientId)) {
+        throw new ApiError(
+          'You need the patient\'s ledger PIN to view their treatment history. Ask the patient to share it, then unlock the ledger.',
+          403,
+        )
+      }
       return {
         patient: {
           id: patientId,

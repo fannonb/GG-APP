@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/query-keys'
 import { getAdminLedgerAccess, ledgerService } from '@/api/services/ledger.service'
-import type { SetupLedgerPinPayload, UnlockLedgerPayload } from '@/types/ledger.types'
+import type { SetupLedgerPinPayload, ResetLedgerPinPayload, UnlockLedgerPayload } from '@/types/ledger.types'
 
 // -----------------------------------------------------------------------------
 // Patient side
@@ -34,6 +34,7 @@ function useLedgerInvalidate() {
     void queryClient.invalidateQueries({ queryKey: queryKeys.patient.ledgerStatus })
     void queryClient.invalidateQueries({ queryKey: queryKeys.patient.ledgerAccess })
     void queryClient.invalidateQueries({ queryKey: queryKeys.patient.ledger })
+    void queryClient.invalidateQueries({ queryKey: ['patient', 'notifications'] })
   }
 }
 
@@ -41,6 +42,14 @@ export function useSetupLedgerPinMutation() {
   const invalidate = useLedgerInvalidate()
   return useMutation({
     mutationFn: (payload: SetupLedgerPinPayload) => ledgerService.setupPin(payload),
+    onSuccess: invalidate,
+  })
+}
+
+export function useResetLedgerPinMutation() {
+  const invalidate = useLedgerInvalidate()
+  return useMutation({
+    mutationFn: (payload: ResetLedgerPinPayload) => ledgerService.resetPin(payload),
     onSuccess: invalidate,
   })
 }

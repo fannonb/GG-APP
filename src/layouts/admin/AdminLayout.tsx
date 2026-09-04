@@ -39,11 +39,13 @@ function ApplicationIcon({ color }: { color: string }) {
 interface AdminLayoutProps {
   children: ReactNode
   title: string
+  status?: string
+  /** @deprecated Prefer `status` for actionable counts. Ignored in the top bar. */
   subtitle?: string
   back?: boolean
 }
 
-export function AdminLayout({ children, title, subtitle, back = false }: AdminLayoutProps) {
+export function AdminLayout({ children, title, status, back = false }: AdminLayoutProps) {
   const { isDesktop, isMobile } = useResponsive()
   const navigate = useNavigate()
   const { data: dashboard } = useAdminDashboard()
@@ -54,6 +56,8 @@ export function AdminLayout({ children, title, subtitle, back = false }: AdminLa
   const [notifOpen, setNotifOpen] = useState(false)
   const [readIds, setReadIds] = useState<Set<string>>(new Set())
   const { country, setCountry } = useAdminCountry()
+  const [adminSearch, setAdminSearch] = useState('')
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false)
 
   const applications = dashboard?.applications ?? []
   const pendingCreditCount = creditApplications.filter(app => app.status === 'submitted').length
@@ -84,7 +88,15 @@ export function AdminLayout({ children, title, subtitle, back = false }: AdminLa
   const markOneRead = (id: string) => setReadIds(prev => new Set([...prev, id]))
 
   return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: C.bg }}>
+    <div style={{
+      display: 'flex',
+      height: '100vh',
+      overflow: 'hidden',
+      background: '#EEF4FB',
+      padding: isDesktop ? '16px 20px 16px 16px' : '0',
+      gap: isDesktop ? '20px' : '0',
+      boxSizing: 'border-box',
+    }}>
 
       {isDesktop && <AdminSidebar pendingCreditCount={pendingCreditCount} />}
 
@@ -97,54 +109,248 @@ export function AdminLayout({ children, title, subtitle, back = false }: AdminLa
         </>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
         <div style={{
           position: 'sticky', top: 0, zIndex: 20,
-          background: '#fff',
-          borderBottom: `1px solid ${C.border}`,
-          padding: '14px 20px',
+          background: isDesktop ? 'transparent' : '#fff',
+          borderBottom: isDesktop ? 'none' : `1px solid ${C.border}`,
+          padding: isDesktop ? '14px 20px 18px 20px' : '10px 14px',
           display: 'flex',
           alignItems: 'center',
           gap: '12px',
-          boxShadow: shadow.sm,
+          minHeight: isDesktop ? 'auto' : '58px',
+          boxSizing: 'border-box',
         }}>
-          {!isDesktop && (
-            <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '4px', display: 'flex', alignItems: 'center' }}>
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </button>
-          )}
+          {!isDesktop && mobileSearchOpen ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', width: '100%' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileSearchOpen(false)
+                  setAdminSearch('')
+                }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '6px', display: 'flex', alignItems: 'center' }}
+                aria-label="Back"
+              >
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="none">
+                  <path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+              <form
+                onSubmit={e => {
+                  e.preventDefault()
+                  const q = adminSearch.trim()
+                  if (q) {
+                    setMobileSearchOpen(false)
+                    navigate(`/admin/providers?q=${encodeURIComponent(q)}`)
+                  }
+                }}
+                style={{
+                  flex: 1,
+                  background: '#E9EDF5',
+                  borderRadius: '9999px',
+                  height: '38px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  padding: '0 12px',
+                  gap: '8px',
+                }}
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="11" cy="11" r="8"/>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                </svg>
+                <input
+                  autoFocus
+                  type="text"
+                  value={adminSearch}
+                  onChange={e => setAdminSearch(e.target.value)}
+                  placeholder="Search providers, users..."
+                  style={{
+                    border: 'none',
+                    background: 'transparent',
+                    outline: 'none',
+                    fontSize: '13px',
+                    color: C.navy800,
+                    width: '100%',
+                    fontFamily: font.family,
+                  }}
+                />
+                {adminSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setAdminSearch('')}
+                    style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', color: '#94A3B8' }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18"/>
+                      <line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                  </button>
+                )}
+              </form>
+              <button
+                type="button"
+                onClick={() => {
+                  const q = adminSearch.trim()
+                  if (q) {
+                    setMobileSearchOpen(false)
+                    navigate(`/admin/providers?q=${encodeURIComponent(q)}`)
+                  }
+                }}
+                style={{
+                  background: C.blue500,
+                  border: 'none',
+                  color: '#fff',
+                  fontSize: '12px',
+                  fontWeight: 700,
+                  borderRadius: radius.full,
+                  padding: '8px 14px',
+                  cursor: 'pointer',
+                  fontFamily: font.family,
+                  flexShrink: 0,
+                }}
+              >
+                Search
+              </button>
+            </div>
+          ) : (
+            <>
+              {!isDesktop && (
+                <button onClick={() => setDrawerOpen(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '4px', display: 'flex', alignItems: 'center' }}>
+                  <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                    <path d="M3 5h14M3 10h14M3 15h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </button>
+              )}
 
-          {back && (
-            <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.textSub, padding: '4px' }}>
-              <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" /></svg>
-            </button>
-          )}
+              {back && (
+                <button onClick={() => navigate(-1)} style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '10px', cursor: 'pointer', color: C.textSub, padding: '7px 12px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                  <span style={{ fontSize: '13px', fontWeight: 600, fontFamily: font.family }}>Back</span>
+                </button>
+              )}
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, fontFamily: font.family, letterSpacing: '-0.03em', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
-            {subtitle && !isMobile && <div style={{ fontSize: '12px', color: C.textSub, fontFamily: font.family }}>{subtitle}</div>}
-          </div>
+              <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <h1 style={{ fontSize: isDesktop ? '28px' : '20px', fontWeight: 800, color: C.navy800, fontFamily: font.family, letterSpacing: '-0.035em', lineHeight: 1.15, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</h1>
+                {status && (
+                  <span style={{
+                    flexShrink: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    background: C.blue100,
+                    color: C.blue500,
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    fontFamily: font.family,
+                  }}>
+                    {status}
+                  </span>
+                )}
+              </div>
+
+              {/* Search pill in Admin TopBar (Desktop) */}
+              {isDesktop && (
+                <form
+                  onSubmit={e => {
+                    e.preventDefault()
+                    const q = adminSearch.trim()
+                    if (q) navigate(`/admin/providers?q=${encodeURIComponent(q)}`)
+                  }}
+                  style={{
+                    background: '#E9EDF5',
+                    borderRadius: '9999px',
+                    height: '42px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 14px 0 16px',
+                    gap: '10px',
+                    width: '260px',
+                    border: '1px solid transparent',
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={adminSearch}
+                    onChange={e => setAdminSearch(e.target.value)}
+                    placeholder="Search providers, users..."
+                    style={{
+                      border: 'none',
+                      background: 'transparent',
+                      outline: 'none',
+                      fontSize: '13px',
+                      color: C.navy800,
+                      width: '100%',
+                      fontFamily: font.family,
+                    }}
+                  />
+                  {adminSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setAdminSearch('')}
+                      style={{ background: 'none', border: 'none', padding: '2px', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#94A3B8' }}
+                      title="Clear search"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  )}
+                </form>
+              )}
+
+              {/* Mobile Search Icon Button */}
+              {!isDesktop && (
+                <button
+                  onClick={() => setMobileSearchOpen(true)}
+                  aria-label="Search"
+                  style={{
+                    width: 38, height: 38,
+                    borderRadius: '50%',
+                    background: '#FFFFFF',
+                    border: '1px solid #E2E8F0',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    cursor: 'pointer',
+                    color: '#64748B',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+                    flexShrink: 0,
+                  }}
+                >
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                </button>
+              )}
+            </>
+          )}
 
           <div style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={() => setNotifOpen(o => !o)}
               style={{
                 position: 'relative',
-                width: 36, height: 36,
-                borderRadius: radius.sm,
-                background: notifOpen ? C.blue100 : C.bg,
-                border: `1.5px solid ${notifOpen ? C.blue500 + '66' : C.border}`,
+                width: 38, height: 38,
+                borderRadius: '50%',
+                background: '#FFFFFF',
+                border: `1px solid ${notifOpen ? C.blue500 : '#E2E8F0'}`,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 cursor: 'pointer', transition: 'all 0.12s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
               }}
-              onMouseEnter={e => { if (!notifOpen) { e.currentTarget.style.background = C.bg; e.currentTarget.style.borderColor = C.blue500 + '44' } }}
-              onMouseLeave={e => { if (!notifOpen) { e.currentTarget.style.background = C.bg; e.currentTarget.style.borderColor = C.border } }}
+              onMouseEnter={e => { if (!notifOpen) { e.currentTarget.style.background = '#F8FAFC' } }}
+              onMouseLeave={e => { if (!notifOpen) { e.currentTarget.style.background = '#FFFFFF' } }}
             >
-              <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-                <path d="M9 2a5.5 5.5 0 00-5.5 5.5v3L2 12.5h14l-1.5-2V7.5A5.5 5.5 0 009 2z" stroke={notifOpen ? C.blue500 : C.textSub} strokeWidth="1.4" strokeLinejoin="round" />
-                <path d="M7.5 14.5a1.5 1.5 0 003 0" stroke={notifOpen ? C.blue500 : C.textSub} strokeWidth="1.4" strokeLinecap="round" />
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={notifOpen ? C.blue500 : '#64748B'} strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
               </svg>
               {unreadCount > 0 && (
                 <span style={{
@@ -367,7 +573,7 @@ export function AdminLayout({ children, title, subtitle, back = false }: AdminLa
           </div>
         </div>
 
-        <main style={{ flex: 1, overflowY: 'auto', padding: isDesktop ? '28px' : '20px 16px' }}>
+        <main style={{ flex: 1, overflowY: 'auto', padding: isDesktop ? '0 8px 24px 8px' : '20px 16px' }}>
           {children}
         </main>
       </div>

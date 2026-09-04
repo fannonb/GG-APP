@@ -85,12 +85,11 @@ export function CreditIncreaseScreen() {
   }
 
   return (
-    <AppLayout title="Request Limit Increase" subtitle="Increase your approved healthcare credit" back notifCount={1}>
+    <AppLayout title="Request Limit Increase" back notifCount={1}>
       <div style={{ maxWidth: 720, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
 
         <FinancePartnerLockedCard
           partnerId={partnerId}
-          subtitle="Limit increases follow the same review process as your original application — your finance partner reassesses and approves the request."
         />
 
         {pendingReview && (

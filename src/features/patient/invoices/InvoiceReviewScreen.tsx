@@ -155,7 +155,7 @@ export function InvoiceReviewScreen() {
 
   if (!inv) {
     return (
-      <AppLayout title="Invoice Review" subtitle="Invoice not found" back notifCount={0}>
+      <AppLayout title="Invoice Review" back notifCount={0}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="28px">
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Invoice unavailable</div>
@@ -169,7 +169,7 @@ export function InvoiceReviewScreen() {
   }
 
   return (
-    <AppLayout title="Invoice Review" subtitle={inv.id} back notifCount={0}>
+    <AppLayout title="Invoice Review" back notifCount={0}>
       <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
         <div style={{ padding: '14px 22px', background: `linear-gradient(90deg, ${C.navy900}, ${C.navy800})`, borderRadius: radius.sm, display: 'flex', gap: '14px', alignItems: 'center' }}>
           <svg width="20" height="20" viewBox="0 0 18 18" fill="none" style={{ flexShrink: 0 }}><path d="M9 2L3 5v5c0 3.9 2.6 7.5 6 8.3 3.4-.8 6-4.4 6-8.3V5L9 2z" stroke={C.blue500} strokeWidth="1.3" fill="none" /><path d="M6 9l2 2 4-4" stroke={C.success} strokeWidth="1.5" strokeLinecap="round" /></svg>

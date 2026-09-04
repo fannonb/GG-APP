@@ -12,6 +12,9 @@ const SCREEN_ROUTE_MAP: Record<string, string> = {
   notifications: ROUTES.NOTIFICATIONS,
   'prescription-requests': ROUTES.PRESCRIPTION_REQUESTS,
   profile: ROUTES.PROFILE,
+  ledger: ROUTES.LEDGER,
+  'ledger-access': ROUTES.LEDGER_ACCESS,
+  'ledger-pin': ROUTES.LEDGER_PIN,
   'transaction-history': ROUTES.TRANSACTIONS,
 }
 
@@ -43,6 +46,8 @@ export function resolvePatientNotificationRoute(notification: Notification) {
         : ROUTES.CREDIT_WALLET
     case 'prescription':
       return ROUTES.PRESCRIPTION_REQUESTS
+    case 'ledger':
+      return ROUTES.LEDGER
     default:
       return ROUTES.DASHBOARD
   }

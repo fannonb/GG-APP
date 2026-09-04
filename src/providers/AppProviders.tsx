@@ -54,6 +54,19 @@ function SessionBootstrap() {
     })()
   }, [setSession, logout])
 
+  // Mid-session 401: a failed refresh clears the tokens but the Zustand
+  // `loggedIn` flag would otherwise survive until navigation. Force the UI
+  // back to the logged-out state and drop the user's data immediately.
+  useEffect(() => {
+    const handleAuthExpired = () => {
+      useUserStore.getState().reset()
+      useNotificationsStore.setState({ patientNotifs: [], panelOpen: false })
+      logout()
+    }
+    window.addEventListener('gg:auth-expired', handleAuthExpired)
+    return () => window.removeEventListener('gg:auth-expired', handleAuthExpired)
+  }, [logout])
+
   useEffect(() => {
     // Skip hydration while offline — queries restored from IndexedDB
     // already carry the last known data.

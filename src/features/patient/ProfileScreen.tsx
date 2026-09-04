@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { GGCard, GGButton, GGInput, GGBadge, GGAvatar, GGDatePicker } from '@/design-system'
+import { GGCard, GGButton, GGInput, GGBadge, GGAvatar, GGDatePicker, PhonePrefixInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -9,18 +9,26 @@ import {
   useChangePatientPasswordMutation,
   useDeleteBeneficiaryMutation,
   usePatientProfile,
-  usePatientTransactions,
   useSetBeneficiariesEnabledMutation,
   useUpdateBeneficiaryMutation,
   useUpdatePatientProfileMutation,
 } from '@/hooks/api'
 import type { Beneficiary } from '@/types/user.types'
 import { FlagImg } from '@/components/FlagImg'
-import { getCountryByCode, OPERATING_COUNTRY_OPTIONS, WORLD_COUNTRIES, getWorldCountryByCode, isOperatingCountryCode, resolveResidenceSelectCode } from '@/config/countries'
+import {
+  getCountryByCode,
+  OPERATING_COUNTRY_OPTIONS,
+  WORLD_COUNTRIES,
+  getWorldCountryByCode,
+  isOperatingCountryCode,
+  resolveResidenceSelectCode,
+  getCountryDial,
+  splitPhonePrefix,
+} from '@/config/countries'
 import type { CountryCode } from '@/config/countries'
 import { formatPhone } from '@/utils/format'
 import { useUserStore } from '@/store/user.store'
-import { getPatientDisplayName, getPatientInitials, isBeneficiariesActive } from './patientAccount'
+import { getPatientDisplayName, isBeneficiariesActive } from './patientAccount'
 import { ROUTES } from '@/router/routes'
 
 const RELATIONS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other']
@@ -31,6 +39,31 @@ const TABS = [
   { id: 'security',      label: 'Security & PIN' },
 ]
 
+function DetailField({
+  label,
+  value,
+  locked,
+}: {
+  label: string
+  value: string
+  locked?: boolean
+}) {
+  return (
+    <div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+        <div style={{ fontSize: 12, fontWeight: 500, color: C.textSub }}>{label}</div>
+        {locked && (
+          <svg width="11" height="11" viewBox="0 0 12 12" fill="none" aria-hidden>
+            <rect x="2.5" y="5.5" width="7" height="5" rx="1" stroke={C.textLight} strokeWidth="1.2" />
+            <path d="M4 5.5V4a2 2 0 014 0v1.5" stroke={C.textLight} strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        )}
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.45, wordBreak: 'break-word' }}>{value}</div>
+    </div>
+  )
+}
+
 export function ProfileScreen() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -38,7 +71,6 @@ export function ProfileScreen() {
   const storedUser = useUserStore(s => s.user)
   const storedBeneficiaries = useUserStore(s => s.beneficiaries)
   const { data: profile } = usePatientProfile()
-  const { data: transactions = [] } = usePatientTransactions()
   const updatePatientProfile = useUpdatePatientProfileMutation()
   const changePassword = useChangePatientPasswordMutation()
   const setBeneficiariesEnabled = useSetBeneficiariesEnabledMutation()
@@ -49,7 +81,6 @@ export function ProfileScreen() {
   const beneficiaries = profile?.beneficiaries ?? storedBeneficiaries
   const beneficiariesActive = isBeneficiariesActive(u.beneficiariesEnabled, beneficiaries.length)
   const country = getCountryByCode(u.countryCode)
-  const currency = country?.currencySymbol ?? 'Z$'
   const countryName = country?.name ?? u.country
   const currencyLabel = country
     ? `${country.currencyName} (${country.currencyCode})`
@@ -67,28 +98,26 @@ export function ProfileScreen() {
   const displayValue = (value: string | undefined) => value?.trim() || 'Not provided'
   const memberSince = u.memberSince
     ? new Date(u.memberSince).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-    : 'New Member'
-  const spendableTransactions = transactions.filter(
-    transaction => transaction.status === 'completed' || transaction.status === 'authorized',
-  )
-  const totalSpent = spendableTransactions.reduce((sum, transaction) => sum + transaction.amount, 0)
-  const providersUsed = new Set(spendableTransactions.map(transaction => transaction.provider)).size
-  const stats = useMemo(() => ([
-    { label: 'Member Since', val: memberSince },
-    { label: 'Total Spent',  val: `${currency}${totalSpent.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` },
-    { label: 'Transactions', val: String(transactions.length) },
-    { label: 'Providers Used', val: String(providersUsed) },
-  ]), [currency, memberSince, providersUsed, totalSpent, transactions.length])
+    : 'New member'
+  const residenceName = u.residenceCountry ?? countryName
+  const residenceFlagCode = resolveResidenceSelectCode(u) || u.countryCode
+  const identityLocation = u.residesAbroad
+    ? [`${residenceName} (lives abroad)`, `${countryName} market`, country?.currencyCode].filter(Boolean).join(' · ')
+    : [countryName, country?.currencyCode].filter(Boolean).join(' · ')
 
   const initialTab = ((location.state as { tab?: string } | null)?.tab ?? 'profile')
   const [tab, setTab] = useState(initialTab)
   const [editing, setEditing] = useState(false)
+  const initialResCode = resolveResidenceSelectCode(u)
+  const initialPhoneState = splitPhonePrefix(u.phone, initialResCode)
   const [form, setForm] = useState({
     name: u.name,
     email: u.email,
     phone: u.phone,
-    residenceCountryCode: resolveResidenceSelectCode(u),
+    residenceCountryCode: initialResCode,
   })
+  const [phoneCountryCode, setPhoneCountryCode] = useState(initialPhoneState.countryCode)
+  const [phoneDigits, setPhoneDigits] = useState(initialPhoneState.digits)
   const [saved, setSaved] = useState(Boolean((location.state as { pinUpdated?: boolean } | null)?.pinUpdated))
   const [saveError, setSaveError] = useState('')
   const [passwordForm, setPasswordForm] = useState({
@@ -104,12 +133,16 @@ export function ProfileScreen() {
 
   useEffect(() => {
     if (editing) return
+    const resCode = resolveResidenceSelectCode(u)
+    const parsed = splitPhonePrefix(u.phone, resCode)
     setForm({
       name: u.name,
       email: u.email,
       phone: u.phone,
-      residenceCountryCode: resolveResidenceSelectCode(u),
+      residenceCountryCode: resCode,
     })
+    setPhoneCountryCode(parsed.countryCode)
+    setPhoneDigits(parsed.digits)
   }, [editing, u.email, u.name, u.phone, u.residenceCountry, u.residesAbroad, u.countryCode, u.country])
 
   useEffect(() => {
@@ -137,38 +170,49 @@ export function ProfileScreen() {
 
   const startEditing = () => {
     setSaveError('')
+    const resCode = resolveResidenceSelectCode(u)
+    const parsed = splitPhonePrefix(u.phone, resCode)
+    setPhoneCountryCode(parsed.countryCode)
+    setPhoneDigits(parsed.digits)
     setForm({
       name: u.name,
       email: u.email,
       phone: u.phone,
-      residenceCountryCode: resolveResidenceSelectCode(u),
+      residenceCountryCode: resCode,
     })
     setEditing(true)
   }
 
   const cancelEditing = () => {
     setSaveError('')
+    const resCode = resolveResidenceSelectCode(u)
+    const parsed = splitPhonePrefix(u.phone, resCode)
+    setPhoneCountryCode(parsed.countryCode)
+    setPhoneDigits(parsed.digits)
     setForm({
       name: u.name,
       email: u.email,
       phone: u.phone,
-      residenceCountryCode: resolveResidenceSelectCode(u),
+      residenceCountryCode: resCode,
     })
     setEditing(false)
   }
 
   const handleSave = async () => {
     setSaveError('')
-    if (!form.name.trim() || !form.email.trim() || !form.phone.trim() || !form.residenceCountryCode) {
+    const dial = getCountryDial(phoneCountryCode)
+    const cleanDigits = phoneDigits.trim()
+    if (!form.name.trim() || !form.email.trim() || !cleanDigits || !form.residenceCountryCode) {
       setSaveError('Please fill in all required fields.')
       return
     }
+    const fullPhone = `${dial} ${cleanDigits}`
     const selected = getWorldCountryByCode(form.residenceCountryCode)
     try {
       await updatePatientProfile.mutateAsync({
         name: form.name.trim(),
         email: form.email.trim(),
-        phone: form.phone.trim(),
+        phone: fullPhone,
         residenceCountryCode: form.residenceCountryCode,
         residenceCountryName: selected?.name ?? form.residenceCountryCode,
       })
@@ -241,7 +285,7 @@ export function ProfileScreen() {
   }
 
   return (
-    <AppLayout title="My Profile" subtitle="Manage your account" notifCount={1}>
+    <AppLayout title="My Profile" notifCount={1}>
       <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {saved && (
@@ -251,131 +295,31 @@ export function ProfileScreen() {
           </div>
         )}
 
-        {/* Profile hero — professional dark brand gradient card matching theme colors */}
-        <div style={{ 
-          background: `linear-gradient(135deg, ${C.navy800} 0%, #152B55 60%, ${C.blue500} 100%)`, 
-          borderRadius: '16px', 
-          padding: isMobile ? '24px 20px' : '32px', 
-          position: 'relative', 
-          overflow: 'hidden', 
-          boxShadow: '0 8px 32px rgba(9, 28, 68, 0.15)' 
-        }}>
-          {/* Decorative circular design lines */}
-          <div style={{ position: 'absolute', right: -60, top: -60, width: 240, height: 240, borderRadius: '50%', background: 'rgba(255, 255, 255, 0.05)', pointerEvents: 'none' }} />
-          <div style={{ position: 'absolute', left: -40, bottom: -40, width: 160, height: 160, borderRadius: '50%', background: 'rgba(56, 182, 255, 0.04)', pointerEvents: 'none' }} />
-
-          <div style={{ position: 'relative', zIndex: 1, display: 'flex', gap: '24px', alignItems: isMobile ? 'flex-start' : 'center', flexWrap: 'wrap' }}>
-            {/* Avatar */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <div style={{ 
-                width: 80, 
-                height: 80, 
-                borderRadius: '50%', 
-                background: '#ffffff', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                boxShadow: '0 4px 14px rgba(9, 28, 68, 0.25)',
-                border: `2px solid ${C.blue300}`
-              }}>
-                <span style={{ fontSize: '28px', fontWeight: 800, color: C.navy800, fontFamily: font.family }}>{getPatientInitials(u)}</span>
+        <GGCard padding={isMobile ? '18px 16px' : '20px 22px'}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+            <GGAvatar name={getPatientDisplayName(u)} size={56} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
+                {getPatientDisplayName(u)}
               </div>
-              <div style={{ 
-                position: 'absolute', 
-                bottom: -2, 
-                right: -2, 
-                width: 26, 
-                height: 26, 
-                borderRadius: '50%', 
-                background: '#10B981', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center', 
-                border: `2.5px solid ${C.navy800}`, 
-                boxShadow: '0 2px 8px rgba(16,185,129,0.4)', 
-                cursor: 'pointer' 
-              }}>
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1 7l2-2 1.5 1.5L8 2.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              <div style={{ fontSize: 13, color: C.textSub, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                <FlagImg code={residenceFlagCode} size={16} />
+                <span>{identityLocation}</span>
+              </div>
+              <div style={{ fontSize: 12, color: C.textLight, marginTop: 4 }}>
+                Member since {memberSince}
+              </div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                <GGBadge type="primary">Verified patient</GGBadge>
+                <GGBadge type={beneficiariesActive ? 'info' : 'outline'}>
+                  {beneficiariesActive
+                    ? `${bens.length} beneficiar${bens.length === 1 ? 'y' : 'ies'}`
+                    : 'Beneficiaries off'}
+                </GGBadge>
               </div>
             </div>
-
-            {/* Info */}
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 800, color: '#ffffff', letterSpacing: '-0.04em', marginBottom: '4px' }}>{getPatientDisplayName(u)}</div>
-              <div style={{ fontSize: '13px', color: '#ffffff', marginBottom: '10px', display: 'flex', alignItems: 'center', gap: '6px', fontFamily: font.family }}>
-                <FlagImg code={u.countryCode} size={18} />
-                {u.nationalId} · {u.country}
-                {country && (
-                  <span style={{ fontSize: '11px', color: '#ffffff', fontFamily: font.family }}>
-                    · {country.currencyCode}
-                  </span>
-                )}
-              </div>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'nowrap', overflowX: 'auto', paddingBottom: '2px' }}>
-                {/* Modern glassmorphic theme-aligned badges */}
-                {[
-                  { label: 'Verified Patient', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)', color: '#34D399' },
-                  {
-                    label: beneficiariesActive
-                      ? `${bens.length} Beneficiar${bens.length === 1 ? 'y' : 'ies'}`
-                      : 'Beneficiaries Off',
-                    bg: 'rgba(255, 255, 255, 0.08)',
-                    border: 'rgba(255, 255, 255, 0.18)',
-                    color: 'rgba(255, 255, 255, 0.9)',
-                  },
-                ].map(b => (
-                  <div key={b.label} style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 12px', borderRadius: '20px', background: b.bg, border: `1px solid ${b.border}`, flexShrink: 0 }}>
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: b.color, fontFamily: font.family, whiteSpace: 'nowrap' }}>{b.label}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Edit button */}
-            <button
-              type="button"
-              onClick={() => {
-                setTab('profile')
-                startEditing()
-              }}
-              style={{ 
-                padding: '9px 18px', 
-                borderRadius: '10px', 
-                border: '1.5px solid rgba(255, 255, 255, 0.35)', 
-                background: 'rgba(255, 255, 255, 0.05)', 
-                color: '#ffffff', 
-                fontSize: '13px', 
-                fontWeight: 600, 
-                fontFamily: font.family, 
-                cursor: 'pointer', 
-                flexShrink: 0, 
-                transition: 'all 0.18s ease' 
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = '#ffffff'
-                e.currentTarget.style.color = C.navy800
-                e.currentTarget.style.borderColor = '#ffffff'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.05)'
-                e.currentTarget.style.color = '#ffffff'
-                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.35)'
-              }}
-            >
-              Edit Profile
-            </button>
           </div>
-        </div>
-
-        {/* Stat tiles row */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'repeat(2,1fr)' : 'repeat(4,1fr)', gap: '12px' }}>
-          {stats.map(s => (
-            <div key={s.label} style={{ textAlign: 'center', padding: '16px 12px', background: '#fff', borderRadius: radius.lg, border: `1px solid ${C.border}` }}>
-              <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '4px' }}>{s.val}</div>
-              <div style={{ fontSize: '11px', color: C.textSub }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
+        </GGCard>
 
         {/* Tab bar */}
         <div style={{ display: 'flex', gap: '0', background: '#fff', borderRadius: '12px', padding: '4px', border: `1px solid ${C.border}` }}>
@@ -385,6 +329,7 @@ export function ProfileScreen() {
             return (
               <button
                 key={t.id}
+                type="button"
                 onClick={() => setTab(t.id)}
                 style={{
                   flex: 1,
@@ -410,7 +355,7 @@ export function ProfileScreen() {
         {/* Personal Info */}
         {tab === 'profile' && (
           <GGCard padding="28px">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: editing ? 20 : 4 }}>
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Personal Details</div>
               {!editing
                 ? <GGButton variant="secondary" size="sm" onClick={startEditing}>Edit</GGButton>
@@ -430,7 +375,15 @@ export function ProfileScreen() {
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
                 <GGInput label="Full Name"      value={form.name}  onChange={e => setF('name', e.target.value)}  required />
                 <GGInput label="Email Address"  type="email" value={form.email} onChange={e => setF('email', e.target.value)} required />
-                <GGInput label="Phone Number"   type="tel"   value={form.phone} onChange={e => setF('phone', e.target.value)} required />
+                <PhonePrefixInput
+                  label="Phone Number"
+                  required
+                  countryCode={phoneCountryCode}
+                  onCountryChange={setPhoneCountryCode}
+                  digits={phoneDigits}
+                  onDigitsChange={setPhoneDigits}
+                  dropdownPlacement="top"
+                />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   <label style={{ fontSize: '13px', fontWeight: 600, color: C.text }}>
                     Country of residence <span style={{ color: C.error }}>*</span>
@@ -456,31 +409,51 @@ export function ProfileScreen() {
                   </select>
                   <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
                     {isOperatingCountryCode(form.residenceCountryCode)
-                      ? 'You live in an operating market. Wallet currency follows this country.'
-                      : `You live abroad. Wallet market stays ${countryName}; beneficiaries must still be in Kenya, Zimbabwe, or Zambia.`}
+                      ? 'You live in an operating market. Credit currency follows this country.'
+                      : `You live abroad. Credit market stays ${countryName}; beneficiaries must still be in Kenya, Zimbabwe, or Zambia.`}
                   </div>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {[ 
-                  { label: 'Full Name',     val: getPatientDisplayName(u) },
-                  { label: 'Email Address', val: displayValue(u.email) },
-                  { label: 'Phone Number',  val: phoneDisplay },
-                  { label: 'Country of residence', val: u.residesAbroad
-                    ? `${u.residenceCountry ?? u.country} (abroad)`
-                    : (u.residenceCountry ?? countryName) },
-                  { label: 'Market country', val: countryName },
-                  { label: 'Currency',      val: currencyLabel },
-                  { label: 'National ID',   val: displayValue(u.nationalId) },
-                  { label: 'Date of Birth', val: dateOfBirth },
-                  { label: 'Member Since',  val: memberSince },
-                ].map((f, i) => (
-                  <div key={f.label} style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: '12px', padding: '13px 0', borderBottom: i < 6 ? `1px solid ${C.border}` : 'none', alignItems: 'center' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: C.textSub }}>{f.label}</div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: C.text }}>{f.val}</div>
+              <div>
+                {[
+                  [
+                    { label: 'Full name', value: getPatientDisplayName(u) },
+                    { label: 'Email address', value: displayValue(u.email) },
+                  ],
+                  [
+                    { label: 'Phone number', value: phoneDisplay },
+                    { label: 'Country of residence', value: u.residesAbroad
+                      ? `${u.residenceCountry ?? u.country} (abroad)`
+                      : (u.residenceCountry ?? countryName) },
+                  ],
+                  [
+                    { label: 'Market country', value: countryName },
+                    { label: 'Currency', value: currencyLabel },
+                  ],
+                  [
+                    { label: 'National ID', value: displayValue(u.nationalId), locked: true },
+                    { label: 'Date of birth', value: dateOfBirth, locked: true },
+                  ],
+                ].map((pair, i, rows) => (
+                  <div
+                    key={pair[0].label}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+                      gap: isMobile ? 16 : 40,
+                      padding: '18px 0',
+                      borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : 'none',
+                    }}
+                  >
+                    {pair.map(field => (
+                      <DetailField key={field.label} label={field.label} value={field.value} locked={'locked' in field ? field.locked : undefined} />
+                    ))}
                   </div>
                 ))}
+                <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.5, paddingTop: 4 }}>
+                  National ID and date of birth are on file for verification and cannot be changed here.
+                </div>
               </div>
             )}
           </GGCard>

@@ -91,8 +91,13 @@ export function AdminCreditAppsScreen() {
     })
   }
 
+  const pendingCount = useMemo(
+    () => applications.filter(app => app.status === 'submitted').length,
+    [applications],
+  )
+
   return (
-    <AdminLayout title="Credit Applications" subtitle="Review patient healthcare credit requests">
+    <AdminLayout title="Credit Applications" status={pendingCount > 0 ? `${pendingCount} pending` : undefined}>
       {isError && (
         <GGCard padding="20px" style={{ marginBottom: '16px', border: `1px solid ${C.error}` }}>
           <div style={{ fontSize: '14px', fontWeight: 700, color: C.error, marginBottom: '6px' }}>

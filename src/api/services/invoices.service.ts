@@ -258,6 +258,27 @@ export const invoicesService = {
           MOCK_INVOICE.offAppAmountDue = offAppDue
         }
 
+        const { getMockPrescriptionRequests, updateMockPrescriptionRequest } = await import('@/mock/prescription.mock')
+        const rx = getMockPrescriptionRequests().find(r => r.invoiceId === payload.invoiceId)
+        if (rx) {
+          updateMockPrescriptionRequest(rx.id, {
+            invoiceStatus: 'authorized',
+            status: rx.status === 'quoted' || rx.status === 'submitted' ? 'accepted' : rx.status,
+          })
+          const { MOCK_SP_NOTIFICATIONS: SP_NOTIFS } = await import('@/mock/sp.mock')
+          const isDelivery = rx.fulfillmentMode === 'delivery'
+          const patientName = spInv?.patient ?? targetInv.billedTo?.name ?? rx.patient ?? 'Patient'
+          SP_NOTIFS.unshift({
+            id: `N-RX-PAID-${Date.now()}`,
+            type: 'prescription',
+            title: isDelivery ? 'Prescription Paid — Ready for Delivery' : 'Prescription Paid — Ready for Pickup',
+            body: `${patientName} paid for ${rx.id}. Prepare medication and mark it ready for ${isDelivery ? 'delivery' : 'pickup'}.`,
+            time: new Date().toISOString(),
+            read: false,
+            screen: `/sp/prescriptions/${rx.id}`,
+          })
+        }
+
         useUserStore.setState(state => ({
           user: {
             ...state.user,

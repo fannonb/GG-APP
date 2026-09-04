@@ -24,8 +24,10 @@ import { FieldEncryptionService } from '../../common/services/field-encryption.s
 import { decryptClinicalField } from '../../common/utils/clinical-field.util'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import type { SetupLedgerPinDto } from './dto/setup-ledger-pin.dto'
+import type { ResetLedgerPinDto } from './dto/reset-ledger-pin.dto'
 import type { UnlockLedgerDto } from './dto/unlock-ledger.dto'
 import type { GetAdminLedgerAccessQueryDto } from './dto/ledger-query.dto'
+import { MailService } from '../../common/services/mail.service'
 
 const GRANT_DURATION_MS = 24 * 60 * 60 * 1000 // 24 hours
 const UNLOCK_MAX_ATTEMPTS = 5
@@ -49,22 +51,27 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
   private readonly prisma: PrismaService
   private readonly redis: RedisService
   private readonly fieldEncryption: FieldEncryptionService
+  private readonly mailService: MailService
   private expirySweepTimer: ReturnType<typeof setInterval> | null = null
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(RedisService) redis: RedisService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
+    @Inject(MailService) mailService: MailService,
   ) {
     this.prisma = prisma
     this.redis = redis
     this.fieldEncryption = fieldEncryption
+    this.mailService = mailService
   }
 
   onModuleInit() {
     void this.expireStaleGrants()
+    void this.expireElapsedPins()
     this.expirySweepTimer = setInterval(() => {
       void this.expireStaleGrants()
+      void this.expireElapsedPins()
     }, GRANT_EXPIRY_SWEEP_MS)
     // Allow Node to exit without waiting for the interval
     if (typeof this.expirySweepTimer.unref === 'function') {
@@ -92,7 +99,7 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
       where: { patientUserId: userId },
     })
 
-    const isRotation = !!existing && existing.status === LedgerPinStatus.ACTIVE
+    const isRotation = this.isPinCurrentlyActive(existing)
     if (isRotation) {
       if (!dto.currentPin) {
         throw new BadRequestException('Current PIN is required to change your ledger PIN')
@@ -170,6 +177,94 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async resetPin(userId: string, dto: ResetLedgerPinDto) {
+    if (dto.pin !== dto.confirmPin) {
+      throw new BadRequestException('PIN confirmation does not match')
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { patientProfile: { select: { firstName: true, lastName: true } } },
+    })
+    if (!user) {
+      throw new NotFoundException('Account not found')
+    }
+
+    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash)
+    if (!passwordMatches) {
+      throw new UnauthorizedException('Account password is incorrect')
+    }
+
+    const existing = await this.prisma.ledgerPin.findUnique({
+      where: { patientUserId: userId },
+    })
+    const pinHash = await bcrypt.hash(dto.pin, 12)
+    const now = new Date()
+    const pinExpiresAt =
+      dto.expiresInDays != null
+        ? new Date(now.getTime() + dto.expiresInDays * 24 * 60 * 60 * 1000)
+        : null
+
+    await this.prisma.$transaction(async tx => {
+      if (existing) {
+        await tx.ledgerPin.update({
+          where: { id: existing.id },
+          data: {
+            pinHash,
+            status: LedgerPinStatus.ACTIVE,
+            rotatedAt: now,
+            revokedAt: null,
+            expiresAt: pinExpiresAt,
+          },
+        })
+      } else {
+        await tx.ledgerPin.create({
+          data: {
+            patientUserId: userId,
+            pinHash,
+            expiresAt: pinExpiresAt,
+          },
+        })
+      }
+
+      await tx.ledgerAccessGrant.updateMany({
+        where: {
+          patientUserId: userId,
+          revokedAt: null,
+          expiresAt: { gt: now },
+        },
+        data: { revokedAt: now },
+      })
+
+      await tx.ledgerAccessAudit.create({
+        data: {
+          patientUserId: userId,
+          action: LedgerAuditAction.PIN_ROTATED,
+          metadata: { reason: 'forgot_pin_password_reset' } as Prisma.JsonObject,
+        },
+      })
+
+      await tx.notification.create({
+        data: {
+          userId,
+          type: NotificationType.LEDGER,
+          title: 'Ledger PIN Reset',
+          body: 'Your health ledger PIN was reset. Providers who previously had access must unlock again with the new PIN.',
+          screen: '/app/ledger',
+        },
+      })
+    })
+
+    void this.mailService.sendLedgerPinResetEmail(user.email, {
+      patientName: formatPatientFullName(user.patientProfile),
+    })
+
+    return {
+      configured: true,
+      message: 'Ledger PIN reset. Existing provider access has been revoked.',
+    }
+  }
+
   async revokePin(userId: string) {
     const existing = await this.prisma.ledgerPin.findUnique({
       where: { patientUserId: userId },
@@ -215,7 +310,8 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
       where: { patientUserId: userId },
     })
 
-    const hasPin = !!pin && pin.status === LedgerPinStatus.ACTIVE
+    const pinExpired = this.isPinPastExpiry(pin)
+    const hasPin = this.isPinCurrentlyActive(pin)
     const now = new Date()
 
     const activeGrants = hasPin
@@ -232,8 +328,9 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
 
     return {
       hasPin,
-      pinCreatedAt: hasPin ? pin.createdAt.toISOString() : null,
-      pinExpiresAt: hasPin && pin.expiresAt ? pin.expiresAt.toISOString() : null,
+      pinExpired,
+      pinCreatedAt: hasPin && pin ? pin.createdAt.toISOString() : null,
+      pinExpiresAt: hasPin && pin?.expiresAt ? pin.expiresAt.toISOString() : null,
       activeGrants: activeGrants.map(grant => ({
         id: grant.id,
         provider: this.mapProviderRef(grant.provider),
@@ -374,7 +471,7 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
     const patient = await this.resolvePatientForUnlock(dto)
     const pinRecord =
       patient?.ledgerPin?.status === LedgerPinStatus.ACTIVE ? patient.ledgerPin : null
-    const pinExpired = !!pinRecord?.expiresAt && pinRecord.expiresAt.getTime() <= Date.now()
+    const pinExpired = this.isPinPastExpiry(pinRecord)
     const pinMatches =
       pinRecord && !pinExpired ? await bcrypt.compare(dto.pin, pinRecord.pinHash) : false
 
@@ -491,8 +588,7 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
     const matches: typeof candidates = []
     for (const candidate of candidates) {
       const pin = candidate.ledgerPin
-      if (!pin) continue
-      if (pin.expiresAt && pin.expiresAt.getTime() <= now) continue
+      if (!this.isPinCurrentlyActive(pin)) continue
       if (await bcrypt.compare(dto.pin, pin.pinHash)) {
         matches.push(candidate)
       }
@@ -670,6 +766,93 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
       )
       return { expired: 0 }
     }
+  }
+
+  async expireElapsedPins() {
+    const now = new Date()
+    try {
+      const expiredPins = await this.prisma.ledgerPin.findMany({
+        where: {
+          status: LedgerPinStatus.ACTIVE,
+          expiresAt: { lte: now },
+        },
+        include: {
+          patient: {
+            select: {
+              id: true,
+              email: true,
+              patientProfile: { select: { firstName: true, lastName: true } },
+            },
+          },
+        },
+        take: 200,
+      })
+
+      if (expiredPins.length === 0) {
+        return { expired: 0 }
+      }
+
+      for (const pin of expiredPins) {
+        await this.prisma.$transaction(async tx => {
+          await tx.ledgerPin.update({
+            where: { id: pin.id },
+            data: { status: LedgerPinStatus.REVOKED, revokedAt: now },
+          })
+
+          await tx.ledgerAccessGrant.updateMany({
+            where: {
+              patientUserId: pin.patientUserId,
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+            data: { revokedAt: now },
+          })
+
+          await tx.ledgerAccessAudit.create({
+            data: {
+              patientUserId: pin.patientUserId,
+              action: LedgerAuditAction.PIN_REVOKED,
+              metadata: { reason: 'expired' } as Prisma.JsonObject,
+            },
+          })
+
+          await tx.notification.create({
+            data: {
+              userId: pin.patientUserId,
+              type: NotificationType.LEDGER,
+              title: 'Ledger PIN Expired',
+              body: 'Your health ledger PIN has expired. Providers can no longer unlock your treatment history until you create a new PIN.',
+              screen: '/app/ledger/pin',
+            },
+          })
+        })
+
+        void this.mailService.sendLedgerPinExpiredEmail(pin.patient.email, {
+          patientName: formatPatientFullName(pin.patient.patientProfile),
+        })
+      }
+
+      this.logger.log(`Expired ${expiredPins.length} ledger PIN(s) and notified patients`)
+      return { expired: expiredPins.length }
+    } catch (error) {
+      this.logger.warn(
+        `Ledger PIN expiry sweep failed: ${(error as Error).message}`,
+      )
+      return { expired: 0 }
+    }
+  }
+
+  private isPinPastExpiry(
+    pin: { status: LedgerPinStatus; expiresAt: Date | null } | null | undefined,
+  ): boolean {
+    if (!pin || pin.status !== LedgerPinStatus.ACTIVE || !pin.expiresAt) return false
+    return pin.expiresAt.getTime() <= Date.now()
+  }
+
+  private isPinCurrentlyActive(
+    pin: { status: LedgerPinStatus; expiresAt: Date | null } | null | undefined,
+  ): boolean {
+    return !!pin && pin.status === LedgerPinStatus.ACTIVE && !this.isPinPastExpiry(pin)
   }
 
   private assertBeneficiaryBelongsToPatient(

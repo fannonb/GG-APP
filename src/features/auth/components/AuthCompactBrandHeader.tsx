@@ -8,99 +8,54 @@ interface AuthCompactBrandHeaderProps {
   tab: Tab
 }
 
-/** Logo navy + cyan — exact brand field so the mark dissolves into the header. */
-const LOGO_NAVY = C.navy800 // #091C44 — matches logo.png ground
-const LOGO_CYAN = C.blue500 // #38B6FF
-const LOGO_CYAN_RGB = '56, 182, 255'
+/** Exact ground from public/gg-logo-v4.png (#091C44). */
+const LOGO_NAVY = C.navy800
+const LOGO_CYAN = C.blue500
+/** Intrinsic logo aspect (1869×1744) — avoid squashing into a forced square. */
+const LOGO_ASPECT = 1869 / 1744
 
 const COPY: Record<Tab, { tagline: string }> = {
   patient: {
-    tagline: 'Healthcare Access, Simplified.',
+    tagline: 'Healthcare access, simplified.',
   },
   sp: {
-    tagline: 'Grow Your Practice.',
+    tagline: 'Grow your practice.',
   },
 }
 
 /**
  * Mobile/tablet auth brand band.
- * Logo is the hero; header ground matches the logo navy so the asset
- * doesn't read as a patched square on a different dark panel.
+ * Generous lockup so the header balances the form below —
+ * logo ground matches the field so the mark reads as part of the band.
  */
 export function AuthCompactBrandHeader({ tab }: AuthCompactBrandHeaderProps) {
   const { isTablet } = useResponsive()
   const copy = COPY[tab]
-  const logoSize = isTablet ? 112 : 96
+  const logoWidth = isTablet ? 120 : 96
+  const logoHeight = Math.round(logoWidth / LOGO_ASPECT)
 
   return (
     <header
       style={{
         position: 'relative',
         overflow: 'hidden',
-        background: `linear-gradient(180deg, ${LOGO_NAVY} 0%, ${LOGO_NAVY} 62%, #061533 100%)`,
-        padding: isTablet ? '36px 32px 40px' : '28px 20px 34px',
+        background: LOGO_NAVY,
+        padding: isTablet ? '36px 32px 40px' : '28px 20px 32px',
         textAlign: 'center',
       }}
     >
-      <style>{`
-        @keyframes ggAuthBrandIn {
-          from { opacity: 0; transform: translateY(8px) scale(0.96); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
-        }
-        @keyframes ggAuthGlow {
-          0%, 100% { opacity: 0.55; transform: scale(1); }
-          50%      { opacity: 0.85; transform: scale(1.04); }
-        }
-        @keyframes ggAuthTaglineIn {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
-      {/* Soft cyan field behind logo — blends the mark into brand navy */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          width: isTablet ? 280 : 230,
-          height: isTablet ? 280 : 230,
-          borderRadius: '50%',
-          left: '50%',
-          top: '42%',
-          transform: 'translate(-50%, -50%)',
-          background: `radial-gradient(circle, rgba(${LOGO_CYAN_RGB}, 0.28) 0%, rgba(${LOGO_CYAN_RGB}, 0.08) 42%, transparent 70%)`,
-          pointerEvents: 'none',
-          animation: 'ggAuthGlow 5.5s ease-in-out infinite',
-        }}
-      />
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          width: isTablet ? 420 : 340,
-          height: isTablet ? 220 : 180,
-          borderRadius: '50%',
-          left: '50%',
-          top: -40,
-          transform: 'translateX(-50%)',
-          background: `radial-gradient(ellipse, rgba(${LOGO_CYAN_RGB}, 0.12) 0%, transparent 72%)`,
-          pointerEvents: 'none',
-        }}
-      />
-
-      {/* Subtle vignette so edges stay deep navy like the logo tile */}
+      {/* Soft depth at the bottom edge — still pure navy, no tinted halo on the mark */}
       <div
         aria-hidden
         style={{
           position: 'absolute',
           inset: 0,
           background:
-            'radial-gradient(ellipse at center, transparent 35%, rgba(5, 14, 34, 0.45) 100%)',
+            'radial-gradient(ellipse 80% 55% at 50% 0%, rgba(255,255,255,0.04) 0%, transparent 55%)',
           pointerEvents: 'none',
         }}
       />
 
-      {/* Brand lockup — logo carries wordmark; no duplicate GG'APP text */}
       <div
         style={{
           position: 'relative',
@@ -108,44 +63,31 @@ export function AuthCompactBrandHeader({ tab }: AuthCompactBrandHeaderProps) {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: isTablet ? 14 : 12,
-          animation: 'ggAuthBrandIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) both',
+          gap: isTablet ? 16 : 14,
         }}
       >
         <div
           style={{
-            position: 'relative',
-            width: logoSize,
-            height: logoSize,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            width: logoWidth,
+            height: logoHeight,
+            background: LOGO_NAVY,
+            // Extend the same navy past any image edge / color-management fringe
+            boxShadow: `0 0 0 20px ${LOGO_NAVY}`,
           }}
         >
-          {/* Halo ring matching logo cyan — softens the square edge */}
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              inset: -10,
-              borderRadius: 22,
-              background: `linear-gradient(145deg, rgba(${LOGO_CYAN_RGB}, 0.22), rgba(${LOGO_CYAN_RGB}, 0.02) 55%, transparent)`,
-              boxShadow: `0 0 40px rgba(${LOGO_CYAN_RGB}, 0.18)`,
-              pointerEvents: 'none',
-            }}
-          />
           <img
             src={LOGO}
             alt="GG'APP"
-            width={logoSize}
-            height={logoSize}
+            width={logoWidth}
+            height={logoHeight}
             style={{
-              position: 'relative',
-              objectFit: 'contain',
+              objectFit: 'cover',
+              objectPosition: 'center',
               display: 'block',
-              // Soft edge so navy tile merges with matching header ground
-              borderRadius: 14,
-              boxShadow: `0 0 0 1px rgba(${LOGO_CYAN_RGB}, 0.12), 0 12px 32px rgba(0, 0, 0, 0.28)`,
+              width: logoWidth,
+              height: logoHeight,
+              // Neutralize CSS-vs-PNG navy mismatch on some displays
+              backgroundColor: LOGO_NAVY,
             }}
           />
         </div>
@@ -153,58 +95,27 @@ export function AuthCompactBrandHeader({ tab }: AuthCompactBrandHeaderProps) {
         <div
           style={{
             fontFamily: font.family,
-            fontSize: isTablet ? 15.5 : 14,
+            fontSize: isTablet ? 16 : 14.5,
             fontWeight: 500,
-            letterSpacing: '-0.01em',
+            letterSpacing: '-0.015em',
             lineHeight: 1.4,
             color: 'rgba(255, 255, 255, 0.78)',
-            maxWidth: 280,
-            animation: 'ggAuthTaglineIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.12s both',
+            maxWidth: isTablet ? 320 : 280,
           }}
         >
           {copy.tagline}
         </div>
 
-        {/* Cyan underline accent — brand signature under tagline */}
         <div
           aria-hidden
           style={{
-            width: 36,
+            width: isTablet ? 40 : 34,
             height: 3,
             borderRadius: 999,
-            background: `linear-gradient(90deg, ${LOGO_CYAN}, rgba(${LOGO_CYAN_RGB}, 0.25))`,
-            boxShadow: `0 0 12px rgba(${LOGO_CYAN_RGB}, 0.45)`,
-            animation: 'ggAuthTaglineIn 0.55s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both',
+            background: `linear-gradient(90deg, ${LOGO_CYAN}, rgba(56,182,255,0.35))`,
           }}
         />
       </div>
-
-      {/* Soft fade into the form surface — no hard patch edge */}
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 28,
-          background: `linear-gradient(180deg, transparent 0%, ${C.surface} 100%)`,
-          opacity: 0.14,
-          pointerEvents: 'none',
-        }}
-      />
-      <div
-        aria-hidden
-        style={{
-          position: 'absolute',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          height: 2,
-          background: `linear-gradient(90deg, transparent 0%, ${LOGO_CYAN} 50%, transparent 100%)`,
-          opacity: 0.55,
-        }}
-      />
     </header>
   )
 }

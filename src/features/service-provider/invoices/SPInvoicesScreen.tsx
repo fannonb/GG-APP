@@ -66,7 +66,7 @@ export function SPInvoicesScreen() {
 
   if (isLoading) {
     return (
-      <SPLayout title="Invoices" subtitle="Billing history and payment status">
+      <SPLayout title="Invoices">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading invoices...
@@ -77,7 +77,7 @@ export function SPInvoicesScreen() {
   }
 
   return (
-    <SPLayout title="Invoices" subtitle="Billing history and payment status">
+    <SPLayout title="Invoices">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {[

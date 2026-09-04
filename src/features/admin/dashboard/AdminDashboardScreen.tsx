@@ -369,7 +369,7 @@ export function AdminDashboardScreen() {
 
   if (isLoading && !data) {
     return (
-      <AdminLayout title="Dashboard" subtitle="Live overview of the admin workspace">
+      <AdminLayout title="Dashboard">
         <GGCard padding="28px">
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'center', textAlign: 'center', color: C.textSub }}>
             <div style={{ width: 34, height: 34, borderRadius: '50%', border: `3px solid ${C.border}`, borderTopColor: C.blue500, animation: 'spin 0.8s linear infinite' }} />
@@ -384,7 +384,7 @@ export function AdminDashboardScreen() {
   if (isError && !data) {
     const message = error instanceof Error ? error.message : 'Unable to load admin dashboard data.'
     return (
-      <AdminLayout title="Dashboard" subtitle="Live overview of the admin workspace">
+      <AdminLayout title="Dashboard">
         <GGCard padding="28px" style={{ maxWidth: 640 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             <div style={{ fontSize: '16px', fontWeight: 800, color: C.text }}>Dashboard data unavailable</div>
@@ -404,7 +404,7 @@ export function AdminDashboardScreen() {
   }
 
   return (
-    <AdminLayout title="Dashboard" subtitle="Live overview of the admin workspace">
+    <AdminLayout title="Dashboard">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '22px', fontFamily: font.family }}>
         {paymentItems.length > 0 && (
           <PaymentAlertBanner
@@ -477,6 +477,103 @@ export function AdminDashboardScreen() {
             sub={country === 'all' ? 'Registered patient accounts' : `Registered patient accounts in ${country}`}
             accent={C.navy800}
           />
+        </div>
+
+        {/* Health Intelligence Platform Strategic Quick-Launch */}
+        <div style={{
+          background: `linear-gradient(135deg, ${C.navy800} 0%, #102B69 100%)`,
+          borderRadius: radius.lg,
+          padding: '22px 24px',
+          color: '#FFFFFF',
+          boxShadow: '0 8px 24px rgba(9, 28, 68, 0.14)',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px', marginBottom: '18px' }}>
+            <div>
+              <div style={{ fontSize: '10.5px', fontWeight: 700, color: C.blue400, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '4px' }}>
+                GG'APP Strategic Health Intelligence Platform
+              </div>
+              <h3 style={{ margin: 0, fontSize: '18px', fontWeight: 800, letterSpacing: '-0.01em' }}>
+                Epidemiological, Actuarial & Consumer Health Intelligence
+              </h3>
+              <p style={{ margin: '4px 0 0', fontSize: '12.5px', color: 'rgba(255,255,255,0.7)', maxWidth: '640px', lineHeight: 1.4 }}>
+                Real-time operational monitoring, disease burden analytics, 5-band demographic profiling, and medical inflation observatory.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+            <div
+              onClick={() => navigate(ROUTES.ADMIN_DISEASE_BURDEN)}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '12px',
+                padding: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 700, color: C.blue400 }}>01 · DISEASE BURDEN</div>
+              <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px' }}>Epidemiology Hub →</div>
+              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>Acute/chronic ratio, county heatmaps, day vs. night care patterns.</div>
+            </div>
+
+            <div
+              onClick={() => navigate(ROUTES.ADMIN_DEMOGRAPHICS)}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '12px',
+                padding: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#F59E0B' }}>02 · DEMOGRAPHICS</div>
+              <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px' }}>Actuarial Pyramids →</div>
+              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>5-band age stratification (&lt;18, 19–24, 25–34, 35–50, 51+) & gender ratios.</div>
+            </div>
+
+            <div
+              onClick={() => navigate(ROUTES.ADMIN_FINANCIALS)}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '12px',
+                padding: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#10B981' }}>03 · FINANCIALS & CPI</div>
+              <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px' }}>Medical Inflation →</div>
+              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>Tracking 7.8% health inflation vs 4.5% CPI & credit thresholds.</div>
+            </div>
+
+            <div
+              onClick={() => navigate(ROUTES.ADMIN_CONSUMER_HEALTH)}
+              style={{
+                background: 'rgba(255,255,255,0.08)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: '12px',
+                padding: '16px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.14)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.08)')}
+            >
+              <div style={{ fontSize: '12px', fontWeight: 700, color: '#EC4899' }}>04 · CONSUMER HEALTH</div>
+              <div style={{ fontSize: '15px', fontWeight: 800, marginTop: '4px' }}>Member Experience →</div>
+              <div style={{ fontSize: '11.5px', color: 'rgba(255,255,255,0.65)', marginTop: '4px' }}>+68 NPS, top provider ratings, and wallet spending habits.</div>
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '1.6fr 1fr', gap: '20px', alignItems: 'flex-start' }}>

@@ -18,7 +18,7 @@ import type { Appointment } from '@/types/appointment.types'
 import type { SPInvoice } from '@/types/invoice.types'
 import type { PrescriptionRequest } from '@/types/prescription.types'
 import { formatCurrency, formatDate } from '@/utils/format'
-import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import { appointmentHasRecordedVisit, getAppointmentDisplayStatus } from '@/utils/appointments'
 import { generateRef } from '@/utils/refgen'
 import { validateInvoicePdfFile, invoiceHasStoredAttachment } from '@/utils/invoice-attachment'
 
@@ -165,7 +165,9 @@ export function SPInvoiceUploadScreen() {
   const confirmedAppointments = appointments.filter(
     appointment => {
       const status = getAppointmentDisplayStatus(appointment)
-      return (status === 'confirmed' || status === 'completed') && !appointment.hasInvoice
+      return (status === 'confirmed' || status === 'completed')
+        && !appointment.hasInvoice
+        && appointmentHasRecordedVisit(appointment)
     },
   )
 
@@ -318,7 +320,6 @@ export function SPInvoiceUploadScreen() {
     return (
       <SPLayout
         title={editInvoice ? 'Invoice Resubmitted' : 'Invoice Submitted'}
-        subtitle="Awaiting patient payment authorization"
       >
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
           <GGCard padding={isMobile ? '24px 16px' : '32px'}>
@@ -373,7 +374,7 @@ export function SPInvoiceUploadScreen() {
 
   if (!editInvoice && !isFromPrescription && !appointmentsLoading && confirmedAppointments.length === 0) {
     return (
-      <SPLayout title="Upload Invoice" subtitle="Post-appointment workflow">
+      <SPLayout title="Upload Invoice">
         <div style={{ maxWidth: 520, margin: '0 auto' }}>
           <GGCard padding="32px">
             <div style={{
@@ -388,10 +389,10 @@ export function SPInvoiceUploadScreen() {
               </svg>
             </div>
             <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, textAlign: 'center', letterSpacing: '-0.03em', marginBottom: '8px' }}>
-              No billable appointments yet
+              Record a visit first
             </div>
             <div style={{ fontSize: '14px', color: C.textSub, textAlign: 'center', lineHeight: 1.6, marginBottom: '24px' }}>
-              Invoices must be linked to a confirmed or completed appointment. Once a patient books and you confirm the visit, you can upload an invoice here.
+              Invoices can only be uploaded after the visit notes are recorded. Open a confirmed appointment, record the visit, then continue to the invoice.
             </div>
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
               <GGButton variant="primary" size="md" onClick={() => navigate(ROUTES.SP_APPOINTMENTS)} style={{ flex: 1 }}>
@@ -410,7 +411,6 @@ export function SPInvoiceUploadScreen() {
   return (
     <SPLayout
       title={editInvoice ? 'Edit & Resubmit Invoice' : isFromPrescription ? 'Upload Prescription Invoice' : 'Upload Invoice'}
-      subtitle={editInvoice ? 'Modify and resubmit invoice to patient' : isFromPrescription ? 'Post-collection workflow' : 'Post-appointment workflow'}
     >
       <div style={{ maxWidth: 680, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px' }}>
         {hasPrefillVisit ? (
@@ -488,8 +488,8 @@ export function SPInvoiceUploadScreen() {
                     <>
                       <option value="">
                         {appointmentsLoading
-                          ? 'Loading confirmed appointments...'
-                          : 'Select patient from confirmed appointment'}
+                          ? 'Loading recorded visits...'
+                          : 'Select a recorded visit'}
                       </option>
                       {confirmedAppointments.map((appointment: Appointment) => (
                         <option key={appointment.id} value={appointment.id}>
@@ -810,7 +810,7 @@ export function SPInvoiceUploadScreen() {
 
               {!editInvoice && !isFromPrescription && !form.appointmentId && (
                 <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5, fontFamily: font.family }}>
-                  Select a confirmed or completed appointment before submitting the invoice.
+                  Select a recorded visit before submitting the invoice.
                 </div>
               )}
 

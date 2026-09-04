@@ -1,5 +1,6 @@
 export * from './useAuthMutations'
 export * from './useAuthQueries'
+export * from './useSessionQueries'
 export * from './usePatientMutations'
 export * from './usePatientQueries'
 export * from './useSPQueries'

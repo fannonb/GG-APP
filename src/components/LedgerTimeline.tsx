@@ -1,119 +1,166 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { LedgerEntry } from '@/types/ledger.types'
-import { GGBadge, GGCard, GGDivider } from '@/design-system'
-import { C, font, radius, shadow } from '@/design-system/tokens'
+import { GGBadge, GGCard, GGDivider, GGInput } from '@/design-system'
+import { C, font, radius } from '@/design-system/tokens'
+import { useResponsive } from '@/hooks/useResponsive'
 
-function formatDateHeader(iso: string) {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  const dateStr = d.toLocaleDateString('en-GB', {
+export type LedgerBeneficiaryOption = {
+  id: string | undefined
+  label: string
+}
+
+type KindFilter = 'all' | 'visit' | 'prescription'
+type DateFilter = 'all' | '30d' | '6m' | '12m'
+
+function entryKey(entry: LedgerEntry) {
+  return `${entry.kind}-${entry.id}`
+}
+
+function formatRowDate(iso: string) {
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return iso
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+function formatDetailDate(iso: string) {
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return iso
+  return date.toLocaleString('en-GB', {
     day: 'numeric',
     month: 'short',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
-  const timeStr = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
-  return `${dateStr} at ${timeStr}`
+}
+
+function monthGroupLabel(iso: string) {
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return 'Unknown date'
+  return date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }).toUpperCase()
+}
+
+function monthGroupKey(iso: string) {
+  const date = new Date(iso)
+  if (isNaN(date.getTime())) return 'unknown'
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
 function categoryLabel(category: string) {
   return category.charAt(0).toUpperCase() + category.slice(1).toLowerCase()
 }
 
+function beneficiaryLabel(name: string | null) {
+  if (!name) return 'Patient'
+  const cleaned = name.replace(/\s*\([^)]*\)/, '').trim()
+  if (!cleaned || cleaned.toLowerCase() === 'self' || cleaned.toLowerCase() === 'me') return 'Patient'
+  return cleaned
+}
+
+function entryTitle(entry: LedgerEntry) {
+  if (entry.kind === 'prescription') return 'Prescription'
+  return entry.service || 'Medical visit'
+}
+
+function entrySummary(entry: LedgerEntry) {
+  if (entry.kind === 'visit') {
+    return entry.diagnosis || entry.treatment || entry.services[0] || 'Visit recorded'
+  }
+  if (entry.items.length === 0) return `Prescription fulfilled · ${entry.reference}`
+  const first = entry.items[0]?.name
+  const extra = entry.items.length - 1
+  return extra > 0 ? `${first} + ${extra} more` : first
+}
+
+function entrySearchText(entry: LedgerEntry) {
+  const parts = [
+    entryTitle(entry),
+    entry.provider.name,
+    entry.provider.category,
+    entry.beneficiaryName,
+    entrySummary(entry),
+  ]
+  if (entry.kind === 'visit') {
+    parts.push(entry.diagnosis, entry.treatment, entry.followUp, entry.service, ...entry.services, ...Object.values(entry.vitals))
+  } else {
+    parts.push(entry.reference, entry.fulfillmentMode, ...entry.items.map(item => item.name))
+  }
+  return parts.filter(Boolean).join(' ').toLowerCase()
+}
+
+function matchesBeneficiary(entry: LedgerEntry, filter: string | undefined, options: LedgerBeneficiaryOption[]) {
+  if (!filter) return true
+  if (filter === 'self') {
+    if (!entry.beneficiaryName) return true
+    const name = entry.beneficiaryName.toLowerCase()
+    return name === 'self' || name === 'me'
+  }
+  const selected = options.find(option => option.id === filter)
+  const target = (selected ? selected.label : filter).toLowerCase().trim()
+  if (!entry.beneficiaryName) return false
+  const entryName = entry.beneficiaryName.toLowerCase()
+  return entryName.includes(target) || target.includes(entryName)
+}
+
+function matchesDate(iso: string, filter: DateFilter) {
+  if (filter === 'all') return true
+  const date = new Date(iso).getTime()
+  if (isNaN(date)) return true
+  const now = Date.now()
+  const days = filter === '30d' ? 30 : filter === '6m' ? 182 : 365
+  return now - date <= days * 24 * 60 * 60 * 1000
+}
+
 const VITAL_LABELS: Record<string, string> = {
-  bp: 'Blood Pressure',
+  bp: 'Blood pressure',
   temp: 'Temperature',
   weight: 'Weight',
-  sats: 'O₂ Sats',
+  sats: 'O₂ sats',
   glucose: 'Glucometer',
   pulse: 'Pulse',
   height: 'Height',
   bmi: 'BMI',
 }
 
-const VITAL_ICONS: Record<string, React.ReactNode> = {
-  bp: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-    </svg>
-  ),
-  temp: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14 4v10.54a4 4 0 1 1-4 0V4a2 2 0 0 1 4 0Z" />
-    </svg>
-  ),
-  sats: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  ),
-  glucose: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-    </svg>
-  ),
-  pulse: (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 0C1.46 6.7 1.33 10.28 4 13l8 8 8-8c2.67-2.72 2.54-6.3.42-8.42z" />
-    </svg>
-  ),
-}
-
-function VitalChip({ label, value, vitalKey }: { label: string; value: string; vitalKey: string }) {
-  const icon = VITAL_ICONS[vitalKey]
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
   return (
-    <div
+    <button
+      type="button"
+      onClick={onClick}
       style={{
-        background: C.bg,
-        border: `1px solid ${C.border}`,
-        borderRadius: radius.sm,
-        padding: '8px 12px',
-        flex: '1 1 130px',
-        minWidth: 120,
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
+        padding: '6px 12px',
+        borderRadius: radius.full,
+        border: `1.5px solid ${active ? C.navy800 : C.border}`,
+        background: active ? C.navy800 : '#fff',
+        color: active ? '#fff' : C.textSub,
+        fontSize: 12.5,
+        fontWeight: 700,
+        fontFamily: font.family,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
       }}
     >
-      {icon && (
-        <div
-          style={{
-            color: C.blue500,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: C.blue100,
-            borderRadius: radius.xs,
-            width: 26,
-            height: 26,
-            flexShrink: 0,
-          }}
-        >
-          {icon}
-        </div>
-      )}
-      <div>
-        <div style={{ fontSize: 11, color: C.textSub, fontWeight: 600 }}>{label}</div>
-        <div style={{ fontSize: 13, color: C.navy800, fontWeight: 700 }}>{value}</div>
-      </div>
-    </div>
+      {label}
+    </button>
   )
 }
 
-function DetailField({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
+function DetailField({ label, value }: { label: string; value: string }) {
   return (
-    <div
-      style={{
-        background: highlight ? C.blue100 : C.bg,
-        border: `1px solid ${highlight ? C.blue300 : C.border}`,
-        borderRadius: radius.sm,
-        padding: '12px 14px',
-      }}
-    >
+    <div>
       <div
         style={{
           fontSize: 11,
           fontWeight: 700,
-          color: highlight ? C.navy800 : C.textSub,
+          color: C.textLight,
           textTransform: 'uppercase',
           letterSpacing: '0.06em',
           marginBottom: 4,
@@ -121,41 +168,61 @@ function DetailField({ label, value, highlight = false }: { label: string; value
       >
         {label}
       </div>
-      <div style={{ fontSize: 13.5, color: C.text, lineHeight: 1.6, fontWeight: highlight ? 600 : 400 }}>{value}</div>
+      <div style={{ fontSize: 14, color: C.text, lineHeight: 1.6, fontWeight: 500 }}>{value}</div>
     </div>
   )
 }
 
-function VisitCardContent({ entry }: { entry: Extract<LedgerEntry, { kind: 'visit' }> }) {
+function VisitDetail({ entry }: { entry: Extract<LedgerEntry, { kind: 'visit' }> }) {
   const vitals = Object.entries(entry.vitals).filter(([, value]) => value)
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 14 }}>
-      {entry.beneficiaryName && (
-        <div>
-          <GGBadge type="info">For: {entry.beneficiaryName}</GGBadge>
-        </div>
-      )}
-
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {entry.diagnosis && <DetailField label="Diagnosis" value={entry.diagnosis} />}
+      {entry.treatment && <DetailField label="Treatment" value={entry.treatment} />}
       {vitals.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>
-            Vitals Recorded
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.textLight,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: 8,
+            }}
+          >
+            Vitals
           </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 8 }}>
             {vitals.map(([key, value]) => (
-              <VitalChip key={key} vitalKey={key} label={VITAL_LABELS[key] ?? key} value={value} />
+              <div
+                key={key}
+                style={{
+                  padding: '10px 12px',
+                  border: `1px solid ${C.border}`,
+                  borderRadius: radius.sm,
+                  background: C.bg,
+                }}
+              >
+                <div style={{ fontSize: 11, color: C.textSub, fontWeight: 600 }}>{VITAL_LABELS[key] ?? key}</div>
+                <div style={{ fontSize: 15, color: C.navy800, fontWeight: 700, marginTop: 2 }}>{value}</div>
+              </div>
             ))}
           </div>
         </div>
       )}
-
-      {entry.diagnosis && <DetailField label="Diagnosis" value={entry.diagnosis} highlight />}
-      {entry.treatment && <DetailField label="Treatment" value={entry.treatment} />}
-
       {entry.services.length > 0 && (
         <div>
-          <div style={{ fontSize: 11, fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+          <div
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: C.textLight,
+              textTransform: 'uppercase',
+              letterSpacing: '0.06em',
+              marginBottom: 8,
+            }}
+          >
             Services
           </div>
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
@@ -167,62 +234,53 @@ function VisitCardContent({ entry }: { entry: Extract<LedgerEntry, { kind: 'visi
           </div>
         </div>
       )}
-
       {entry.followUp && <DetailField label="Follow-up" value={entry.followUp} />}
     </div>
   )
 }
 
-function PrescriptionCardContent({ entry }: { entry: Extract<LedgerEntry, { kind: 'prescription' }> }) {
+function PrescriptionDetail({ entry }: { entry: Extract<LedgerEntry, { kind: 'prescription' }> }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 14 }}>
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <GGBadge type="primary">{entry.fulfillmentMode === 'DELIVERY' ? 'Delivered' : 'Collected'}</GGBadge>
-        {entry.beneficiaryName && <GGBadge type="info">For: {entry.beneficiaryName}</GGBadge>}
-        <div style={{ fontSize: 12, color: C.textSub, marginLeft: 'auto' }}>
-          Ref: <span style={{ fontWeight: 600, color: C.navy800 }}>{entry.reference}</span>
-        </div>
+        <span style={{ fontSize: 12.5, color: C.textSub }}>
+          Ref <span style={{ fontWeight: 700, color: C.navy800 }}>{entry.reference}</span>
+        </span>
       </div>
-
       <div>
-        <div style={{ fontSize: 11, fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
-          Medication Dispensed ({entry.items.length})
+        <div
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: C.textLight,
+            textTransform: 'uppercase',
+            letterSpacing: '0.06em',
+            marginBottom: 8,
+          }}
+        >
+          Medication dispensed
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          {entry.items.map((item, index) => (
-            <div
-              key={`${item.name}-${index}`}
-              style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                gap: 12,
-                fontSize: 13.5,
-                color: C.text,
-                padding: '8px 12px',
-                background: C.bg,
-                border: `1px solid ${C.border}`,
-                borderRadius: radius.sm,
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div
-                  style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: C.blue500,
-                  }}
-                />
-                <span style={{ fontWeight: 600 }}>{item.name}</span>
+          {entry.items.length === 0 ? (
+            <div style={{ fontSize: 13.5, color: C.textSub }}>Prescription fulfilled ({entry.reference})</div>
+          ) : (
+            entry.items.map((item, index) => (
+              <div
+                key={`${item.name}-${index}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  padding: '10px 0',
+                  borderBottom: `1px solid ${C.border}`,
+                  fontSize: 14,
+                }}
+              >
+                <span style={{ fontWeight: 600, color: C.text }}>{item.name}</span>
+                {item.quantity && <span style={{ color: C.textSub }}>{item.quantity}</span>}
               </div>
-              {item.quantity && <span style={{ color: C.textSub, fontSize: 13 }}>{item.quantity}</span>}
-            </div>
-          ))}
-          {entry.items.length === 0 && (
-            <div style={{ fontSize: 13, color: C.textSub, padding: '8px 12px', background: C.bg, borderRadius: radius.sm }}>
-              Prescription fulfilled ({entry.reference})
-            </div>
+            ))
           )}
         </div>
       </div>
@@ -230,192 +288,86 @@ function PrescriptionCardContent({ entry }: { entry: Extract<LedgerEntry, { kind
   )
 }
 
-function CollapsibleEntryCard({
-  entry,
-  isExpanded,
-  onToggle,
-}: {
-  entry: LedgerEntry
-  isExpanded: boolean
-  onToggle: () => void
-}) {
-  const isVisit = entry.kind === 'visit'
-  const dateHeading = formatDateHeader(entry.date)
-
-  const vitalsCount = isVisit ? Object.values(entry.vitals).filter(Boolean).length : 0
-
+function RecordDetail({ entry }: { entry: LedgerEntry }) {
   return (
-    <div
-      style={{
-        background: C.surface,
-        borderRadius: radius.lg,
-        border: `1.5px solid ${isExpanded ? C.blue400 : C.border}`,
-        boxShadow: isExpanded ? shadow.md : shadow.sm,
-        transition: 'all 0.2s ease-in-out',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Header Bar */}
-      <div
-        onClick={onToggle}
-        role="button"
-        tabIndex={0}
-        onKeyDown={e => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            onToggle()
-          }
-        }}
-        style={{
-          padding: '16px 20px',
-          cursor: 'pointer',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 16,
-          background: isExpanded ? 'rgba(56, 182, 255, 0.03)' : C.surface,
-          userSelect: 'none',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, minWidth: 0 }}>
-          {/* Light Blue Icon Badge */}
-          <div
-            style={{
-              width: 42,
-              height: 42,
-              borderRadius: radius.md,
-              background: C.blue100,
-              color: C.blue500,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-            }}
-          >
-            {isVisit ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M4.8 2.3A.3.3 0 0 0 4.5 2.6V11a6 6 0 0 0 12 0V2.6a.3.3 0 0 0-.3-.3" />
-                <path d="M10.5 17a6 6 0 0 0 6 6h1.5a4.5 4.5 0 0 0 4.5-4.5v-3.5" />
-                <circle cx="22.5" cy="15" r="1.5" />
-              </svg>
-            ) : (
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z" />
-                <path d="m8.5 8.5 7 7" />
-              </svg>
-            )}
-          </div>
-
-          {/* Main Info */}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            {/* DATE HEADING */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 2 }}>
-              <span
-                style={{
-                  fontSize: 15,
-                  fontWeight: 700,
-                  color: C.navy800,
-                }}
-              >
-                {dateHeading}
-              </span>
-              {entry.beneficiaryName && <GGBadge type="info">For: {entry.beneficiaryName}</GGBadge>}
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', fontSize: 12.5, color: C.textSub }}>
-              <span style={{ fontWeight: 600 }}>{entry.provider.name}</span>
-              <span style={{ color: C.borderDark }}>•</span>
-              <GGBadge type="navy">{categoryLabel(entry.provider.category)}</GGBadge>
-              {isVisit ? (
-                <>
-                  <span style={{ color: C.borderDark }}>•</span>
-                  <span>{entry.service ?? 'Medical Visit'}</span>
-                </>
-              ) : (
-                <>
-                  <span style={{ color: C.borderDark }}>•</span>
-                  <GGBadge type="primary">Prescription</GGBadge>
-                </>
-              )}
-            </div>
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start', marginBottom: 6 }}>
+        <div>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.navy800, letterSpacing: '-0.02em' }}>{entryTitle(entry)}</div>
+          <div style={{ fontSize: 13, color: C.textSub, marginTop: 4 }}>
+            {formatDetailDate(entry.date)} · {entry.provider.name}
           </div>
         </div>
-
-        {/* Right side stats & toggle */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-          {/* Quick info chip */}
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            {isVisit ? (
-              <>
-                {vitalsCount > 0 && <GGBadge type="outline">{vitalsCount} Vitals</GGBadge>}
-                {entry.services.length > 0 && <GGBadge type="outline">{entry.services.length} Services</GGBadge>}
-              </>
-            ) : (
-              <>
-                <GGBadge type="primary">{entry.fulfillmentMode === 'DELIVERY' ? 'Delivered' : 'Collected'}</GGBadge>
-                <GGBadge type="outline">{entry.items.length} Items</GGBadge>
-              </>
-            )}
-          </div>
-
-          {/* Toggle Chevron Button */}
-          <button
-            type="button"
-            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: radius.full,
-              border: `1px solid ${isExpanded ? C.blue500 : C.border}`,
-              background: isExpanded ? C.blue100 : C.bg,
-              color: isExpanded ? C.blue500 : C.textSub,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{
-                transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.25s ease',
-              }}
-            >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
-        </div>
+        <GGBadge type="info">{beneficiaryLabel(entry.beneficiaryName)}</GGBadge>
       </div>
-
-      {/* Expanded Content Body */}
-      {isExpanded && (
-        <div style={{ padding: '0 20px 20px 20px' }}>
-          <GGDivider margin="0 0 16px 0" />
-          {isVisit ? <VisitCardContent entry={entry} /> : <PrescriptionCardContent entry={entry} />}
-        </div>
-      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', margin: '10px 0 16px' }}>
+        <GGBadge type="navy">{categoryLabel(entry.provider.category)}</GGBadge>
+        {entry.kind === 'prescription' && <GGBadge type="primary">Prescription</GGBadge>}
+      </div>
+      <GGDivider margin="0 0 16px 0" />
+      {entry.kind === 'visit' ? <VisitDetail entry={entry} /> : <PrescriptionDetail entry={entry} />}
     </div>
   )
 }
 
-export function LedgerTimeline({ entries, emptyMessage }: { entries: LedgerEntry[]; emptyMessage?: string }) {
-  // Track expanded card IDs. Default to expanding the first item if available.
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => {
-    const initial = new Set<string>()
-    if (entries.length > 0) {
-      initial.add(`${entries[0].kind}-${entries[0].id}`)
+export function LedgerTimeline({
+  entries,
+  emptyMessage,
+  beneficiaryOptions = [],
+}: {
+  entries: LedgerEntry[]
+  emptyMessage?: string
+  beneficiaryOptions?: LedgerBeneficiaryOption[]
+}) {
+  const { isDesktop } = useResponsive()
+  const [query, setQuery] = useState('')
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all')
+  const [beneficiaryFilter, setBeneficiaryFilter] = useState<string | undefined>(undefined)
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+
+  const filteredEntries = useMemo(() => {
+    const needle = query.trim().toLowerCase()
+    return [...entries]
+      .filter(entry => matchesBeneficiary(entry, beneficiaryFilter, beneficiaryOptions))
+      .filter(entry => kindFilter === 'all' || entry.kind === kindFilter)
+      .filter(entry => matchesDate(entry.date, dateFilter))
+      .filter(entry => (needle ? entrySearchText(entry).includes(needle) : true))
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [entries, beneficiaryFilter, beneficiaryOptions, kindFilter, dateFilter, query])
+
+  useEffect(() => {
+    if (filteredEntries.length === 0) {
+      setSelectedKey(null)
+      return
     }
-    return initial
-  })
+    const stillVisible = selectedKey && filteredEntries.some(entry => entryKey(entry) === selectedKey)
+    if (!stillVisible) setSelectedKey(entryKey(filteredEntries[0]))
+  }, [filteredEntries, selectedKey])
+
+  const selectedEntry = filteredEntries.find(entry => entryKey(entry) === selectedKey) ?? null
+  const grouped = useMemo(() => {
+    const groups: Array<{ key: string; label: string; items: LedgerEntry[] }> = []
+    for (const entry of filteredEntries) {
+      const key = monthGroupKey(entry.date)
+      const last = groups[groups.length - 1]
+      if (last && last.key === key) {
+        last.items.push(entry)
+      } else {
+        groups.push({ key, label: monthGroupLabel(entry.date), items: [entry] })
+      }
+    }
+    return groups
+  }, [filteredEntries])
+
+  const hasActiveFilters = Boolean(query.trim()) || kindFilter !== 'all' || dateFilter !== 'all' || Boolean(beneficiaryFilter)
+
+  const resetFilters = () => {
+    setQuery('')
+    setKindFilter('all')
+    setDateFilter('all')
+    setBeneficiaryFilter(undefined)
+  }
 
   if (entries.length === 0) {
     return (
@@ -427,68 +379,167 @@ export function LedgerTimeline({ entries, emptyMessage }: { entries: LedgerEntry
     )
   }
 
-  const allIds = entries.map(e => `${e.kind}-${e.id}`)
-  const allExpanded = allIds.every(id => expandedIds.has(id))
+  const filterBar = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <GGInput
+        placeholder="Search diagnosis, medication, provider, reference…"
+        value={query}
+        onChange={event => setQuery(event.target.value)}
+      />
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <FilterChip label="All" active={kindFilter === 'all'} onClick={() => setKindFilter('all')} />
+        <FilterChip label="Visits" active={kindFilter === 'visit'} onClick={() => setKindFilter('visit')} />
+        <FilterChip label="Prescriptions" active={kindFilter === 'prescription'} onClick={() => setKindFilter('prescription')} />
+        <FilterChip label="Last 30 days" active={dateFilter === '30d'} onClick={() => setDateFilter(dateFilter === '30d' ? 'all' : '30d')} />
+        <FilterChip label="Last 6 months" active={dateFilter === '6m'} onClick={() => setDateFilter(dateFilter === '6m' ? 'all' : '6m')} />
+        <FilterChip label="Last 12 months" active={dateFilter === '12m'} onClick={() => setDateFilter(dateFilter === '12m' ? 'all' : '12m')} />
+      </div>
+      {beneficiaryOptions.length > 0 && (
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {beneficiaryOptions.map(option => (
+            <FilterChip
+              key={option.id ?? 'all'}
+              label={option.label}
+              active={beneficiaryFilter === option.id}
+              onClick={() => setBeneficiaryFilter(option.id)}
+            />
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, color: C.textSub, fontWeight: 600 }}>
+          {filteredEntries.length} {filteredEntries.length === 1 ? 'record' : 'records'}
+        </div>
+        {hasActiveFilters && (
+          <button
+            type="button"
+            onClick={resetFilters}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: C.blue500,
+              fontSize: 12.5,
+              fontWeight: 700,
+              fontFamily: font.family,
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+    </div>
+  )
 
-  const toggleExpand = (id: string) => {
-    setExpandedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
+  const list = (
+    <div>
+      {filteredEntries.length === 0 ? (
+        <div style={{ padding: '28px 16px', textAlign: 'center', color: C.textSub, fontSize: 13.5 }}>
+          No records match these filters.
+        </div>
+      ) : (
+        grouped.map(group => (
+          <div key={group.key}>
+            <div
+              style={{
+                padding: '8px 14px',
+                background: C.bg,
+                borderTop: `1px solid ${C.border}`,
+                borderBottom: `1px solid ${C.border}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}
+            >
+              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '0.06em', color: C.textSub }}>{group.label}</span>
+              <span style={{ fontSize: 11, color: C.textLight, fontWeight: 600 }}>{group.items.length}</span>
+            </div>
+            {group.items.map(entry => {
+              const key = entryKey(entry)
+              const active = key === selectedKey
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSelectedKey(key)}
+                  style={{
+                    width: '100%',
+                    textAlign: 'left',
+                    padding: '12px 14px',
+                    border: 'none',
+                    borderBottom: `1px solid ${C.border}`,
+                    background: active ? C.bg : '#fff',
+                    cursor: 'pointer',
+                    fontFamily: font.family,
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                    <div style={{ width: 58, flexShrink: 0, fontSize: 12.5, fontWeight: 700, color: C.navy800, paddingTop: 1 }}>
+                      {formatRowDate(entry.date)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: C.navy800 }}>{entryTitle(entry)}</span>
+                        {entry.kind === 'prescription' && <GGBadge type="primary">Rx</GGBadge>}
+                      </div>
+                      <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 2 }}>{entry.provider.name}</div>
+                      <div style={{ fontSize: 12.5, color: C.textLight, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {entrySummary(entry)}
+                        {entry.kind === 'visit' && entry.followUp ? ` · ${entry.followUp}` : ''}
+                        {` · ${beneficiaryLabel(entry.beneficiaryName)}`}
+                      </div>
+                    </div>
+                    <span style={{ color: C.textLight, fontSize: 16, lineHeight: 1, paddingTop: 2 }}>›</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        ))
+      )}
+    </div>
+  )
 
-  const toggleAll = () => {
-    if (allExpanded) {
-      setExpandedIds(new Set())
-    } else {
-      setExpandedIds(new Set(allIds))
-    }
+  if (!isDesktop) {
+    return (
+      <div style={{ fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {filterBar}
+        <GGCard padding="0" style={{ overflow: 'hidden' }}>
+          {list}
+        </GGCard>
+        {selectedEntry && (
+          <GGCard padding="20px">
+            <RecordDetail entry={selectedEntry} />
+          </GGCard>
+        )}
+      </div>
+    )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: font.family }}>
-      {/* Timeline Controls Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px' }}>
-        <div style={{ fontSize: 13, color: C.textSub, fontWeight: 600 }}>
-          {entries.length} {entries.length === 1 ? 'treatment record' : 'treatment records'}
+    <div style={{ fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {filterBar}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'minmax(300px, 0.92fr) minmax(360px, 1.08fr)',
+          border: `1px solid ${C.border}`,
+          borderRadius: radius.lg,
+          overflow: 'hidden',
+          background: '#fff',
+          minHeight: 520,
+        }}
+      >
+        <div style={{ borderRight: `1px solid ${C.border}`, maxHeight: 720, overflow: 'auto' }}>{list}</div>
+        <div style={{ padding: 22, maxHeight: 720, overflow: 'auto' }}>
+          {selectedEntry ? (
+            <RecordDetail entry={selectedEntry} />
+          ) : (
+            <div style={{ color: C.textSub, fontSize: 14, padding: 24 }}>Select a record to view details.</div>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={toggleAll}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: C.blue500,
-            fontSize: 12.5,
-            fontWeight: 700,
-            fontFamily: font.family,
-            cursor: 'pointer',
-            padding: '4px 8px',
-            borderRadius: radius.xs,
-            transition: 'opacity 0.2s',
-          }}
-        >
-          {allExpanded ? 'Collapse all' : 'Expand all'}
-        </button>
       </div>
-
-      {/* Treatment Record Cards */}
-      {entries.map(entry => {
-        const idKey = `${entry.kind}-${entry.id}`
-        return (
-          <CollapsibleEntryCard
-            key={idKey}
-            entry={entry}
-            isExpanded={expandedIds.has(idKey)}
-            onToggle={() => toggleExpand(idKey)}
-          />
-        )
-      })}
     </div>
   )
 }

@@ -710,7 +710,7 @@ export function AppointmentsScreen() {
   }, {})
 
   return (
-    <AppLayout title="Appointments" subtitle="Your healthcare schedule" notifCount={2}>
+    <AppLayout title="Appointments" status={upcoming.length > 0 ? `${upcoming.length} upcoming` : undefined} notifCount={2}>
       <div
         style={{
           maxWidth: 860,

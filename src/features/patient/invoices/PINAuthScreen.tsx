@@ -53,7 +53,7 @@ export function PINAuthScreen() {
 
   if (!user.hasPaymentPin) {
     return (
-      <AppLayout title="Payment Authorization" subtitle="Payment PIN required" back notifCount={0}>
+      <AppLayout title="Payment Authorization" back notifCount={0}>
         <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="28px">
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Set up your payment PIN first</div>
@@ -78,7 +78,7 @@ export function PINAuthScreen() {
 
   if (!inv) {
     return (
-      <AppLayout title="Payment Authorization" subtitle="Invoice not found" back notifCount={0}>
+      <AppLayout title="Payment Authorization" back notifCount={0}>
         <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="28px">
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Payment authorization unavailable</div>
@@ -93,7 +93,7 @@ export function PINAuthScreen() {
 
   if (inv.status === 'rejected') {
     return (
-      <AppLayout title="Payment Authorization" subtitle="Invoice rejected" back notifCount={0}>
+      <AppLayout title="Payment Authorization" back notifCount={0}>
         <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="28px">
             <div style={{ fontSize: '18px', fontWeight: 700, color: C.error, marginBottom: '8px' }}>Authorization blocked</div>
@@ -185,7 +185,7 @@ export function PINAuthScreen() {
   const sm = stepMessages[step]
 
   return (
-    <AppLayout title="Payment Authorization" subtitle="Enter PIN 3 times" back notifCount={0}>
+    <AppLayout title="Payment Authorization" back notifCount={0}>
       <div style={{ maxWidth: 460, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="40px">
           {processing ? (

@@ -50,6 +50,10 @@ export function getPatientInitials(user: Patient): string {
   return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase()
 }
 
+/**
+ * Guided setup stays visible until payment PIN exists and a credit application
+ * has been submitted — not merely because an appointment or invoice exists.
+ */
 export function isLivePatientAccountNew(params: {
   user: Patient
   beneficiaries?: Beneficiary[]
@@ -57,24 +61,18 @@ export function isLivePatientAccountNew(params: {
   appointments?: Appointment[]
   invoiceCount?: number
 }): boolean {
-  const {
-    user,
-    beneficiaries = [],
-    transactions = [],
-    appointments = [],
-    invoiceCount = 0,
-  } = params
+  const { user } = params
+  return !user.hasPaymentPin || user.creditStatus === 'not_applied'
+}
 
-  // Invoices, appointments, or transactions mean the account is already in use.
-  if (invoiceCount > 0 || transactions.length > 0 || appointments.length > 0) {
-    return false
-  }
-
-  return (
-    user.creditStatus === 'not_applied' &&
-    user.creditLimit === 0 &&
-    user.creditUsed === 0 &&
-    user.creditAvailable === 0 &&
-    beneficiaries.length === 0
-  )
+/** Server-derived onboarding steps: 1 account, 2 email, 3 PIN, 4 credit, 5 first booking. */
+export function derivePatientOnboardingCompletedSteps(
+  user: Patient,
+  appointmentCount: number,
+): number[] {
+  const steps = [1, 2]
+  if (user.hasPaymentPin) steps.push(3)
+  if (user.creditStatus !== 'not_applied') steps.push(4)
+  if (appointmentCount > 0) steps.push(5)
+  return steps
 }

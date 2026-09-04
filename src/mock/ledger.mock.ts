@@ -61,6 +61,7 @@ export const MOCK_LEDGER_ENTRIES: LedgerEntry[] = [
 
 export const MOCK_LEDGER_STATUS: LedgerStatusResponse = {
   hasPin: true,
+  pinExpired: false,
   pinCreatedAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 10).toISOString(),
   pinExpiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 80).toISOString(),
   activeGrants: [

@@ -75,7 +75,7 @@ export function CreditApprovedBanner({ items, approvedAmountLabel, onAction, onD
           size="sm"
           onClick={() => onAction(items)}
         >
-          View Wallet
+          View credit
         </GGButton>
         <button
           type="button"

@@ -458,7 +458,7 @@ export function AdminNewsScreen() {
   const previewSlotIndex = editing ? articles.findIndex(a => a.id === editing.id) : 0
 
   return (
-    <AdminLayout title="News" subtitle="Publish and manage health news for patients and service providers">
+    <AdminLayout title="News">
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {/* Toast */}

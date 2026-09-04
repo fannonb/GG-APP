@@ -21,6 +21,7 @@ export class GoogleAuthService {
   private readonly webClientId: string | undefined
   private readonly mobileClient: OAuth2Client | null
   private readonly mobileClientId: string | undefined
+  private readonly allowedRedirectUris: string[]
 
   constructor(@Inject(ConfigService) configService: ConfigService) {
     this.webClientId = configService.get<string>('oauth.googleClientId') || undefined
@@ -35,6 +36,20 @@ export class GoogleAuthService {
     this.mobileClient = this.mobileClientId
       ? new OAuth2Client({ clientId: this.mobileClientId })
       : null
+
+    this.allowedRedirectUris =
+      configService.get<string[]>('oauth.allowedRedirectUris') ?? []
+  }
+
+  /**
+   * Server-side allowlist check for the OAuth redirect URI. Skipped when the
+   * allowlist is unconfigured (Google's console still enforces its own list).
+   */
+  private assertRedirectUriAllowed(redirectUri: string) {
+    if (this.allowedRedirectUris.length === 0) return
+    if (!this.allowedRedirectUris.includes(redirectUri)) {
+      throw new UnauthorizedException('Google sign-in was started from an unauthorized origin')
+    }
   }
 
   /**
@@ -58,6 +73,7 @@ export class GoogleAuthService {
     codeVerifier?: string,
     clientId?: string,
   ): Promise<GoogleCodeExchangeResult> {
+    this.assertRedirectUriAllowed(redirectUri)
     const { client } = this.clientFor(clientId)
     let idToken: string | null | undefined
     try {

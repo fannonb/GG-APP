@@ -382,6 +382,12 @@ model ProviderPayoutAccount {
   country       String
   isDefault     Boolean                     @default(false)
   status        ProviderPayoutAccountStatus @default(ACTIVE)
+  mpesaType     String?
+  paybillNumber String?
+  bankName      String?
+  branch        String?
+  branchCode    String?
+  swiftCode     String?
   createdAt     DateTime                    @default(now())
   updatedAt     DateTime                    @updatedAt
   provider      Provider                    @relation(fields: [providerId], references: [id], onDelete: Cascade)

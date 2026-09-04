@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common'
@@ -21,7 +22,7 @@ import {
   UserStatus,
 } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
-import { randomUUID } from 'node:crypto'
+import { randomUUID, createHash, timingSafeEqual } from 'node:crypto'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../prisma/prisma.service'
 import { RedisService } from '../../redis/redis.service'
@@ -35,8 +36,16 @@ import type { RegisterPatientDto } from './dto/register-patient.dto'
 import type { RegisterSpDto } from './dto/register-sp.dto'
 import type { AuthSessionResponse, ForgotPasswordResponse } from './auth.types'
 
+/** Request context captured at login/refresh and recorded on the session so the
+ * "active sessions" screen can tell one device from another. */
+export interface SessionContext {
+  userAgent?: string
+  ip?: string
+}
+
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name)
   private readonly prisma: PrismaService
   private readonly redis: RedisService
   private readonly jwtService: JwtService
@@ -63,7 +72,7 @@ export class AuthService {
     this.mailService = mailService
   }
 
-  async registerPatient(dto: RegisterPatientDto) {
+  async registerPatient(dto: RegisterPatientDto, ctx: SessionContext = {}) {
     const email = dto.email.toLowerCase()
     const existing = await this.prisma.user.findUnique({ where: { email } })
 
@@ -191,14 +200,14 @@ export class AuthService {
       }
     }
 
-    const session = await this.issueSession({ userId, email, role: 'patient' })
+    const session = await this.issueSession({ userId, email, role: 'patient' }, { ctx })
     return {
       message: 'Registration successful.',
       session,
     }
   }
 
-  async loginWithGoogle(dto: GoogleAuthDto) {
+  async loginWithGoogle(dto: GoogleAuthDto, ctx: SessionContext = {}) {
     const { profile, idToken } = await this.googleAuth.exchangeCode(
       dto.code,
       dto.redirectUri,
@@ -243,11 +252,14 @@ export class AuthService {
 
     await this.assertLoginAccess(user.id, user.role, user.status, user.emailVerifiedAt)
 
-    const session = await this.issueSession({
-      userId: user.id,
-      email: user.email,
-      role: this.mapRoleToClient(user.role),
-    })
+    const session = await this.issueSession(
+      {
+        userId: user.id,
+        email: user.email,
+        role: this.mapRoleToClient(user.role),
+      },
+      { ctx },
+    )
 
     return { needsRegistration: false as const, ...session }
   }
@@ -423,16 +435,18 @@ export class AuthService {
     }
   }
 
-  async login(dto: LoginDto): Promise<AuthSessionResponse> {
+  async login(dto: LoginDto, ctx: SessionContext = {}): Promise<AuthSessionResponse> {
     const email = dto.email.toLowerCase()
     const requestedRole = this.mapRequestedRole(dto.role)
 
     // Admin portal gate runs before any user lookup: a wrong or missing token
     // returns 404 regardless of whether the email exists, so admin login does
     // not reveal user existence and repeated failures are throttled via Redis.
+    // The token is compared in constant time (SHA-256 + timingSafeEqual) to
+    // avoid a timing side channel.
     if (requestedRole === UserRole.ADMIN) {
       const expectedToken = this.configService.get<string>('portal.adminToken') ?? ''
-      if (!expectedToken || dto.portalToken !== expectedToken) {
+      if (!expectedToken || !this.tokensEqual(dto.portalToken, expectedToken)) {
         throw new NotFoundException()
       }
       const attempts = Number((await this.redis.get(this.getAdminLoginKey(email))) ?? '0')
@@ -481,11 +495,14 @@ export class AuthService {
       })
     }
 
-    return this.issueSession({
-      userId: user.id,
-      email: user.email,
-      role: this.mapRoleToClient(user.role),
-    })
+    return this.issueSession(
+      {
+        userId: user.id,
+        email: user.email,
+        role: this.mapRoleToClient(user.role),
+      },
+      { ctx },
+    )
   }
 
   async forgotPassword(email: string): Promise<ForgotPasswordResponse> {
@@ -596,26 +613,42 @@ export class AuthService {
 
     await this.redis.del(this.getPasswordResetTokenKey(token))
     await this.redis.del(this.getPasswordResetUserKey(user.id))
+    // A reset password invalidates any access tokens issued before it —
+    // e.g. tokens held by an attacker who compromised the old password.
+    await this.markAccessTokensRevoked(user.id)
 
     return {
       message: 'Password reset successfully. You can now sign in.',
     }
   }
 
-  async refresh(refreshToken: string): Promise<AuthSessionResponse> {
+  async refresh(refreshToken: string, ctx: SessionContext = {}): Promise<AuthSessionResponse> {
     const payload = await this.verifyRefreshToken(refreshToken)
     const key = this.getRefreshTokenKey(payload.jti)
-    const session = await this.redis.get(key)
+    const storedDigest = await this.redis.get(key)
+    const presentedDigest = this.hashToken(refreshToken)
 
-    if (!session) {
+    // Rotation already consumed {refreshToken}: the stored digest no longer
+    // matches. This is either a replay of a rotated token (theft) or a
+    // duplicate concurrent refresh (multi-tab). A token that matches the
+    // previous digest within the grace window is treated as a concurrent
+    // refresh and rejected WITHOUT killing the session — the losing tab
+    // retries with the rotated token (or the shared cookie) on its next call.
+    if (!storedDigest || !this.hashesEqual(presentedDigest, storedDigest)) {
+      if (storedDigest) {
+        const prevDigest = await this.redis.get(this.getRefreshTokenPrevKey(payload.jti))
+        if (prevDigest && this.hashesEqual(presentedDigest, prevDigest)) {
+          throw new UnauthorizedException('Refresh session has expired')
+        }
+        await this.revokeSessionByJti(
+          payload.sub,
+          payload.jti,
+          'auth.refresh.rotated_token_replayed',
+        )
+        await this.notifySuspiciousSession(payload.sub, payload.jti)
+      }
       throw new UnauthorizedException('Refresh session has expired')
     }
-
-    await this.redis.del(key)
-    await this.prisma.providerSessionAudit.updateMany({
-      where: { sessionId: payload.jti, revokedAt: null },
-      data: { revokedAt: new Date() },
-    })
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
     if (!user) {
@@ -624,26 +657,69 @@ export class AuthService {
 
     await this.assertLoginAccess(user.id, user.role, user.status, user.emailVerifiedAt)
 
-    return this.issueSession({
-      userId: user.id,
-      email: user.email,
-      role: this.mapRoleToClient(user.role),
+    // Keep the just-consumed digest around briefly so a concurrent tab that
+    // presents it in the same window is not mistaken for a stolen replay.
+    await this.redis.set(this.getRefreshTokenPrevKey(payload.jti), presentedDigest, 15)
+
+    // Rotation: consume the presented refresh token and issue a fresh one for
+    // the SAME logical session (same jti), so per-session revocation and the
+    // device list stay stable across refreshes.
+    const session = await this.issueSession(
+      {
+        userId: user.id,
+        email: user.email,
+        role: this.mapRoleToClient(user.role),
+      },
+      { ctx, track: false, reuseJti: payload.jti },
+    )
+
+    await this.prisma.providerSessionAudit.updateMany({
+      where: { sessionId: payload.jti, revokedAt: null },
+      data: {
+        lastSeenAt: new Date(),
+        deviceLabel: this.describeDevice(ctx, this.mapRoleToClient(user.role)),
+        locationLabel: ctx.ip ? `IP ${ctx.ip}` : undefined,
+        ipAddress: ctx.ip ?? undefined,
+        userAgent: ctx.userAgent?.slice(0, 512) ?? undefined,
+      },
     })
+
+    return session
   }
 
-  async logout(refreshToken: string) {
-    try {
-      const payload = await this.verifyRefreshToken(refreshToken)
-      await this.redis.del(this.getRefreshTokenKey(payload.jti))
-      await this.prisma.providerSessionAudit.updateMany({
-        where: { sessionId: payload.jti, revokedAt: null },
-        data: { revokedAt: new Date() },
-      })
-    } catch {
+  async logout(
+    session?: { sub: string; jti?: string },
+    refreshToken?: string,
+  ) {
+    // Preferred path: revoke by the access token's jti. Logout is guarded by
+    // JwtAuthGuard, so a caller without a live access token (e.g. someone who
+    // only stole a refresh token) cannot destroy the victim's session.
+    if (session?.jti) {
+      await this.revokeSessionByJti(session.sub, session.jti, 'auth.logout')
       return { message: 'Logged out' }
+    }
+    if (refreshToken) {
+      try {
+        const payload = await this.verifyRefreshToken(refreshToken)
+        await this.revokeSessionByJti(payload.sub, payload.jti, 'auth.logout')
+      } catch {
+        return { message: 'Logged out' }
+      }
     }
 
     return { message: 'Logged out' }
+  }
+
+  /** Revokes every live session for the account ("sign out everywhere"). */
+  async revokeAllSessions(userId: string) {
+    const sessions = await this.prisma.providerSessionAudit.findMany({
+      where: { userId, revokedAt: null },
+      select: { sessionId: true },
+    })
+    for (const { sessionId } of sessions) {
+      await this.revokeSessionByJti(userId, sessionId, 'auth.sessions.revoked_all')
+    }
+    return { message: 'All sessions signed out.' }
   }
 
   private async assertLoginAccess(
@@ -708,11 +784,24 @@ export class AuthService {
     }
   }
 
-  private async issueSession(params: {
-    userId: string
-    email: string
-    role: 'patient' | 'sp' | 'admin'
-  }): Promise<AuthSessionResponse> {
+  private async issueSession(
+    params: {
+      userId: string
+      email: string
+      role: 'patient' | 'sp' | 'admin'
+    },
+    options: {
+      /** Client context recorded as the session's device / location metadata. */
+      ctx?: SessionContext
+      /** Create a ProviderSessionAudit row (true for fresh logins). False when
+       * rotating tokens for an existing session (refresh) — the existing row
+       * is bumped instead so the device list is not churned. */
+      track?: boolean
+      /** Reuse an existing logical session id (refresh rotation keeps the
+       * session stable so per-session revocation still targets one device). */
+      reuseJti?: string
+    } = {},
+  ): Promise<AuthSessionResponse> {
     const accessTtl = this.configService.getOrThrow<string>('auth.accessTtl')
     // Admin sessions expire much sooner than patient/provider sessions.
     const refreshTtl = this.configService.getOrThrow<string>(
@@ -720,13 +809,14 @@ export class AuthService {
     )
     const accessSecret = this.configService.getOrThrow<string>('auth.accessSecret')
     const refreshSecret = this.configService.getOrThrow<string>('auth.refreshSecret')
-    const jti = randomUUID()
+    const jti = options.reuseJti ?? randomUUID()
 
     const accessToken = await this.jwtService.signAsync(
       {
         sub: params.userId,
         email: params.email,
         role: params.role,
+        jti,
       },
       {
         secret: accessSecret,
@@ -741,6 +831,10 @@ export class AuthService {
         role: params.role,
         jti,
         typ: 'refresh',
+        // Unique per issuance even when `iat` is identical (same-second
+        // rotations). Without it two refresh tokens signed in the same second
+        // are byte-identical and rotation/replay detection collapses.
+        nonce: randomUUID(),
       },
       {
         secret: refreshSecret,
@@ -748,29 +842,36 @@ export class AuthService {
       },
     )
 
+    // Store only a SHA-256 digest of the refresh token. The digest is the
+    // source of truth for "which refresh token is currently valid for this
+    // session" — it is replaced on every rotation, so replaying an older
+    // refresh token is detectable.
     await this.redis.set(
       this.getRefreshTokenKey(jti),
-      JSON.stringify({
-        userId: params.userId,
-        role: params.role,
-      }),
+      this.hashToken(refreshToken),
       parseDurationToSeconds(refreshTtl),
     )
 
-    await this.prisma.providerSessionAudit.create({
-      data: {
-        userId: params.userId,
-        sessionId: jti,
-        deviceLabel: this.getSessionLabel(params.role),
-        lastSeenAt: new Date(),
-      },
-    })
+    if (options.track !== false) {
+      await this.prisma.providerSessionAudit.create({
+        data: {
+          userId: params.userId,
+          sessionId: jti,
+          deviceLabel: this.describeDevice(options.ctx, params.role),
+          locationLabel: options.ctx?.ip ? `IP ${options.ctx.ip}` : null,
+          ipAddress: options.ctx?.ip ?? null,
+          userAgent: options.ctx?.userAgent?.slice(0, 512) ?? null,
+          lastSeenAt: new Date(),
+        },
+      })
+    }
 
     return {
       accessToken,
       refreshToken,
       role: params.role,
       expiresAt: Date.now() + parseDurationToMs(accessTtl),
+      sessionId: jti,
     }
   }
 
@@ -796,6 +897,176 @@ export class AuthService {
 
   private getRefreshTokenKey(tokenId: string) {
     return `refresh-token:${tokenId}`
+  }
+
+  /** Holds the digest of the token consumed by the most recent rotation for a
+   * short grace window, so a concurrent duplicate refresh is distinguishable
+   * from a real replay. */
+  private getRefreshTokenPrevKey(tokenId: string) {
+    return `refresh-token:${tokenId}:prev`
+  }
+
+  /**
+   * Best-effort alert when a rotated refresh token is replayed outside the
+   * grace window — the strongest signal of a stolen session. Never throws so
+   * the auth path is unaffected by mail/Redis hiccups.
+   */
+  private async notifySuspiciousSession(userId: string, jti: string) {
+    try {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      })
+      if (!user) return
+      await this.mailService.send({
+        to: user.email,
+        subject: 'Suspicious sign-in detected — GG’APP session terminated',
+        html: `
+          <p>We detected that one of your GG'APP session tokens was reused after it
+          had already been rotated — a sign that the session may have been stolen.</p>
+          <p>To protect your account, we terminated that session immediately.</p>
+          <p>If this wasn't you, sign in and change your password, then sign out all
+          sessions from Security settings.</p>
+        `,
+      })
+    } catch (error) {
+      this.logger.warn(
+        `Suspicious-session notification failed (userId=${userId}, jti=${jti}): ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+    }
+  }
+
+  /**
+   * Records a user-wide cutoff timestamp so the JWT strategy rejects any access
+   * token issued before now. Deliberately account-wide: used for password
+   * reset and refresh-token reuse escalations, where every live session for
+   * the account must die (devices recover by refreshing / re-logging in).
+   * Single-device logout/revocation uses the per-session key instead.
+   */
+  async markAccessTokensRevoked(userId: string) {
+    await this.redis.set(
+      this.getAccessRevocationKey(userId),
+      String(Math.floor(Date.now() / 1000)),
+      3600,
+    )
+  }
+
+  private getAccessRevocationKey(userId: string) {
+    return `token-revoked-before:${userId}`
+  }
+
+  /** Lists a user's live sessions (any role). `currentJti` lets the caller
+   * flag the exact session the active request belongs to. */
+  async listSessions(userId: string, currentJti?: string) {
+    const sessions = await this.prisma.providerSessionAudit.findMany({
+      where: { userId, revokedAt: null },
+      orderBy: { lastSeenAt: 'desc' },
+    })
+
+    return sessions.map((session, index) => ({
+      id: session.id,
+      sessionId: session.sessionId,
+      device: session.deviceLabel,
+      location:
+        session.locationLabel ??
+        (session.ipAddress ? `IP ${session.ipAddress}` : 'Unknown location'),
+      ipAddress: session.ipAddress ?? undefined,
+      current: currentJti ? session.sessionId === currentJti : index === 0,
+      active: index === 0,
+      time: index === 0 ? 'Active now' : session.lastSeenAt.toISOString(),
+      lastSeenAt: session.lastSeenAt.toISOString(),
+    }))
+  }
+
+  /** Revokes one of the user's sessions (by audit row id or session jti). */
+  async revokeSession(userId: string, sessionId: string) {
+    const session = await this.prisma.providerSessionAudit.findFirst({
+      where: {
+        userId,
+        OR: [{ id: sessionId }, { sessionId }],
+      },
+    })
+
+    if (!session) {
+      throw new NotFoundException('Session not found')
+    }
+
+    await this.revokeSessionByJti(userId, session.sessionId, 'auth.session.revoked')
+    return { message: 'Session revoked successfully.' }
+  }
+
+  private async revokeSessionByJti(userId: string, jti: string, auditAction: string) {
+    await this.redis.del(this.getRefreshTokenKey(jti))
+    // Kill the paired access token immediately (it carries the same jti) —
+    // a revoked device must not keep API access until the access token's
+    // natural expiry.
+    await this.redis.set(this.getSessionRevocationKey(jti), '1', 3600)
+    await this.prisma.providerSessionAudit.updateMany({
+      where: { sessionId: jti, revokedAt: null },
+      data: { revokedAt: new Date() },
+    })
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: auditAction,
+        entityType: 'ProviderSessionAudit',
+        entityId: jti,
+        metadata: { sessionId: jti } as Prisma.JsonObject,
+      },
+    })
+  }
+
+  private getSessionRevocationKey(jti: string) {
+    return `session-revoked:${jti}`
+  }
+
+  private hashToken(token: string) {
+    return createHash('sha256').update(token).digest('hex')
+  }
+
+  private hashesEqual(a: string, b: string): boolean {
+    const left = Buffer.from(a)
+    const right = Buffer.from(b)
+    if (left.length !== right.length) return false
+    return timingSafeEqual(left, right)
+  }
+
+  /** Constant-time comparison (SHA-256 + timingSafeEqual) for the admin portal
+   * token — prevents a timing side channel on the admin gate. */
+  private tokensEqual(a: string | undefined, b: string): boolean {
+    if (!a) return false
+    return this.hashesEqual(
+      createHash('sha256').update(a).digest('hex'),
+      createHash('sha256').update(b).digest('hex'),
+    )
+  }
+
+  /** Builds a short human-readable device label from the User-Agent so the
+   * "active sessions" list can tell one device from another. */
+  private describeDevice(
+    ctx: SessionContext | undefined,
+    role: 'patient' | 'sp' | 'admin',
+  ) {
+    const ua = ctx?.userAgent?.toLowerCase() ?? ''
+    if (!ua) return this.getSessionLabel(role)
+    if (ua.includes('expo') || ua.includes('okhttp') || ua.includes('react-native')) {
+      return 'Mobile App'
+    }
+    let label = ''
+    if (ua.includes('edg/')) label = 'Edge'
+    else if (ua.includes('chrome/')) label = 'Chrome'
+    else if (ua.includes('firefox/')) label = 'Firefox'
+    else if (ua.includes('safari/')) label = 'Safari'
+    else label = 'Browser'
+    if (ua.includes('windows')) label += ' · Windows'
+    else if (ua.includes('mac os x') || ua.includes('macintosh')) label += ' · macOS'
+    else if (ua.includes('iphone') || ua.includes('ipod')) label += ' · iPhone'
+    else if (ua.includes('ipad')) label += ' · iPad'
+    else if (ua.includes('android')) label += ' · Android'
+    else if (ua.includes('linux')) label += ' · Linux'
+    return label
   }
 
   private getPasswordResetTokenKey(token: string) {

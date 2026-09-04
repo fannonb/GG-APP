@@ -3,6 +3,9 @@ import { z } from 'zod'
 export const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(1, 'Password is required'),
+  // Admin-only portal key. Kept out of the shipped bundle — the operator types
+  // it at sign-in so it stays a real secret (audit H2).
+  portalToken: z.string().optional(),
 })
 
 export type LoginFormValues = z.infer<typeof loginSchema>
@@ -17,6 +20,7 @@ export const patientRegisterStep0Schema = z.object({
 
 export const patientRegisterStep1Schema = z.object({
   dob: z.string().min(1, 'Date of birth is required'),
+  gender: z.string().min(1, 'Please select a gender'),
   nationalId: z.string().min(5, 'Enter a valid national ID'),
 })
 

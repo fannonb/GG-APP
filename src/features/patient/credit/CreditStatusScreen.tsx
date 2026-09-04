@@ -67,7 +67,7 @@ export function CreditStatusScreen() {
       return [
         { step: 'Increase Request Submitted', done: !!application, active: false, date: submittedDate },
         { step: reviewStep, done: status === 'approved' || status === 'declined', active: status === 'under-review', date: status === 'under-review' ? 'In progress…' : application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
-        { step: 'Wallet Updated', done: status === 'approved', active: false, date: status === 'approved' && application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
+        { step: 'Credit updated', done: status === 'approved', active: false, date: status === 'approved' && application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
       ]
     }
 
@@ -96,7 +96,7 @@ export function CreditStatusScreen() {
   return (
     <AppLayout
       title={isIncrease ? 'Increase Request Status' : 'Application Status'}
-      subtitle={`Ref: ${refNum}`}
+      status={refNum !== '—' ? `Ref ${refNum}` : undefined}
       back
       notifCount={1}
     >
@@ -160,7 +160,7 @@ export function CreditStatusScreen() {
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <GGButton variant="secondary" size="md" onClick={() => navigate(ROUTES.DASHBOARD)} style={{ flex: 1 }}>Back to Dashboard</GGButton>
-          <GGButton variant="primary" size="md" onClick={() => navigate(ROUTES.CREDIT_WALLET)} style={{ flex: 2 }}>View Wallet →</GGButton>
+          <GGButton variant="primary" size="md" onClick={() => navigate(ROUTES.CREDIT_WALLET)} style={{ flex: 2 }}>View credit →</GGButton>
         </div>
       </div>
     </AppLayout>

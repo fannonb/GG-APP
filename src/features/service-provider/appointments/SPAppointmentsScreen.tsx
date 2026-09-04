@@ -8,7 +8,7 @@ import { route, ROUTES } from '@/router/routes'
 import type { Appointment } from '@/types/appointment.types'
 import { getCountryByCode } from '@/config/countries'
 import { formatDate, formatPhone, formatTime12h } from '@/utils/format'
-import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import { getAppointmentDisplayStatus, appointmentHasRecordedVisit } from '@/utils/appointments'
 
 const STATUS_LABELS: Record<string, string> = {
   all: 'All',
@@ -48,8 +48,14 @@ function AppointmentRow({ appointment }: { appointment: Appointment }) {
   const navigate = useNavigate()
   const displayStatus = getAppointmentDisplayStatus(appointment)
   const isInvoiceUploaded = !!appointment.hasInvoice
+  const hasRecordedVisit = appointmentHasRecordedVisit(appointment)
+  const canRecordVisit =
+    !isInvoiceUploaded &&
+    !hasRecordedVisit &&
+    (displayStatus === 'confirmed' || displayStatus === 'completed')
   const canUploadInvoice =
     !isInvoiceUploaded &&
+    hasRecordedVisit &&
     (displayStatus === 'confirmed' || displayStatus === 'completed')
   const patientCountry = getCountryByCode(appointment.countryCode ?? '')
 
@@ -98,6 +104,29 @@ function AppointmentRow({ appointment }: { appointment: Appointment }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', alignItems: 'flex-end' }}>
           <AppointmentStatusChip status={displayStatus as Appointment['status']} />
           <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+            {canRecordVisit && (
+              <div onClick={event => event.stopPropagation()}>
+                <GGButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    navigate(ROUTES.SP_VISIT_RECORD, {
+                      state: {
+                        ctx: {
+                          patientId: appointment.patientId,
+                          patientName: appointment.patient,
+                          appointmentId: appointment.id,
+                          conditions: appointment.medicalHistory,
+                          allergies: appointment.allergies,
+                        },
+                      },
+                    })
+                  }
+                >
+                  Record Visit
+                </GGButton>
+              </div>
+            )}
             {canUploadInvoice && (
               <div onClick={event => event.stopPropagation()}>
                 <GGButton
@@ -110,6 +139,7 @@ function AppointmentRow({ appointment }: { appointment: Appointment }) {
                           appointmentId: appointment.id,
                           patientId: appointment.patientId,
                           patientName: appointment.patient,
+                          visitId: appointment.visitId,
                         },
                       },
                     })
@@ -159,7 +189,7 @@ export function SPAppointmentsScreen() {
 
   if (isLoading) {
     return (
-      <SPLayout title="Appointments" subtitle="Manage incoming and confirmed bookings">
+      <SPLayout title="Appointments">
         <GGCard padding="24px">
           <div style={{ fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
             Loading appointments...
@@ -170,7 +200,7 @@ export function SPAppointmentsScreen() {
   }
 
   return (
-    <SPLayout title="Appointments" subtitle="Manage incoming and confirmed bookings">
+    <SPLayout title="Appointments" status={counts.new > 0 ? `${counts.new} new` : undefined}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '12px' }}>
           {[
