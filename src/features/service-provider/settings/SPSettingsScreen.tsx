@@ -16,6 +16,8 @@ import { PublicProfileTab } from './components/PublicProfileTab'
 import { PayoutsTab } from './components/PayoutsTab'
 import { SecurityTab } from './components/SecurityTab'
 import { SettingsTabBar } from './components/SettingsTabBar'
+import { NotificationsTab } from './components/NotificationsTab'
+import { SettingsAboutCard } from '@/components/SettingsAboutCard'
 import {
   formFromSettings,
   profilesEqual,
@@ -27,6 +29,7 @@ import {
 function normalizeTab(value: unknown): SettingsTabId {
   if (value === 'payouts' || value === 'account') return 'payouts'
   if (value === 'security') return 'security'
+  if (value === 'notifications') return 'notifications'
   return 'profile'
 }
 
@@ -208,6 +211,19 @@ export function SPSettingsScreen() {
           />
         )}
 
+        {tab === 'notifications' && (
+          <NotificationsTab
+            initial={settings.notificationPreferences ?? {
+              newAppointmentEmail: true,
+              paymentEmail: true,
+              invoiceEmail: true,
+              disputeEmail: true,
+              systemEmail: false,
+            }}
+            onSaved={flashSaved}
+          />
+        )}
+
         {tab === 'security' && (
           <SecurityTab
             email={settings.profile.email}
@@ -215,7 +231,6 @@ export function SPSettingsScreen() {
             country={profileForm.country}
             accountAccessPending={updateProfileMutation.isPending}
             passwordPending={changePasswordMutation.isPending}
-            logoutPending={logoutMutation.isPending}
             onSaveAccountAccess={async payload => {
               await updateProfileMutation.mutateAsync({
                 email: payload.email,
@@ -232,9 +247,10 @@ export function SPSettingsScreen() {
               })
               flashSaved('Password updated.')
             }}
-            onSignOut={() => logoutMutation.mutate()}
           />
         )}
+
+        <SettingsAboutCard onSignOut={() => logoutMutation.mutate()} signingOut={logoutMutation.isPending} />
       </div>
     </SPLayout>
   )

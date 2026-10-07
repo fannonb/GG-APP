@@ -121,13 +121,10 @@ export class PatientService {
       throw new NotFoundException('Patient profile not found')
     }
 
-    const email = dto.email.toLowerCase().trim()
-    const existingEmail = await this.prisma.user.findUnique({
-      where: { email },
-    })
-
-    if (existingEmail && existingEmail.id !== userId) {
-      throw new BadRequestException('An account already exists for that email address')
+    // The sign-in email only changes through an admin-approved request (Settings → Security).
+    const current = await this.prisma.user.findUnique({ where: { id: userId }, select: { email: true } })
+    if (current && dto.email.toLowerCase().trim() !== current.email.toLowerCase()) {
+      throw new BadRequestException('To change your email, use “Change email” in Settings. An admin approves the change.')
     }
 
     const { firstName, lastName } = this.splitName(dto.name)
@@ -148,7 +145,6 @@ export class PatientService {
       this.prisma.user.update({
         where: { id: userId },
         data: {
-          email,
           phone: dto.phone.trim(),
           ...(updateResidence ? { country: residenceCountry } : {}),
         },
@@ -177,7 +173,6 @@ export class PatientService {
           entityType: 'User',
           entityId: userId,
           metadata: {
-            email,
             name: dto.name.trim(),
             ...(dto.beneficiariesEnabled !== undefined
               ? { beneficiariesEnabled: dto.beneficiariesEnabled }
@@ -411,7 +406,7 @@ export class PatientService {
         creditAvailable: this.toNumber(profile.creditAvailable),
         creditStatus: this.mapCreditStatus(profile.creditStatus),
         memberSince: profile.memberSince.toISOString(),
-        financePartnerId: profile.financePartnerId?.toLowerCase(),
+        financePartnerId: profile.financePartnerId ? this.financePartnerForCountry(profile.countryCode) : undefined,
         creditAccountRef: profile.creditAccountRef ?? undefined,
         hasPaymentPin: !!profile.user.paymentPinHash,
         beneficiariesEnabled:
@@ -1842,6 +1837,12 @@ export class PatientService {
 
     const reference = await this.referenceService.next('GGA')
     const residence = this.resolveResidenceUpdate(dto, profile.user.country)
+    const financePartnerId = this.financePartnerForCountry(residence.countryCode ?? profile.countryCode)
+    if (dto.financePartnerId.toLowerCase() !== financePartnerId) {
+      throw new BadRequestException(
+        `Healthcare credit in your country is provided by ${this.formatFinancePartnerName(financePartnerId)}.`,
+      )
+    }
 
     const application = await this.prisma.$transaction(async tx => {
       const created = await tx.creditApplication.create({
@@ -1849,7 +1850,7 @@ export class PatientService {
           reference,
           patientUserId: userId,
           type: CreditApplicationType.INITIAL,
-          financePartnerId: dto.financePartnerId,
+          financePartnerId,
           employment: dto.employment,
           monthlyIncome: dto.monthlyIncome,
           requestedAmount: dto.requestedAmount,
@@ -1867,7 +1868,7 @@ export class PatientService {
         where: { userId },
         data: {
           creditStatus: CreditStatus.PENDING,
-          financePartnerId: dto.financePartnerId,
+          financePartnerId,
           residesAbroad: residence.residesAbroad,
           residenceCountry: residence.residenceCountry,
           ...(residence.countryCode ? { countryCode: residence.countryCode } : {}),
@@ -1917,7 +1918,7 @@ export class PatientService {
           userId,
           type: NotificationType.CREDIT,
           title: 'Credit Application Submitted',
-          body: `Your application ${reference} was sent to the ${this.formatFinancePartnerName(dto.financePartnerId)} team for review.`,
+          body: `Your application ${reference} was sent to the ${this.formatFinancePartnerName(financePartnerId)} team for review.`,
           screen: '/app/credit/status',
         },
       })
@@ -1945,9 +1946,7 @@ export class PatientService {
       throw new BadRequestException('Approved credit is required before requesting an increase')
     }
 
-    if (!profile.financePartnerId) {
-      throw new BadRequestException('Finance partner is not configured on your account')
-    }
+    const financePartnerId = this.financePartnerForCountry(profile.countryCode)
 
     const pendingApplication = await this.prisma.creditApplication.findFirst({
       where: {
@@ -1973,7 +1972,7 @@ export class PatientService {
           reference,
           patientUserId: userId,
           type: CreditApplicationType.INCREASE,
-          financePartnerId: profile.financePartnerId!,
+          financePartnerId,
           employment: 'existing-customer',
           monthlyIncome: dto.monthlyIncome,
           requestedAmount: dto.increaseAmount,
@@ -2009,7 +2008,7 @@ export class PatientService {
           userId,
           type: NotificationType.CREDIT,
           title: 'Increase Request Submitted',
-          body: `Your request ${reference} was sent to the ${this.formatFinancePartnerName(profile.financePartnerId!)} team for review.`,
+          body: `Your request ${reference} was sent to the ${this.formatFinancePartnerName(financePartnerId)} team for review.`,
           screen: '/app/credit/status?type=increase',
         },
       })
@@ -2039,7 +2038,7 @@ export class PatientService {
       creditLimit: this.toNumber(profile.creditLimit),
       creditUsed: this.toNumber(profile.creditUsed),
       creditAvailable: this.toNumber(profile.creditAvailable),
-      financePartnerId: profile.financePartnerId?.toLowerCase() ?? undefined,
+      financePartnerId: profile.financePartnerId ? this.financePartnerForCountry(profile.countryCode) : undefined,
       creditAccountRef: profile.creditAccountRef ?? undefined,
       application: application ? this.mapCreditApplication(application) : null,
     }
@@ -2083,6 +2082,11 @@ export class PatientService {
 
   private mapCreditStatus(status: CreditStatus) {
     return status.toLowerCase() as 'approved' | 'pending' | 'rejected' | 'not_applied'
+  }
+
+  /** Each market has exactly one lender: Equity Bank in Kenya, Moneymart in Zimbabwe and Zambia. */
+  private financePartnerForCountry(countryCode: string | null | undefined): 'equity' | 'moneymart' {
+    return countryCode?.toUpperCase() === 'KE' ? 'equity' : 'moneymart'
   }
 
   private formatFinancePartnerName(partnerId: string) {

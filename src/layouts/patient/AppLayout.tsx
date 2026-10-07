@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { ROUTES, LOGO } from '@/router/routes'
+import { ROUTES, LOGO_WORDMARK } from '@/router/routes'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useNotificationsStore } from '@/store/notifications.store'
@@ -16,6 +16,8 @@ import { useLocationStore } from '@/store/location.store'
 interface AppLayoutProps {
   children: ReactNode
   title: string
+  /** Shown before the title in the desktop top bar. */
+  titleIcon?: ReactNode
   status?: string
   /** @deprecated Prefer `status` for actionable counts. Ignored in the top bar. */
   subtitle?: string
@@ -50,7 +52,7 @@ const BOTTOM_NAV = [
   { id: 'profile',      label: 'Profile',      path: ROUTES.PROFILE,       icon: (a: boolean) => <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="3" stroke={a ? C.blue500 : C.textSub} strokeWidth="1.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={a ? C.blue500 : C.textSub} strokeWidth="1.5" strokeLinecap="round"/></svg> },
 ]
 
-export function AppLayout({ children, title, status, back = false, backLabel }: AppLayoutProps) {
+export function AppLayout({ children, title, titleIcon, status, back = false, backLabel }: AppLayoutProps) {
   const { isDesktop } = useResponsive()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -143,7 +145,7 @@ export function AppLayout({ children, title, status, back = false, backLabel }: 
       }}>
         <AppSidebar />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-          <AppTopBar title={title} status={status} back={back} backLabel={backLabel} />
+          <AppTopBar title={title} titleIcon={titleIcon} status={status} back={back} backLabel={backLabel} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '0 8px 24px 8px' }}>
             {children}
           </main>
@@ -273,14 +275,14 @@ export function AppLayout({ children, title, status, back = false, backLabel }: 
 
             {!back && (
               <img
-                src={LOGO}
+                src={LOGO_WORDMARK}
                 alt="GG'APP"
-                style={{ width: 30, height: 30, objectFit: 'contain', flexShrink: 0, borderRadius: 6 }}
+                style={{ height: 16, width: 'auto', flexShrink: 0, display: 'block', marginRight: 4 }}
               />
             )}
 
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: font.family, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.02em' }}>{title}</div>
+              <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: font.family, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{title}</div>
               {status && (
                 <span style={{
                   flexShrink: 0,
@@ -555,7 +557,7 @@ export function AppLayout({ children, title, status, back = false, backLabel }: 
           <div onClick={() => setMenuOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 40, background: 'rgba(8,21,40,0.55)' }} />
           <div style={{ position: 'fixed', left: 0, top: 0, bottom: 0, width: 280, zIndex: 50, background: C.navy800, display: 'flex', flexDirection: 'column', boxShadow: '4px 0 24px rgba(13,30,66,0.2)' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <img src={LOGO} alt="GG'APP" style={{ width: 72, height: 72, objectFit: 'contain' }} />
+              <img src={LOGO_WORDMARK} alt="GG'APP" style={{ height: 26, width: 'auto', display: 'block', margin: '12px 0' }} />
               <button
                 onClick={() => setMenuOpen(false)}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'rgba(255,255,255,0.5)', padding: '6px' }}

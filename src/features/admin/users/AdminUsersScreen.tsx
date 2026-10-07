@@ -1,504 +1,364 @@
-import { useEffect, useMemo, useState } from 'react'
-import { GGButton, GGCard } from '@/design-system'
+import { useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
-import { formatCurrency, formatDate, formatPhone } from '@/utils/format'
-import type { AdminUser, CreditStatus, AdminUserStatus, UploadedDocument } from '@/types/admin.types'
-import { CountryBadge, countryCode, COUNTRY_CURRENCIES } from '@/features/admin/AdminShared'
-import { useAdminCountry } from '@/features/admin/AdminCountryContext'
-import { useAdminUsers } from '@/hooks/api/useAdminQueries'
+import { useAdminCreditApplications, useAdminUsers } from '@/hooks/api/useAdminQueries'
 import { adminService } from '@/api/services/admin.service'
+import { useAdminCountry } from '@/features/admin/AdminCountryContext'
+import { CountryBadge, countryCode, COUNTRY_CURRENCIES } from '@/features/admin/AdminShared'
+import { AccountHistory, PatientAccountActions } from '@/features/admin/accounts/AccountManagement'
 import {
-  useDeleteAdminUserMutation,
-  useReactivateAdminUserMutation,
-  useSuspendAdminUserMutation,
-} from '@/hooks/api/useAdminMutations'
+  DefList, Initials, PanelSection, PanelTabs, Pager, PlainHeader, SearchBox, SidePanel, SortHeader, StatusPill, StatusTabs, type SortDir,
+} from '@/features/admin/accounts/AccountListKit'
+import { exportCsv } from '@/features/admin/metrics/metricsFormat'
+import { PatientCreditActivity } from './PatientCreditActivity'
+import { formatDate, formatRelativeTime } from '@/utils/format'
+import type { AdminUser } from '@/types/admin.types'
 
-function CreditBadge({ status }: { status: CreditStatus }) {
-  const map: Record<CreditStatus, { bg: string; color: string; label: string }> = {
-    approved:    { bg: C.blue100, color: C.navy800, label: 'Credit Approved' },
-    pending:     { bg: C.bg, color: C.textSub, label: 'Credit Pending' },
-    rejected:    { bg: C.errorBg, color: C.error, label: 'Credit Rejected' },
-    not_applied: { bg: C.bg, color: C.textSub, label: 'No Credit' },
-  }
-  const s = map[status]
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '3px 10px', borderRadius: radius.full, background: s.bg, border: `1px solid ${C.border}`, fontSize: '11px', fontWeight: 700, color: s.color }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
-      {s.label}
-    </span>
-  )
+const CYAN_DEEP = '#0B7BC0'
+const PAGE_SIZE = 25
+
+type StatusTab = 'all' | 'active' | 'pending_verification' | 'suspended'
+type SortKey = 'name' | 'credit' | 'activity' | 'joined'
+type PanelTab = 'overview' | 'credit' | 'history'
+
+const currencyOf = (user: AdminUser) => (COUNTRY_CURRENCIES[user.country] ?? '').replace(/\.$/, '').replace(/^Ksh$/i, 'KSh')
+const money = (user: AdminUser, value: number) => `${currencyOf(user)} ${Math.round(value).toLocaleString('en-US')}`
+
+const CREDIT_LABEL: Record<string, { label: string; fg: string; bg: string }> = {
+  approved: { label: 'Approved', fg: '#15803D', bg: '#DCFCE7' },
+  pending: { label: 'Applied', fg: '#B45309', bg: '#FEF3C7' },
+  rejected: { label: 'Declined', fg: '#B91C1C', bg: '#FEE2E2' },
+  not_applied: { label: 'No credit', fg: C.textSub, bg: C.bg },
 }
 
-function AccountStatusBadge({ status }: { status: AdminUserStatus }) {
-  const map: Record<AdminUserStatus, { bg: string; border: string; color: string; label: string; dot: string }> = {
-    active: { bg: C.blue100, border: C.blue500 + '44', color: C.navy800, label: 'Active', dot: C.blue500 },
-    suspended: { bg: C.errorBg, border: C.error + '44', color: C.error, label: 'Suspended', dot: C.error },
-    pending_verification: { bg: C.bg, border: C.border, color: C.textSub, label: 'Pending', dot: C.textSub },
+function CreditCell({ user }: { user: AdminUser }) {
+  const style = CREDIT_LABEL[user.creditStatus] ?? CREDIT_LABEL.not_applied
+  if (user.creditStatus !== 'approved' || user.creditLimit <= 0) {
+    return <span style={{ fontSize: 12, fontWeight: 700, color: style.fg, background: style.bg, padding: '3px 9px', borderRadius: radius.full }}>{style.label}</span>
   }
-  const s = map[status]
+  const pct = Math.min(100, Math.round((user.creditUsed / user.creditLimit) * 100))
   return (
-    <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: '4px',
-      padding: '3px 10px', borderRadius: radius.full,
-      background: s.bg,
-      border: `1px solid ${s.border}`,
-      fontSize: '11px', fontWeight: 700,
-      color: s.color,
-    }}>
-      <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.dot, display: 'inline-block' }} />
-      {s.label}
-    </span>
-  )
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div style={{ fontSize: '10px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px', paddingBottom: '6px', borderBottom: `1px solid ${C.border}` }}>
-      {children}
+    <div style={{ minWidth: 140 }}>
+      <div style={{ fontSize: 13, color: C.text }}>
+        <strong>{money(user, user.creditUsed)}</strong> <span style={{ color: C.textSub }}>of {money(user, user.creditLimit)}</span>
+      </div>
+      <div style={{ height: 5, marginTop: 5, borderRadius: 3, background: C.bg, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: pct > 85 ? '#DC2626' : CYAN_DEEP }} />
+      </div>
     </div>
   )
 }
 
-function InfoCell({ label, value }: { label: string; value: string }) {
+function NationalId({ user }: { user: AdminUser }) {
+  const [revealed, setRevealed] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const toggle = async () => {
+    if (revealed) { setRevealed(null); return }
+    setBusy(true)
+    setError(null)
+    try { setRevealed((await adminService.revealNationalId(user.id)).nationalId) } catch (e) { setError(e instanceof Error ? e.message : 'Couldn’t reveal the ID.') } finally { setBusy(false) }
+  }
   return (
-    <div style={{ padding: '10px 12px', background: C.bg, borderRadius: radius.xs, border: `1px solid ${C.border}` }}>
-      <div style={{ fontSize: '10px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '3px' }}>{label}</div>
-      <div style={{ fontSize: '13px', fontWeight: 600, color: C.text, wordBreak: 'break-all' }}>{value || '-'}</div>
-    </div>
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+      <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', letterSpacing: '0.04em' }}>{revealed ?? user.nationalId ?? '—'}</span>
+      <button type="button" onClick={() => void toggle()} disabled={busy} style={{ background: 'none', border: 'none', padding: 0, color: CYAN_DEEP, fontWeight: 700, fontSize: 13, fontFamily: font.family, cursor: 'pointer' }}>
+        {busy ? 'Revealing…' : revealed ? 'Hide' : 'Reveal'}
+      </button>
+      {error && <span style={{ fontSize: 12, color: '#B91C1C' }}>{error}</span>}
+    </span>
   )
 }
 
-function DocRow({ doc }: { doc: UploadedDocument }) {
-  const isPdf = doc.type === 'pdf'
+function age(dob: string) {
+  const d = new Date(dob)
+  if (isNaN(d.getTime())) return null
+  const now = new Date()
+  let years = now.getFullYear() - d.getFullYear()
+  if (now < new Date(now.getFullYear(), d.getMonth(), d.getDate())) years -= 1
+  return years
+}
+
+function PatientPanel({ user, initialTab = 'overview', onUpdated, onDeleted }: { user: AdminUser; initialTab?: PanelTab; onUpdated: (u: AdminUser) => void; onDeleted: () => void }) {
+  const [tab, setTab] = useState<PanelTab>(initialTab)
+  const [copied, setCopied] = useState(false)
+  const { data: creditApps = [] } = useAdminCreditApplications()
+  const apps = creditApps.filter(a => a.patientUserId === user.id).sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
+  const years = age(user.dob)
+  const available = Math.max(0, user.creditLimit - user.creditUsed)
+  const pct = user.creditLimit > 0 ? Math.min(100, Math.round((user.creditUsed / user.creditLimit) * 100)) : 0
+
+  const copyId = async () => {
+    try { await navigator.clipboard.writeText(user.id); setCopied(true); setTimeout(() => setCopied(false), 1500) } catch { /* clipboard blocked */ }
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 14px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}` }}>
-      <div style={{
-        width: 34, height: 34, borderRadius: radius.xs, flexShrink: 0,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: isPdf ? C.errorBg : C.blue100,
-        border: `1px solid ${isPdf ? C.error + '33' : C.blue500 + '33'}`,
-      }}>
-        {isPdf ? (
-          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-            <rect x="2" y="1" width="14" height="16" rx="2" fill={C.error} opacity="0.15" />
-            <rect x="2" y="1" width="14" height="16" rx="2" stroke={C.error} strokeWidth="1.2" />
-            <path d="M5 6h8M5 9h8M5 12h5" stroke={C.error} strokeWidth="1" strokeLinecap="round" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 18 18" fill="none">
-            <rect x="2" y="1" width="14" height="16" rx="2" fill={C.blue500} opacity="0.12" />
-            <rect x="2" y="1" width="14" height="16" rx="2" stroke={C.blue500} strokeWidth="1.2" />
-            <circle cx="6.5" cy="7" r="1.5" stroke={C.blue500} strokeWidth="1" />
-            <path d="M3 13l3-3 3 3 2-2 4 4" stroke={C.blue500} strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+    <div>
+      <header style={{ padding: '22px 22px 16px', background: '#fff' }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'center', paddingRight: 44 }}>
+          <Initials name={user.name} size={52} />
+          <div style={{ minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <h2 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: C.text }}>{user.name}</h2>
+              {user.status !== 'active' && <StatusPill status={user.status} />}
+            </div>
+            <div style={{ fontSize: 13.5, color: C.textSub, marginTop: 3, overflowWrap: 'anywhere' }}>{user.email}</div>
+            <button type="button" onClick={() => void copyId()} style={{ background: 'none', border: 'none', padding: 0, marginTop: 3, fontSize: 12, color: C.textLight, fontFamily: font.family, cursor: 'pointer' }}>
+              {copied ? 'Copied' : 'Copy patient ID'}
+            </button>
+          </div>
+        </div>
+        <div style={{ marginTop: 16 }}>
+          <PatientAccountActions user={user} currency={currencyOf(user)} onUpdated={onUpdated} onDeleted={onDeleted} />
+        </div>
+      </header>
+      <PanelTabs tabs={[{ id: 'overview', label: 'Overview' }, { id: 'credit', label: 'Credit' }, { id: 'history', label: 'History' }]} value={tab} onChange={setTab} />
+
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {tab === 'overview' && (
+          <>
+            <PanelSection title="Details">
+              <DefList items={[
+                { label: 'Phone', value: user.phone },
+                { label: 'Country', value: <CountryBadge code={countryCode(user.country)} showName name={user.country} size={14} /> },
+                { label: 'Date of birth', value: user.dob ? `${formatDate(user.dob)}${years != null ? ` · ${years} years` : ''}` : null },
+                { label: 'Gender', value: user.gender || 'Not recorded' },
+                { label: 'Signed up', value: `${formatDate(user.memberSince)} · ${user.signUpMethod === 'google' ? 'Google' : 'Email'}` },
+                { label: 'Email verified', value: user.emailVerified === false ? <span style={{ color: '#B45309', fontWeight: 600 }}>Not yet</span> : 'Yes' },
+                { label: 'Last activity', value: user.lastActivityAt ? formatRelativeTime(user.lastActivityAt) : 'No bookings or invoices yet' },
+                { label: 'Payments made', value: String(user.transactionCount) },
+                { label: 'National ID', value: <NationalId user={user} />, wide: true },
+              ]} />
+            </PanelSection>
+            <PanelSection title={`Family members (${user.family?.length ?? user.beneficiariesCount})`}>
+              {(user.family?.length ?? 0) === 0 ? (
+                <div style={{ fontSize: 13.5, color: C.textSub }}>No family members added.</div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {user.family!.map((m, i) => (
+                    <li key={`${m.name}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none', fontSize: 14 }}>
+                      <span style={{ fontWeight: 600, color: C.text }}>{m.name}</span>
+                      <span style={{ color: C.textSub }}>{m.relation}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PanelSection>
+          </>
+        )}
+
+        {tab === 'credit' && (
+          <>
+            <PanelSection title="Healthcare credit">
+              {user.creditStatus === 'approved' && user.creditLimit > 0 ? (
+                <>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                    {[['Limit', user.creditLimit], ['Used', user.creditUsed], ['Available', available]].map(([label, value]) => (
+                      <div key={label as string}>
+                        <div style={{ fontSize: 12, color: C.textSub }}>{label}</div>
+                        <div style={{ fontSize: 17, fontWeight: 800, color: C.text, marginTop: 2 }}>{money(user, value as number)}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ height: 8, marginTop: 12, borderRadius: 4, background: C.bg, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: pct > 85 ? '#DC2626' : CYAN_DEEP }} />
+                  </div>
+                  <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 6 }}>
+                    {pct}% used{user.financePartner ? ` · Financed by ${user.financePartner === 'equity' ? 'Equity' : 'Moneymart'}` : ''}
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 13.5, color: C.textSub }}>
+                  {user.creditStatus === 'pending' ? 'Their credit application is waiting for review.' : user.creditStatus === 'rejected' ? 'Their last credit application was declined.' : 'This patient hasn’t applied for credit yet.'}
+                </div>
+              )}
+            </PanelSection>
+            <PanelSection title="Credit activity">
+              <PatientCreditActivity userId={user.id} patientName={user.name} money={value => money(user, value)} />
+            </PanelSection>
+            <PanelSection title="Credit applications">
+              {apps.length === 0 ? (
+                <div style={{ fontSize: 13.5, color: C.textSub }}>No applications.</div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {apps.map((a, i) => (
+                    <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{a.type === 'increase' ? 'Increase' : 'First application'} · {money(user, a.requestedAmount)}</div>
+                        <div style={{ fontSize: 12, color: C.textSub }}>{a.reference} · {formatDate(a.submittedAt)}</div>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, padding: '3px 9px', borderRadius: radius.full, ...(a.status === 'approved' ? { color: '#15803D', background: '#DCFCE7' } : a.status === 'rejected' ? { color: '#B91C1C', background: '#FEE2E2' } : { color: '#B45309', background: '#FEF3C7' }) }}>
+                        {a.status === 'approved' ? `Approved${a.approvedAmount ? ` ${money(user, a.approvedAmount)}` : ''}` : a.status === 'rejected' ? 'Declined' : 'Waiting'}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </PanelSection>
+          </>
+        )}
+
+        {tab === 'history' && (
+          <PanelSection title="Admin history">
+            <AccountHistory kind="users" id={user.id} />
+          </PanelSection>
         )}
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: '13px', fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{doc.name}</div>
-        <div style={{ fontSize: '11px', color: C.textSub, marginTop: '1px' }}>{doc.size} | Uploaded {formatDate(doc.uploadedAt)}</div>
-      </div>
-      <button style={{ padding: '5px 12px', borderRadius: radius.full, border: `1.5px solid ${C.border}`, background: '#fff', fontSize: '11px', fontWeight: 600, color: C.textSub, cursor: 'default', fontFamily: font.family }}>
-        View
-      </button>
     </div>
   )
 }
-
-function PatientAvatar({ name }: { name: string }) {
-  const parts = name.trim().split(' ')
-  const init = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')
-  return (
-    <div style={{
-      width: 40, height: 40, borderRadius: '50%',
-      background: C.blue100,
-      color: C.navy800,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      fontSize: '14px', fontWeight: 800, flexShrink: 0, fontFamily: font.family,
-    }}>
-      {init.toUpperCase()}
-    </div>
-  )
-}
-
-type StatusFilter = AdminUserStatus | 'all'
-
-const STATUS_TABS: { id: StatusFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
-  { id: 'active', label: 'Active' },
-  { id: 'pending_verification', label: 'Pending' },
-  { id: 'suspended', label: 'Suspended' },
-]
 
 export function AdminUsersScreen() {
-  const { isMobile, isTablet } = useResponsive()
-  const isNarrow = isMobile || isTablet
+  const { isMobile } = useResponsive()
   const { country } = useAdminCountry()
-  const { data: fetchedUsers = [], isLoading, isError, error } = useAdminUsers()
-  const suspendMutation = useSuspendAdminUserMutation()
-  const reactivateMutation = useReactivateAdminUserMutation()
-  const deleteMutation = useDeleteAdminUserMutation()
+  const [searchParams] = useSearchParams()
+  const { data: users = [], isLoading, error } = useAdminUsers()
+  const [query, setQuery] = useState(searchParams.get('q') ?? '')
+  const [status, setStatus] = useState<StatusTab>('all')
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'joined', dir: 'desc' })
+  const [page, setPage] = useState(0)
+  // ?open=<id> opens that account's panel directly (used for links from other pages).
+  const [openId, setOpenId] = useState<string | null>(searchParams.get('open'))
+  // Edits made in the panel show straight away while the list refetches.
+  const [overrides, setOverrides] = useState<Record<string, AdminUser | null>>({})
 
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [selected, setSelected] = useState<AdminUser | null>(null)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatus] = useState<StatusFilter>('all')
-  const [actionMsg, setActionMsg] = useState<string | null>(null)
-  const [pendingDelete, setPendingDelete] = useState<string | null>(null)
-  const [revealedIds, setRevealedIds] = useState<Record<string, string>>({})
-  const [revealingId, setRevealingId] = useState<string | null>(null)
-
-  useEffect(() => {
-    setUsers(fetchedUsers)
-    setSelected(current => {
-      if (!fetchedUsers.length) return null
-      if (!current) return fetchedUsers[0]
-      return fetchedUsers.find(user => user.id === current.id) ?? fetchedUsers[0]
-    })
-  }, [fetchedUsers])
-
-  const filtered = useMemo(() => users.filter(user => {
-    if (search) {
-      const q = search.toLowerCase()
-      if (!user.name.toLowerCase().includes(q) && !user.email.toLowerCase().includes(q)) return false
-    }
-    if (country !== 'all' && user.country !== country) return false
-    if (statusFilter !== 'all' && user.status !== statusFilter) return false
-    return true
-  }), [users, search, country, statusFilter])
-
-  const handleToggleSuspend = async (user: AdminUser) => {
-    try {
-      const updated =
-        user.status === 'suspended'
-          ? await reactivateMutation.mutateAsync(user.id)
-          : await suspendMutation.mutateAsync(user.id)
-
-      setUsers(prev => prev.map(entry => (entry.id === user.id ? updated : entry)))
-      setSelected(updated)
-      setPendingDelete(null)
-      setActionMsg(`Account ${updated.status === 'suspended' ? 'suspended' : 'reactivated'} successfully.`)
-      setTimeout(() => setActionMsg(null), 3500)
-    } catch (mutationError) {
-      const message = mutationError instanceof Error ? mutationError.message : 'We could not update this patient right now.'
-      setActionMsg(message)
-    }
+  const merged = useMemo(() => users.map(u => (u.id in overrides ? overrides[u.id] : u)).filter((u): u is AdminUser => !!u), [users, overrides])
+  const inCountry = useMemo(() => merged.filter(u => country === 'all' || u.country === country), [merged, country])
+  const q = query.trim().toLowerCase()
+  const searched = useMemo(() => inCountry.filter(u => !q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q) || u.phone.includes(q)), [inCountry, q])
+  const counts = {
+    all: searched.length,
+    active: searched.filter(u => u.status === 'active').length,
+    pending_verification: searched.filter(u => u.status === 'pending_verification').length,
+    suspended: searched.filter(u => u.status === 'suspended').length,
   }
-
-  const handleDelete = async (user: AdminUser) => {
-    try {
-      await deleteMutation.mutateAsync(user.id)
-      const remaining = users.filter(entry => entry.id !== user.id)
-      setUsers(remaining)
-      setSelected(remaining[0] ?? null)
-      setPendingDelete(null)
-      setActionMsg('Account permanently deleted.')
-      setTimeout(() => setActionMsg(null), 4000)
-    } catch (mutationError) {
-      const message = mutationError instanceof Error ? mutationError.message : 'This patient cannot be deleted while linked activity still exists.'
-      setActionMsg(message)
+  const filtered = status === 'all' ? searched : searched.filter(u => u.status === status)
+  const sorted = useMemo(() => {
+    const dir = sort.dir === 'asc' ? 1 : -1
+    const val = (u: AdminUser): string | number => {
+      switch (sort.key) {
+        case 'name': return u.name.toLowerCase()
+        case 'credit': return u.creditLimit > 0 ? u.creditUsed / u.creditLimit : -1
+        case 'activity': return u.lastActivityAt ?? ''
+        default: return u.memberSince
+      }
     }
-  }
+    return [...filtered].sort((a, b) => (val(a) > val(b) ? dir : val(a) < val(b) ? -dir : 0))
+  }, [filtered, sort])
+  const pageRows = sorted.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const open = merged.find(u => u.id === openId) ?? null
 
-  const creditPct = (user: AdminUser) => user.creditLimit > 0 ? Math.min(100, Math.round((user.creditUsed / user.creditLimit) * 100)) : 0
-  const currSymbol = (user: AdminUser) => COUNTRY_CURRENCIES[user.country] ?? 'Z$'
+  const onSort = (key: SortKey) => setSort(s => ({ key, dir: s.key === key && s.dir === 'desc' ? 'asc' : 'desc' }))
+  const td: React.CSSProperties = { padding: '12px', borderTop: `1px solid ${C.border}`, verticalAlign: 'middle' }
 
   return (
-    <AdminLayout title="Users">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0', background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-          <div style={{ padding: '10px 14px', borderBottom: `1px solid ${C.border}`, background: C.bg }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: radius.sm, padding: '0 12px', transition: 'border-color 0.15s' }}
-              onFocusCapture={e => (e.currentTarget.style.borderColor = C.blue500)}
-              onBlurCapture={e => (e.currentTarget.style.borderColor = C.border)}
-            >
-              <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ flexShrink: 0 }}>
-                <circle cx="7" cy="7" r="5.5" stroke={C.textSub} strokeWidth="1.4" />
-                <path d="M11 11l3 3" stroke={C.textSub} strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Search by patient name or email..."
-                style={{ flex: 1, padding: '9px 0', fontSize: '13px', fontFamily: font.family, color: C.text, background: 'transparent', border: 'none', outline: 'none' }}
-              />
-              {search && (
-                <button
-                  onClick={() => setSearch('')}
-                  style={{ background: C.bg, border: `1px solid ${C.border}`, borderRadius: radius.full, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
-                  aria-label="Clear search"
-                >
-                  <svg width="9" height="9" viewBox="0 0 10 10" fill="none">
-                    <path d="M2 2l6 6M8 2L2 8" stroke={C.textSub} strokeWidth="1.4" strokeLinecap="round" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ fontSize: '9px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.12em', flexShrink: 0 }}>Status</div>
-            <div style={{ display: 'flex', gap: '6px', flex: 1, flexWrap: 'wrap' }}>
-              {STATUS_TABS.map(tab => {
-                const active = statusFilter === tab.id
-                return (
-                  <button key={tab.id} onClick={() => setStatus(tab.id)}
-                    style={{ padding: '5px 13px', borderRadius: radius.full, border: `1.5px solid ${active ? C.blue500 : C.border}`, background: active ? C.blue100 : C.bg, color: active ? C.navy800 : C.textSub, fontSize: '12px', fontWeight: active ? 700 : 500, cursor: 'pointer', fontFamily: font.family, transition: 'all 0.12s', whiteSpace: 'nowrap' }}>
-                    {tab.label}
-                  </button>
-                )
-              })}
-            </div>
-            <span style={{ fontSize: '12px', color: C.textSub, flexShrink: 0 }}>
-              {filtered.length} patient{filtered.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+    <AdminLayout title="Patients">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: font.family }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <SearchBox value={query} onChange={v => { setQuery(v); setPage(0) }} placeholder="Search name, email or phone" />
+          <button
+            type="button"
+            onClick={() => exportCsv('patients.csv', sorted.map(u => ({
+              Name: u.name, Email: u.email, Phone: u.phone, Country: u.country, Status: u.status,
+              'Credit status': u.creditStatus, 'Credit limit': u.creditLimit, 'Credit used': u.creditUsed,
+              'Family members': u.beneficiariesCount, Payments: u.transactionCount,
+              Joined: u.memberSince.slice(0, 10), 'Last activity': u.lastActivityAt?.slice(0, 10) ?? '',
+            })))}
+            style={{ height: 40, padding: '0 14px', borderRadius: radius.sm, border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: 13.5, fontWeight: 600, fontFamily: font.family, cursor: 'pointer' }}
+          >
+            Export CSV
+          </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: isNarrow ? '1fr' : '300px 1fr', gap: '20px', alignItems: 'flex-start' }}>
-          <GGCard padding="0" style={{ overflow: 'hidden' }}>
-            <div style={{ padding: '10px 16px', borderBottom: `1px solid ${C.border}`, fontSize: '11px', color: C.textSub, fontWeight: 600 }}>
-              Patients {country !== 'all' ? `| ${country}` : '| All Countries'}
-            </div>
-            {isLoading && (
-              <div style={{ padding: '32px', textAlign: 'center', color: C.textSub, fontSize: '13px' }}>Loading patients...</div>
-            )}
-            {!isLoading && filtered.length === 0 && (
-              <div style={{ padding: '40px', textAlign: 'center', color: C.textSub, fontSize: '13px' }}>No patients match</div>
-            )}
-            {filtered.map((user, index) => (
-              <div key={user.id}
-                onClick={() => { setSelected(user); setActionMsg(null) }}
-                style={{
-                  padding: '13px 16px',
-                  borderBottom: index < filtered.length - 1 ? `1px solid ${C.border}` : 'none',
-                  cursor: 'pointer',
-                  background: selected?.id === user.id ? C.blue100 : '#fff',
-                  borderLeft: selected?.id === user.id ? `3px solid ${C.blue500}` : '3px solid transparent',
-                  transition: 'all 0.12s',
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                }}>
-                <PatientAvatar name={user.name} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{user.name}</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '2px' }}>
-                    <CountryBadge code={countryCode(user.country)} showName name={user.country} size={14} />
-                  </div>
-                  <div style={{ fontSize: '10px', color: C.textLight, marginTop: '2px' }}>Since {formatDate(user.memberSince)}</div>
-                </div>
-                <AccountStatusBadge status={user.status} />
-              </div>
-            ))}
-          </GGCard>
+        <StatusTabs<StatusTab>
+          tabs={[
+            { id: 'all', label: 'All', count: counts.all },
+            { id: 'active', label: 'Active', count: counts.active },
+            { id: 'pending_verification', label: 'Not verified', count: counts.pending_verification },
+            { id: 'suspended', label: 'Suspended', count: counts.suspended },
+          ]}
+          value={status}
+          onChange={id => { setStatus(id); setPage(0) }}
+        />
 
-          {selected ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {actionMsg && (
-                <div style={{ padding: '11px 16px', background: C.blue100, borderRadius: radius.sm, fontSize: '13px', fontWeight: 600, color: C.navy800, border: `1px solid ${C.blue500}33` }}>
-                  {actionMsg}
-                </div>
-              )}
-
-              {isError && (
-                <div style={{ padding: '11px 16px', background: C.errorBg, borderRadius: radius.sm, fontSize: '13px', fontWeight: 600, color: C.error, border: `1px solid ${C.error}33` }}>
-                  {error instanceof Error ? error.message : 'We could not load patient data.'}
-                </div>
-              )}
-
-              <GGCard padding="22px">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
-                  <div style={{ width: 52, height: 52, borderRadius: '50%', background: C.blue100, color: C.navy800, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', fontWeight: 800, flexShrink: 0 }}>
-                    {selected.name.trim().split(' ').map(chunk => chunk[0]).join('').toUpperCase().slice(0, 2)}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{selected.name}</div>
-                    <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>{selected.id} | Patient Account</div>
-                  </div>
-                  <AccountStatusBadge status={selected.status} />
-                </div>
-
-                <SectionLabel>Registration Details</SectionLabel>
-                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
-                  <InfoCell label="Email" value={selected.email} />
-                  <InfoCell label="Phone" value={selected.phone ? formatPhone(selected.phone, selected.country).display : 'Not provided'} />
-                  <InfoCell label="Country" value={selected.country} />
-                  <InfoCell label="Date of Birth" value={formatDate(selected.dob)} />
-                  <InfoCell label="Member Since" value={formatDate(selected.memberSince)} />
-                  <InfoCell label="Patient ID" value={selected.id} />
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '18px' }}>
-                  <div style={{ padding: '12px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, textAlign: 'center' }}>
-                    <div style={{ fontSize: '22px', fontWeight: 800, color: C.blue500 }}>{selected.beneficiariesCount}</div>
-                    <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Beneficiaries</div>
-                  </div>
-                  <div style={{ padding: '12px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, textAlign: 'center' }}>
-                    <div style={{ fontSize: '22px', fontWeight: 800, color: C.navy800 }}>{selected.transactionCount}</div>
-                    <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>Transactions</div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <GGButton
-                      variant={selected.status === 'suspended' ? 'success' : 'danger'}
-                      size="sm"
-                      onClick={() => handleToggleSuspend(selected)}
-                    >
-                      {selected.status === 'suspended' ? 'Reactivate Account' : 'Suspend Account'}
-                    </GGButton>
-                    {selected.status === 'suspended' && pendingDelete !== selected.id && (
-                      <GGButton variant="danger" size="sm" onClick={() => setPendingDelete(selected.id)}>
-                        Delete Account
-                      </GGButton>
-                    )}
-                  </div>
-
-                  {pendingDelete === selected.id && (
-                    <div style={{ padding: '14px 16px', background: C.errorBg, borderRadius: radius.sm, border: `1.5px solid ${C.error}44` }}>
-                      <div style={{ fontSize: '13px', fontWeight: 700, color: C.error, marginBottom: '4px' }}>Permanently delete this account?</div>
-                      <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '12px' }}>Patients with linked appointments, invoices, transactions, or beneficiaries cannot be deleted.</div>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <GGButton variant="danger" size="sm" onClick={() => handleDelete(selected)}>Confirm Delete</GGButton>
-                        <GGButton variant="secondary" size="sm" onClick={() => setPendingDelete(null)}>Cancel</GGButton>
-                      </div>
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg, padding: isMobile ? 0 : '14px 6px 10px' }}>
+          {isLoading ? (
+            <div style={{ padding: 24, fontSize: 14, color: C.textSub }}>Loading patients…</div>
+          ) : error ? (
+            <div style={{ padding: 24, fontSize: 14, color: '#B91C1C' }}>{error instanceof Error ? error.message : 'Couldn’t load patients.'}</div>
+          ) : pageRows.length === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', fontSize: 14, color: C.textSub }}>No patients match.</div>
+          ) : isMobile ? (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {pageRows.map((u, i) => (
+                <li key={u.id}>
+                  <button type="button" onClick={() => setOpenId(u.id)} style={{ all: 'unset', boxSizing: 'border-box', width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i > 0 ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: font.family }}>
+                    <Initials name={u.name} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{u.name}</div>
+                      <div style={{ fontSize: 12.5, color: C.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.country} · {u.creditStatus === 'approved' ? `${money(u, u.creditUsed)} of ${money(u, u.creditLimit)}` : (CREDIT_LABEL[u.creditStatus] ?? CREDIT_LABEL.not_applied).label}</div>
                     </div>
-                  )}
-                </div>
-              </GGCard>
-
-              <GGCard padding="22px">
-                <SectionLabel>Identity Verification</SectionLabel>
-                {(() => {
-                  const revealedValue = revealedIds[selected.id]
-                  const isRevealed = !!revealedValue
-                  const isLoading = revealingId === selected.id
-                  const displayValue = isRevealed ? revealedValue : (selected.nationalId ?? 'Not available')
-
-                  const handleReveal = async () => {
-                    if (isRevealed) {
-                      setRevealedIds(prev => { const next = { ...prev }; delete next[selected.id]; return next })
-                      return
-                    }
-                    setRevealingId(selected.id)
-                    try {
-                      const { nationalId } = await adminService.revealNationalId(selected.id)
-                      setRevealedIds(prev => ({ ...prev, [selected.id]: nationalId }))
-                    } finally {
-                      setRevealingId(null)
-                    }
-                  }
-
-                  return (
-                    <div style={{ padding: '14px 16px', background: C.blue100, borderRadius: radius.sm, border: `1.5px solid ${C.blue500}44`, marginBottom: '16px' }}>
-                      <div style={{ fontSize: '10px', fontWeight: 700, color: C.navy800, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '8px' }}>National ID / NRC</div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '0.04em', fontFamily: "'Courier New', monospace", flex: 1 }}>
-                          {displayValue}
-                        </div>
-                        <button
-                          onClick={handleReveal}
-                          disabled={isLoading}
-                          title={isRevealed ? 'Hide ID' : 'Reveal full ID'}
-                          style={{ background: 'none', border: `1.5px solid ${C.blue500}66`, borderRadius: radius.sm, padding: '5px 10px', cursor: isLoading ? 'default' : 'pointer', display: 'flex', alignItems: 'center', gap: '5px', color: C.blue500, fontSize: '11px', fontWeight: 700, fontFamily: font.family, transition: 'background 0.15s', flexShrink: 0, opacity: isLoading ? 0.6 : 1 }}
-                          onMouseEnter={e => { if (!isLoading) (e.currentTarget as HTMLButtonElement).style.background = `${C.blue100}` }}
-                          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.background = 'none' }}
-                        >
-                          {isLoading ? (
-                            <>
-                              <span style={{ width: 12, height: 12, borderRadius: '50%', border: `1.5px solid ${C.blue500}44`, borderTopColor: C.blue500, animation: 'spin 0.7s linear infinite', display: 'inline-block' }} />
-                              Loading…
-                            </>
-                          ) : isRevealed ? (
-                            <>
-                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M1 1l12 12M5.5 5.64A2 2 0 009.36 9.5M3.2 3.32A6.3 6.3 0 001 7c1.1 2.4 3.6 4 6 4a6.2 6.2 0 003.6-1.14M6 3.06C6.33 3.02 6.66 3 7 3c2.4 0 4.9 1.6 6 4a6.6 6.6 0 01-1.5 2.08" stroke={C.blue500} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                              </svg>
-                              Hide
-                            </>
-                          ) : (
-                            <>
-                              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                                <path d="M1 7c1.1-2.4 3.6-4 6-4s4.9 1.6 6 4c-1.1 2.4-3.6 4-6 4S2.1 9.4 1 7z" stroke={C.blue500} strokeWidth="1.3" strokeLinejoin="round"/>
-                                <circle cx="7" cy="7" r="2" stroke={C.blue500} strokeWidth="1.3"/>
-                              </svg>
-                              Reveal
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })()}
-
-                <div style={{ fontSize: '12px', fontWeight: 600, color: C.text, marginBottom: '10px' }}>
-                  ID Documents ({selected.idDocuments.length})
-                </div>
-                {selected.idDocuments.length === 0 ? (
-                  <div style={{ padding: '20px', textAlign: 'center', color: C.textSub, fontSize: '13px', background: C.bg, borderRadius: radius.sm }}>
-                    No uploaded identity documents are available from the backend yet.
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                    {selected.idDocuments.map((doc, index) => <DocRow key={index} doc={doc} />)}
-                  </div>
-                )}
-              </GGCard>
-
-              <GGCard padding="22px">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
-                  <SectionLabel>Healthcare Credit</SectionLabel>
-                  <CreditBadge status={selected.creditStatus} />
-                </div>
-
-                {selected.creditStatus === 'approved' && selected.creditLimit > 0 ? (
-                  <>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '14px' }}>
-                      {[
-                        { label: 'Limit', val: formatCurrency(selected.creditLimit, currSymbol(selected)), color: C.navy800 },
-                        { label: 'Used', val: formatCurrency(selected.creditUsed, currSymbol(selected)), color: C.blue500 },
-                        { label: 'Available', val: formatCurrency(selected.creditLimit - selected.creditUsed, currSymbol(selected)), color: C.navy800 },
-                      ].map(item => (
-                        <div key={item.label} style={{ padding: '10px 12px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, textAlign: 'center' }}>
-                          <div style={{ fontSize: '10px', color: C.textSub, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' }}>{item.label}</div>
-                          <div style={{ fontSize: '13px', fontWeight: 700, color: item.color }}>{item.val}</div>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div style={{ marginBottom: '14px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '5px' }}>
-                        <span style={{ fontSize: '11px', color: C.textSub }}>Credit utilisation</span>
-                        <span style={{ fontSize: '11px', fontWeight: 700, color: creditPct(selected) > 80 ? C.error : C.navy800 }}>{creditPct(selected)}%</span>
-                      </div>
-                      <div style={{ height: 6, background: C.border, borderRadius: radius.full, overflow: 'hidden' }}>
-                        <div style={{ height: '100%', width: `${creditPct(selected)}%`, background: creditPct(selected) > 80 ? C.error : C.blue500, borderRadius: radius.full }} />
-                      </div>
-                    </div>
-
-                    {selected.financePartner && (
-                      <div style={{ fontSize: '12px', color: C.textSub }}>
-                        Finance partner: <strong style={{ color: C.text }}>{selected.financePartner === 'moneymart' ? 'MoneyMart' : 'Equity Bank'}</strong>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ padding: '16px', background: C.bg, borderRadius: radius.sm, fontSize: '13px', color: C.textSub, textAlign: 'center', border: `1px solid ${C.border}` }}>
-                    {selected.creditStatus === 'pending' && 'Credit application is under review.'}
-                    {selected.creditStatus === 'rejected' && 'Credit application was not approved.'}
-                    {selected.creditStatus === 'not_applied' && 'Patient has not yet applied for healthcare credit.'}
-                  </div>
-                )}
-              </GGCard>
-            </div>
+                    {u.status !== 'active' && <StatusPill status={u.status} />}
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div style={{ padding: '60px', textAlign: 'center', color: C.textSub, fontSize: '13px', background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}` }}>
-              {isLoading ? 'Loading patient details...' : 'Select a patient to view their details'}
+            <div className="hide-scrollbar" style={{ overflowX: 'auto', overflowY: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 760 }}>
+                <thead>
+                  <tr>
+                    <SortHeader label="Patient" sortKey="name" sort={sort} onSort={onSort} />
+                    <PlainHeader label="Country" />
+                    <SortHeader label="Credit" sortKey="credit" sort={sort} onSort={onSort} />
+                    <SortHeader label="Last activity" sortKey="activity" sort={sort} onSort={onSort} />
+                    <SortHeader label="Joined" sortKey="joined" sort={sort} onSort={onSort} />
+                    <PlainHeader label="" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageRows.map(u => (
+                    <tr key={u.id} onClick={() => setOpenId(u.id)} className="acct-row" style={{ cursor: 'pointer', background: u.id === openId ? C.blue100 : undefined }}>
+                      <td style={td}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Initials name={u.name} />
+                          <div style={{ minWidth: 0 }}>
+                            <button type="button" onClick={e => { e.stopPropagation(); setOpenId(u.id) }} style={{ all: 'unset', fontWeight: 700, color: C.text, cursor: 'pointer' }}>{u.name}</button>
+                            <div style={{ fontSize: 12.5, color: C.textSub }}>{u.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={td}><CountryBadge code={countryCode(u.country)} showName name={u.country} size={14} /></td>
+                      <td style={td}><CreditCell user={u} /></td>
+                      <td style={{ ...td, color: u.lastActivityAt ? C.text : C.textLight, fontSize: 13.5 }}>{u.lastActivityAt ? formatRelativeTime(u.lastActivityAt) : 'None yet'}</td>
+                      <td style={{ ...td, color: C.textSub, fontSize: 13.5, whiteSpace: 'nowrap' }}>{formatDate(u.memberSince)}</td>
+                      <td style={{ ...td, textAlign: 'right' }}>{u.status !== 'active' && <StatusPill status={u.status} />}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
+          <div style={{ padding: isMobile ? '0 14px 12px' : '0 8px' }}>
+            <Pager page={page} pageSize={PAGE_SIZE} total={sorted.length} onPage={setPage} />
+          </div>
         </div>
+        <style>{'.acct-row:hover { background: #F5F9FD; }'}</style>
       </div>
+
+      <SidePanel open={!!open} onClose={() => setOpenId(null)} label={open ? open.name : 'Patient'}>
+        {open && (
+          <PatientPanel
+            key={open.id}
+            user={open}
+            initialTab={open.id === searchParams.get('open') && ['overview', 'credit', 'history'].includes(searchParams.get('tab') ?? '') ? searchParams.get('tab') as PanelTab : undefined}
+            onUpdated={u => setOverrides(o => ({ ...o, [u.id]: u }))}
+            onDeleted={() => { setOverrides(o => ({ ...o, [open.id]: null })); setOpenId(null) }}
+          />
+        )}
+      </SidePanel>
     </AdminLayout>
   )
 }

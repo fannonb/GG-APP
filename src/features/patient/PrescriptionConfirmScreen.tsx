@@ -29,7 +29,7 @@ export function PrescriptionConfirmScreen() {
             <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M8 18l7 7 13-13" stroke={C.success} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
 
-          <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px' }}>Prescription Sent!</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', marginBottom: '8px' }}>Prescription Sent!</div>
           <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '28px' }}>
             Your prescription has been sent to <strong style={{ color: C.text }}>{provider.name}</strong>. They'll confirm stock and pricing before you pay.
           </div>

@@ -134,6 +134,7 @@ export class AuthService {
               firstName: dto.firstName,
               lastName: dto.lastName,
               dateOfBirth: new Date(dto.dob),
+              gender: dto.gender ?? null,
               countryCode: dto.country,
               nationalIdEncrypted,
               nationalIdLast4,
@@ -433,6 +434,53 @@ export class AuthService {
     return {
       message: 'Email verified successfully. You can now sign in.',
     }
+  }
+
+  /**
+   * Re-sends the verification email for an unverified local account. Always
+   * returns the same message so the endpoint cannot be used to probe which
+   * emails are registered, and never returns the token itself.
+   */
+  async resendVerification(email: string) {
+    const genericMessage =
+      'If that account still needs verifying, we have sent a new verification email.'
+    if (!this.mailService.isEnabled) {
+      return { message: genericMessage }
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: email.toLowerCase().trim() },
+      select: { id: true, email: true, emailVerifiedAt: true, authProvider: true },
+    })
+    if (!user || user.emailVerifiedAt || user.authProvider === AuthProvider.GOOGLE) {
+      return { message: genericMessage }
+    }
+
+    // One email per account per minute, on top of the route-level IP throttle.
+    const cooldownKey = `auth:verify-resend:${user.id}`
+    if (await this.redis.get(cooldownKey)) {
+      return { message: genericMessage }
+    }
+    await this.redis.set(cooldownKey, '1', 60)
+
+    const verificationToken = randomUUID()
+    await this.prisma.$transaction([
+      // Older links stop working once a new one is issued.
+      this.prisma.emailVerificationToken.updateMany({
+        where: { userId: user.id, consumedAt: null },
+        data: { consumedAt: new Date() },
+      }),
+      this.prisma.emailVerificationToken.create({
+        data: {
+          token: verificationToken,
+          userId: user.id,
+          expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        },
+      }),
+    ])
+    void this.mailService.sendVerificationEmail(user.email, verificationToken)
+
+    return { message: genericMessage }
   }
 
   async login(dto: LoginDto, ctx: SessionContext = {}): Promise<AuthSessionResponse> {

@@ -41,6 +41,8 @@ export interface LedgerPinEmailData {
 }
 
 export interface ProviderApplicationEmailData {
+  /** Links the email to the pending page where the provider can reply. */
+  applicationId?: string
   practiceName: string
   note?: string
 }
@@ -306,6 +308,21 @@ export class MailService {
     })
   }
 
+  /** Plain account notice (suspension, email change, reactivation). Paragraphs are escaped. */
+  async sendAccountNotice(
+    to: string,
+    data: { subject: string; paragraphs: string[]; cta?: { label: string; path: string } },
+  ): Promise<boolean> {
+    return this.send({
+      to,
+      subject: data.subject,
+      html: this.layout(
+        ['<p>Hi there,</p>', ...data.paragraphs.map(p => `<p>${escapeHtml(p)}</p>`)].join(''),
+        data.cta ? { label: data.cta.label, url: `${this.appBaseUrl}${data.cta.path}` } : undefined,
+      ),
+    })
+  }
+
   async sendProviderApplicationRejectedEmail(
     to: string,
     data: ProviderApplicationEmailData,
@@ -338,8 +355,11 @@ export class MailService {
         <p>We need a bit more information to finish reviewing your application for
         <strong>${escapeHtml(data.practiceName)}</strong>.</p>
         ${data.note ? `<p>What we need: ${escapeHtml(data.note)}</p>` : ''}
-        <p>Please log in to update your application so we can continue the review.</p>`,
-        { label: 'Update application', url: `${this.appBaseUrl}/sp/pending` },
+        <p>Reply from your application page so we can continue the review.</p>`,
+        {
+          label: 'Reply to the review team',
+          url: `${this.appBaseUrl}/sp/pending${data.applicationId ? `?applicationId=${encodeURIComponent(data.applicationId)}` : ''}`,
+        },
       ),
     })
   }

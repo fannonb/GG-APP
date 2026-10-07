@@ -250,7 +250,7 @@ export function SPPatientDetailScreen() {
             <GGAvatar name={p.name} size={isMobile ? 48 : 56} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <h1 style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, margin: 0, fontFamily: font.family, letterSpacing: '-0.02em' }}>
+                <h1 style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, margin: 0, fontFamily: font.family, letterSpacing: '-0.01em' }}>
                   {p.name}
                 </h1>
                 {p.bloodType && p.bloodType !== 'Unknown' && p.bloodType !== 'Not specified' && (

@@ -131,7 +131,7 @@ export function InvoiceListScreen() {
                     <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>{formatDate(invoice.date)}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{formatCurrency(invoice.amount)}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{formatCurrency(invoice.amount)}</div>
                     <div style={{ marginTop: '4px' }}><GGBadge type={status.type}>{status.label}</GGBadge></div>
                   </div>
                 </div>

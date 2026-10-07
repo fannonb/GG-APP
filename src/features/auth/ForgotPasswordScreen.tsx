@@ -142,7 +142,7 @@ export function ForgotPasswordScreen() {
               fontSize: '24px',
               fontWeight: 800,
               color: C.text,
-              letterSpacing: '-0.04em',
+              letterSpacing: '-0.02em',
               marginBottom: '8px',
             }}
           >

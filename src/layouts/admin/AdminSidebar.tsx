@@ -1,6 +1,6 @@
-import type { ReactElement } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
-import { ROUTES, LOGO } from '@/router/routes'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { ROUTES, LOGO_WORDMARK } from '@/router/routes'
 import { C, font } from '@/design-system/tokens'
 import { useLogoutMutation } from '@/hooks/api'
 
@@ -13,21 +13,22 @@ interface NavItem {
 }
 
 const PRIMARY_NAV: NavItem[] = [
-  { id: 'admin-dashboard', label: 'Dashboard',       path: ROUTES.ADMIN_DASHBOARD },
+  { id: 'admin-dashboard', label: 'Overview',        path: ROUTES.ADMIN_DASHBOARD },
   { id: 'admin-sp-apps',   label: 'SP Applications', path: ROUTES.ADMIN_APPLICATIONS },
   { id: 'admin-credit-apps', label: 'Credit Applications', path: ROUTES.ADMIN_CREDIT_APPLICATIONS },
+  { id: 'admin-email-changes', label: 'Email changes', path: ROUTES.ADMIN_EMAIL_CHANGES },
 ]
 
-const HEALTH_INTELLIGENCE_NAV: NavItem[] = [
-  { id: 'admin-disease-burden', label: 'Disease Burden',   path: ROUTES.ADMIN_DISEASE_BURDEN },
-  { id: 'admin-demographics',   label: 'Demographics',     path: ROUTES.ADMIN_DEMOGRAPHICS },
-  { id: 'admin-financials',     label: 'Financials & CPI', path: ROUTES.ADMIN_FINANCIALS },
-  { id: 'admin-consumer-health', label: 'Consumer Health', path: ROUTES.ADMIN_CONSUMER_HEALTH },
-  { id: 'admin-analytics',      label: 'Country Analytics', path: ROUTES.ADMIN_ANALYTICS },
+const INSIGHTS_NAV: NavItem[] = [
+  { id: 'admin-financials',     label: 'Money',                path: ROUTES.ADMIN_INSIGHTS_MONEY },
+  { id: 'admin-demographics',   label: 'Patients & credit',    path: ROUTES.ADMIN_INSIGHTS_PATIENTS },
+  { id: 'admin-analytics',      label: 'Care activity',        path: ROUTES.ADMIN_INSIGHTS_CARE },
+  { id: 'admin-provider-performance', label: 'Provider performance', path: ROUTES.ADMIN_INSIGHTS_PROVIDERS },
+  { id: 'admin-disease-burden', label: 'Health insights',      path: ROUTES.ADMIN_INSIGHTS_HEALTH },
 ]
 
 const MANAGEMENT_NAV: NavItem[] = [
-  { id: 'admin-users',     label: 'Users',     path: ROUTES.ADMIN_USERS },
+  { id: 'admin-users',     label: 'Patients',  path: ROUTES.ADMIN_USERS },
   { id: 'admin-providers', label: 'Providers', path: ROUTES.ADMIN_PROVIDERS },
   { id: 'admin-payments',  label: 'Payments',  path: ROUTES.ADMIN_PAYMENTS },
   { id: 'admin-ledger',    label: 'Ledger Access', path: ROUTES.ADMIN_LEDGER_ACCESS },
@@ -131,14 +132,15 @@ function AdminNavIcon({ id, active }: { id: string; active: boolean }) {
       </svg>
     ),
   }
-  return icons[id] ?? null
+  // Provider performance shares the providers icon.
+  return icons[id] ?? (id === 'admin-provider-performance' ? icons['admin-providers'] : id === 'admin-email-changes' ? icons['admin-users'] : null) ?? null
 }
 
 function NavSection({ items, label, compact, pendingCreditCount = 0 }: { items: NavItem[]; label?: string; compact?: boolean; pendingCreditCount?: number }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
       {label && !compact && (
-        <div style={{ padding: '8px 12px 4px', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: font.family }}>
+        <div style={{ padding: '6px 12px 4px', fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: font.family }}>
           {label}
         </div>
       )}
@@ -146,11 +148,12 @@ function NavSection({ items, label, compact, pendingCreditCount = 0 }: { items: 
         <NavLink key={item.id} to={item.path} style={{ textDecoration: 'none' }}>
           {({ isActive }) => (
             <div
+              data-active={isActive || undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '12px',
-                padding: '10px 14px',
+                padding: '8px 12px',
                 borderRadius: '12px',
                 background: isActive ? '#FFFFFF' : 'transparent',
                 color: isActive ? C.navy800 : 'rgba(255,255,255,0.72)',
@@ -209,12 +212,31 @@ interface AdminSidebarProps {
 
 export function AdminSidebar({ onClose, pendingCreditCount = 0 }: AdminSidebarProps) {
   const navigate = useNavigate()
+  const { pathname } = useLocation()
   const logoutMutation = useLogoutMutation()
+  const navRef = useRef<HTMLElement>(null)
+  const [moreBelow, setMoreBelow] = useState(false)
 
   const handleLogout = () => {
     logoutMutation.mutate()
     onClose?.()
   }
+
+  // Track whether items are hidden below, so the fade only shows when there is more to scroll to.
+  useEffect(() => {
+    const nav = navRef.current
+    if (!nav) return
+    const update = () => setMoreBelow(nav.scrollTop + nav.clientHeight < nav.scrollHeight - 4)
+    const observer = new ResizeObserver(update)
+    observer.observe(nav)
+    nav.addEventListener('scroll', update, { passive: true })
+    return () => { observer.disconnect(); nav.removeEventListener('scroll', update) }
+  }, [])
+
+  // Keep the current page visible, e.g. when landing on an Insights page on a short screen.
+  useEffect(() => {
+    navRef.current?.querySelector('[data-active]')?.scrollIntoView({ block: 'nearest' })
+  }, [pathname])
 
   return (
     <div style={{
@@ -231,13 +253,13 @@ export function AdminSidebar({ onClose, pendingCreditCount = 0 }: AdminSidebarPr
     }}>
       {/* Brand Logo */}
       <div style={{
-        padding: '8px 10px 18px 10px',
+        padding: '4px 10px 12px 10px',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         position: 'relative',
       }}>
-        <img src={LOGO} alt="GG'APP" style={{ width: 80, height: 80, objectFit: 'contain' }} />
+        <img src={LOGO_WORDMARK} alt="GG'APP" style={{ height: 30, width: 'auto', display: 'block', margin: '8px 0 4px' }} />
 
         {onClose && (
           <button
@@ -252,65 +274,67 @@ export function AdminSidebar({ onClose, pendingCreditCount = 0 }: AdminSidebarPr
       </div>
 
       {/* Nav items */}
-      <nav className="hide-scrollbar" style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, overflowY: 'auto', paddingRight: '2px' }}>
-        <NavSection items={PRIMARY_NAV} label="Operations" compact={!!onClose} pendingCreditCount={pendingCreditCount} />
-        <div style={{ height: 1, background: DIVIDER, margin: '6px 4px' }} />
-        <NavSection items={HEALTH_INTELLIGENCE_NAV} label="Health Intelligence" compact={!!onClose} />
-        <div style={{ height: 1, background: DIVIDER, margin: '6px 4px' }} />
-        <NavSection items={MANAGEMENT_NAV} label="Management" compact={!!onClose} />
-      </nav>
+      {/* minHeight 0 lets the list shrink and scroll instead of being cropped by the sidebar. */}
+      <div style={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <nav ref={navRef} className="admin-nav-scroll" style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1, minHeight: 0, overflowY: 'auto', paddingRight: '4px', paddingBottom: 12 }}>
+          <NavSection items={PRIMARY_NAV} label="Operations" compact={!!onClose} pendingCreditCount={pendingCreditCount} />
+          <div style={{ height: 1, background: DIVIDER, margin: '4px', flexShrink: 0 }} />
+          <NavSection items={MANAGEMENT_NAV} label="Manage" compact={!!onClose} />
+          <div style={{ height: 1, background: DIVIDER, margin: '4px', flexShrink: 0 }} />
+          <NavSection items={INSIGHTS_NAV} label="Insights" compact={!!onClose} />
+        </nav>
+        {/* Fade hints that the list continues below; hidden once the end is reached. */}
+        <div aria-hidden style={{ position: 'absolute', left: 0, right: 10, bottom: 0, height: 36, pointerEvents: 'none', background: `linear-gradient(to bottom, rgba(13,30,66,0), ${C.navy800})`, opacity: moreBelow ? 1 : 0, transition: 'opacity 0.15s' }} />
+      </div>
 
-      {/* Footer */}
-      <div style={{ borderTop: `1px solid ${DIVIDER}`, paddingTop: '10px', marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-        <button
-          onClick={handleLogout}
-          disabled={logoutMutation.isPending}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            width: '100%', padding: '10px 14px',
-            borderRadius: '12px', border: 'none',
-            background: 'transparent',
-            color: 'rgba(255,255,255,0.65)',
-            fontSize: '13.5px', fontWeight: 500,
-            fontFamily: font.family, cursor: logoutMutation.isPending ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s ease',
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
-            e.currentTarget.style.color = '#EF4444'
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.background = 'transparent'
-            e.currentTarget.style.color = 'rgba(255,255,255,0.65)'
-          }}
-        >
-          <span style={{ flexShrink: 0, display: 'flex', alignItems: 'center' }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
-              <polyline points="16 17 21 12 16 7"/>
-              <line x1="21" x2="9" y1="12" y2="12"/>
-            </svg>
-          </span>
-          <span>{logoutMutation.isPending ? 'Signing out…' : 'Sign Out'}</span>
-        </button>
-
-        {/* Admin identity card */}
+      {/* Footer: admin identity with sign out alongside, in one row to leave room for the menu. */}
+      <div style={{ borderTop: `1px solid ${DIVIDER}`, paddingTop: '10px', marginTop: 'auto', display: 'flex', alignItems: 'center', gap: '6px' }}>
         <div
           onClick={() => navigate(ROUTES.ADMIN_DASHBOARD)}
-          style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '8px 12px', borderRadius: '12px', background: 'rgba(56,182,255,0.08)', cursor: 'pointer', transition: 'background 0.14s' }}
+          style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '10px', padding: '7px 10px', borderRadius: '12px', background: 'rgba(56,182,255,0.08)', cursor: 'pointer', transition: 'background 0.14s' }}
           onMouseEnter={e => (e.currentTarget.style.background = 'rgba(56,182,255,0.14)')}
           onMouseLeave={e => (e.currentTarget.style.background = 'rgba(56,182,255,0.08)')}
         >
-          <div style={{ width: 34, height: 34, borderRadius: '50%', background: C.blue500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-            <svg width="17" height="17" viewBox="0 0 20 20" fill="none">
+          <div style={{ width: 30, height: 30, borderRadius: '50%', background: C.blue500, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
               <path d="M10 2l2 5h5l-4 3 2 5-5-3-5 3 2-5-4-3h5z" fill="white"/>
             </svg>
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: font.family }}>GG'APP Admin</div>
-            {!onClose && <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.5)', fontFamily: font.family }}>Administrator</div>}
+            <div style={{ fontSize: '12.5px', fontWeight: 700, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: font.family }}>GG'APP Admin</div>
+            <div style={{ fontSize: '10.5px', color: 'rgba(255,255,255,0.5)', fontFamily: font.family }}>Administrator</div>
           </div>
         </div>
+        <button
+          onClick={handleLogout}
+          disabled={logoutMutation.isPending}
+          title="Sign out"
+          aria-label="Sign out"
+          style={{
+            width: 44, height: 44, flexShrink: 0,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            borderRadius: '12px', border: 'none',
+            background: 'rgba(255,255,255,0.06)',
+            color: 'rgba(255,255,255,0.7)',
+            cursor: logoutMutation.isPending ? 'not-allowed' : 'pointer',
+            opacity: logoutMutation.isPending ? 0.5 : 1,
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.14)'
+            e.currentTarget.style.color = '#F87171'
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.06)'
+            e.currentTarget.style.color = 'rgba(255,255,255,0.7)'
+          }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" x2="9" y1="12" y2="12"/>
+          </svg>
+        </button>
       </div>
     </div>
   )

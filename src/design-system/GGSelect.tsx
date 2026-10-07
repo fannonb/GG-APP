@@ -22,7 +22,7 @@ export function GGSelect({ label, value, onChange, options, required = false, pl
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {label && (
-        <label style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
+        <label style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: 0, fontFamily: font.family }}>
           {label}
           {required && <span style={{ color: C.error }}> *</span>}
         </label>

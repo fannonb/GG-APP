@@ -56,12 +56,13 @@ export function RegisterScreen() {
       }}
     >
       <AuthBrandPanel tab={tab} />
-      {compactBrand && <AuthCompactBrandHeader tab={tab} />}
+      {compactBrand && <AuthCompactBrandHeader tab={tab} variant="bar" />}
 
       <div
         style={{
           flex: 1,
-          overflowY: 'auto',
+          // On phones the page itself scrolls, so the pinned Continue bar can stick to the screen.
+          overflowY: compactBrand ? 'visible' : 'auto',
           background: C.surface,
           position: 'relative',
         }}
@@ -70,9 +71,9 @@ export function RegisterScreen() {
           style={{
             minHeight: compactBrand ? 'auto' : '100%',
             display: 'flex',
-            alignItems: 'center',
+            alignItems: compactBrand ? 'flex-start' : 'center',
             justifyContent: 'center',
-            padding: compactBrand ? '12px 12px 24px' : '36px 40px',
+            padding: compactBrand ? '8px 12px 0' : '36px 40px',
             boxSizing: 'border-box',
           }}
         >
@@ -96,15 +97,15 @@ export function RegisterScreen() {
                   fontSize: 22,
                   fontWeight: 800,
                   color: C.text,
-                  letterSpacing: '-0.03em',
+                  letterSpacing: '-0.015em',
                   marginBottom: 6,
                 }}
               >
-                {tab === 'patient' ? 'Create your patient account' : 'Apply as a provider'}
+                {tab === 'patient' ? (compactBrand ? 'Create your account' : 'Create your patient account') : 'Apply as a provider'}
               </div>
               <div style={{ fontSize: 14, color: C.textSub, lineHeight: 1.5 }}>
                 {tab === 'patient'
-                  ? 'Set up access to verified healthcare providers. You’ll verify your email before signing in.'
+                  ? 'Takes about 3 minutes. You’ll confirm your email at the end.'
                   : 'Submit your practice for admin review. Verification typically takes 2–3 business days.'}
               </div>
             </div>

@@ -1,4 +1,7 @@
 export const LOGO = '/gg-logo-v4.png'
+/** Transparent cut-outs of the logo — use these on navy instead of the boxed PNG. */
+export const LOGO_MARK = '/gg-mark.png'
+export const LOGO_WORDMARK = '/gg-wordmark.png'
 
 /**
  * Secret admin portal path, set at build time via VITE_ADMIN_PORTAL_PATH.
@@ -78,14 +81,15 @@ export const ROUTES = {
   ADMIN_USERS:        `${ADMIN_PORTAL_PATH}/users`,
   ADMIN_PROVIDERS:    `${ADMIN_PORTAL_PATH}/providers`,
   ADMIN_PAYMENTS:     `${ADMIN_PORTAL_PATH}/payments`,
-  ADMIN_ANALYTICS:    `${ADMIN_PORTAL_PATH}/analytics`,
-  ADMIN_DISEASE_BURDEN: `${ADMIN_PORTAL_PATH}/disease-burden`,
-  ADMIN_DEMOGRAPHICS:   `${ADMIN_PORTAL_PATH}/demographics`,
-  ADMIN_FINANCIALS:     `${ADMIN_PORTAL_PATH}/financials`,
-  ADMIN_CONSUMER_HEALTH: `${ADMIN_PORTAL_PATH}/consumer-health`,
   ADMIN_NEWS:         `${ADMIN_PORTAL_PATH}/news`,
   ADMIN_ADS:          `${ADMIN_PORTAL_PATH}/ads`,
   ADMIN_LEDGER_ACCESS: `${ADMIN_PORTAL_PATH}/ledger-access`,
+  ADMIN_EMAIL_CHANGES:      `${ADMIN_PORTAL_PATH}/email-changes`,
+  ADMIN_INSIGHTS_MONEY:     `${ADMIN_PORTAL_PATH}/insights/money`,
+  ADMIN_INSIGHTS_PATIENTS:  `${ADMIN_PORTAL_PATH}/insights/patients`,
+  ADMIN_INSIGHTS_CARE:      `${ADMIN_PORTAL_PATH}/insights/care`,
+  ADMIN_INSIGHTS_PROVIDERS: `${ADMIN_PORTAL_PATH}/insights/providers`,
+  ADMIN_INSIGHTS_HEALTH:    `${ADMIN_PORTAL_PATH}/insights/health`,
 } as const
 
 /** Dynamic route builders for navigation */

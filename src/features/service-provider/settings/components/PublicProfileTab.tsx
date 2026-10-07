@@ -97,16 +97,21 @@ export function PublicProfileTab({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {!isEditing && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <GGButton variant="primary" size="sm" onClick={() => setIsEditing(true)}>
-            Edit public profile
-          </GGButton>
-        </div>
-      )}
+      <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={handleLogoFile} />
 
       <GGCard padding={isMobile ? '18px' : '24px'}>
-        <SectionTitle>Practice identity</SectionTitle>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12 }}>
+          <SectionTitle>Practice identity</SectionTitle>
+          {!isEditing && (
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              style={{ height: 34, padding: '0 14px', borderRadius: radius.sm, border: '1px solid rgba(11,123,192,0.35)', background: '#fff', color: '#0B7BC0', fontSize: 13, fontWeight: 700, fontFamily: font.family, cursor: 'pointer', flexShrink: 0 }}
+            >
+              Edit profile
+            </button>
+          )}
+        </div>
 
         <div
           style={{
@@ -133,14 +138,28 @@ export function PublicProfileTab({
               {profileForm.logoUrl ? (
                 <img src={profileForm.logoUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <span style={{ fontSize: 12, color: C.textSub, fontFamily: font.family }}>No logo</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditing(true)
+                    logoInputRef.current?.click()
+                  }}
+                  style={{ all: 'unset', boxSizing: 'border-box', width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 4, cursor: 'pointer', color: '#0B7BC0', fontFamily: font.family, textAlign: 'center' }}
+                >
+                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden><rect x="2.5" y="4" width="17" height="14" rx="3" stroke="currentColor" strokeWidth="1.5" /><circle cx="8" cy="9" r="1.8" stroke="currentColor" strokeWidth="1.4" /><path d="M3 16l5-4.5 4 3.5 3-2.5 4 3.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /></svg>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>Add logo</span>
+                </button>
               )}
             </div>
+            {!profileForm.logoUrl && !isEditing && (
+              <div style={{ fontSize: 11, color: C.textSub, marginTop: 6, lineHeight: 1.4, maxWidth: 112, fontFamily: font.family }}>
+                Patients see this on your listing.
+              </div>
+            )}
             {isEditing && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 10 }}>
-                <input ref={logoInputRef} type="file" accept="image/*" hidden onChange={handleLogoFile} />
                 <GGButton variant="secondary" size="sm" onClick={() => logoInputRef.current?.click()}>
-                  Change logo
+                  {profileForm.logoUrl ? 'Change logo' : 'Upload logo'}
                 </GGButton>
                 {profileForm.logoUrl && (
                   <GGButton variant="ghost" size="sm" onClick={() => patch({ logoUrl: '' })}>
@@ -174,9 +193,12 @@ export function PublicProfileTab({
 
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 16 }}>
           <LockedField label="Practice name" value={practiceName} />
-          <LockedField label="Email" value={email} hint="Change under Security" />
-          <LockedField label="Country" value={profileForm.country} hint="Fixed at registration" />
+          <LockedField label="Email" value={email} />
+          <LockedField label="Country" value={profileForm.country} />
           <LockedField label="License" value={profileForm.license || '—'} />
+          <div style={{ gridColumn: '1 / -1', fontSize: 12, color: C.textSub, lineHeight: 1.5, padding: '10px 12px', background: C.bg, borderRadius: radius.sm, fontFamily: font.family }}>
+            Name, country and licence were verified at registration. Change your email under Security; for anything else, contact support.
+          </div>
 
           {isEditing ? (
             <>

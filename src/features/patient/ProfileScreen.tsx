@@ -30,13 +30,17 @@ import { formatPhone } from '@/utils/format'
 import { useUserStore } from '@/store/user.store'
 import { getPatientDisplayName, isBeneficiariesActive } from './patientAccount'
 import { ROUTES } from '@/router/routes'
+import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { ChangeEmailCard } from '@/components/ChangeEmailCard'
+import { SettingsAboutCard } from '@/components/SettingsAboutCard'
+import { useLogoutMutation } from '@/hooks/api'
 
 const RELATIONS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other']
 
 const TABS = [
-  { id: 'profile',       label: 'Personal Info' },
-  { id: 'beneficiaries', label: 'Beneficiaries' },
-  { id: 'security',      label: 'Security & PIN' },
+  { id: 'profile',       label: 'Personal info' },
+  { id: 'beneficiaries', label: 'Family' },
+  { id: 'security',      label: 'Security' },
 ]
 
 function DetailField({
@@ -107,6 +111,7 @@ export function ProfileScreen() {
 
   const initialTab = ((location.state as { tab?: string } | null)?.tab ?? 'profile')
   const [tab, setTab] = useState(initialTab)
+  const logoutMutation = useLogoutMutation()
   const [editing, setEditing] = useState(false)
   const initialResCode = resolveResidenceSelectCode(u)
   const initialPhoneState = splitPhonePrefix(u.phone, initialResCode)
@@ -285,7 +290,7 @@ export function ProfileScreen() {
   }
 
   return (
-    <AppLayout title="My Profile" notifCount={1}>
+    <AppLayout title="Settings" notifCount={1}>
       <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
 
         {saved && (
@@ -299,7 +304,7 @@ export function ProfileScreen() {
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
             <GGAvatar name={getPatientDisplayName(u)} size={56} />
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
+              <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>
                 {getPatientDisplayName(u)}
               </div>
               <div style={{ fontSize: 13, color: C.textSub, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -321,36 +326,14 @@ export function ProfileScreen() {
           </div>
         </GGCard>
 
-        {/* Tab bar */}
-        <div style={{ display: 'flex', gap: '0', background: '#fff', borderRadius: '12px', padding: '4px', border: `1px solid ${C.border}` }}>
-          {TABS.map(t => {
-            const inactiveBeneficiaries = t.id === 'beneficiaries' && !beneficiariesActive
-            const active = tab === t.id
-            return (
-              <button
-                key={t.id}
-                type="button"
-                onClick={() => setTab(t.id)}
-                style={{
-                  flex: 1,
-                  padding: '9px 10px',
-                  borderRadius: '9px',
-                  border: 'none',
-                  background: active ? C.blue500 : 'transparent',
-                  color: active ? '#fff' : inactiveBeneficiaries ? C.textLight : C.textSub,
-                  fontSize: '13px',
-                  fontWeight: active ? 700 : 500,
-                  cursor: 'pointer',
-                  fontFamily: font.family,
-                  transition: 'all 0.14s',
-                  opacity: inactiveBeneficiaries && !active ? 0.7 : 1,
-                }}
-              >
-                {t.label}{inactiveBeneficiaries ? ' (Locked)' : ''}
-              </button>
-            )
-          })}
-        </div>
+        <UnderlineTabs
+          tabs={TABS.map(t => ({
+            id: t.id,
+            label: t.id === 'beneficiaries' && !beneficiariesActive ? `${t.label} (off)` : t.label,
+          }))}
+          active={tab}
+          onChange={setTab}
+        />
 
         {/* Personal Info */}
         {tab === 'profile' && (
@@ -374,7 +357,7 @@ export function ProfileScreen() {
             {editing ? (
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '16px' }}>
                 <GGInput label="Full Name"      value={form.name}  onChange={e => setF('name', e.target.value)}  required />
-                <GGInput label="Email Address"  type="email" value={form.email} onChange={e => setF('email', e.target.value)} required />
+                <GGInput label="Email Address"  type="email" value={form.email} disabled hint="Change your email under Security." />
                 <PhonePrefixInput
                   label="Phone Number"
                   required
@@ -423,13 +406,9 @@ export function ProfileScreen() {
                   ],
                   [
                     { label: 'Phone number', value: phoneDisplay },
-                    { label: 'Country of residence', value: u.residesAbroad
-                      ? `${u.residenceCountry ?? u.country} (abroad)`
-                      : (u.residenceCountry ?? countryName) },
-                  ],
-                  [
-                    { label: 'Market country', value: countryName },
-                    { label: 'Currency', value: currencyLabel },
+                    u.residesAbroad
+                      ? { label: 'Country', value: `${u.residenceCountry ?? u.country} (abroad) · credit in ${countryName}, ${country?.currencyCode ?? ''}` }
+                      : { label: 'Country', value: [countryName, currencyLabel].filter(Boolean).join(' · ') },
                   ],
                   [
                     { label: 'National ID', value: displayValue(u.nationalId), locked: true },
@@ -452,7 +431,10 @@ export function ProfileScreen() {
                   </div>
                 ))}
                 <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.5, paddingTop: 4 }}>
-                  National ID and date of birth are on file for verification and cannot be changed here.
+                  National ID and date of birth are used to verify your identity, so they can't be edited here.{' '}
+                  <a href="mailto:support@gatewayglobal.africa" style={{ color: '#0B7BC0', fontWeight: 700 }}>
+                    {u.dateOfBirth ? 'Contact support to correct them' : 'Contact support to add your date of birth'}
+                  </a>.
                 </div>
               </div>
             )}
@@ -664,6 +646,7 @@ export function ProfileScreen() {
         {/* Security & PIN */}
         {tab === 'security' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <ChangeEmailCard currentEmail={u.email} />
 
             {/* Payment PIN */}
             <GGCard padding="24px">
@@ -714,6 +697,20 @@ export function ProfileScreen() {
 
               <div style={{ padding: '12px 14px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, fontSize: '12px', color: C.textSub, lineHeight: 1.6 }}>
                 <strong style={{ color: C.text }}>How it works:</strong> When authorizing a payment, you enter your PIN three times in a row. Each entry must match the same PIN.
+              </div>
+            </GGCard>
+
+            <GGCard padding="24px">
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Health Ledger PIN & access</div>
+                  <div style={{ fontSize: '13px', color: C.textSub, marginTop: 4, lineHeight: 1.5 }}>
+                    Choose which providers can see your medical history, and for how long.
+                  </div>
+                </div>
+                <GGButton variant="secondary" size="sm" onClick={() => navigate(ROUTES.LEDGER_ACCESS)}>
+                  Manage access
+                </GGButton>
               </div>
             </GGCard>
 
@@ -771,6 +768,8 @@ export function ProfileScreen() {
 
           </div>
         )}
+
+        <SettingsAboutCard onSignOut={() => logoutMutation.mutate()} signingOut={logoutMutation.isPending} />
       </div>
     </AppLayout>
   )

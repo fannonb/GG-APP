@@ -2,7 +2,7 @@ import { useState, type ReactElement } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useLogoutMutation, useSPProfile } from '@/hooks/api'
 import { C, font } from '@/design-system/tokens'
-import { LOGO, ROUTES } from '@/router/routes'
+import { LOGO_WORDMARK, ROUTES } from '@/router/routes'
 
 interface NavItem {
   id: string
@@ -116,9 +116,9 @@ export function SPSidebar() {
         }}
       >
         <img
-          src={LOGO}
+          src={LOGO_WORDMARK}
           alt="GG'APP"
-          style={{ width: 80, height: 80, objectFit: 'contain' }}
+          style={{ height: 30, width: 'auto', display: 'block', margin: '14px 0 6px' }}
         />
       </div>
 

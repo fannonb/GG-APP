@@ -8,6 +8,7 @@ import type {
 import { useUserStore } from '@/store/user.store'
 import { useNotificationsStore } from '@/store/notifications.store'
 import { generateRef } from '@/utils/refgen'
+import { getFinancePartnerIdForCountry } from '@/features/patient/credit/credit.constants'
 
 function pushCreditApprovalNotification(app: CreditApplication, amount: number) {
   const isIncrease = app.type === 'increase'
@@ -112,7 +113,7 @@ export const useCreditStore = create<CreditStore>((set, get) => ({
       reference: generateRef('GGA'),
       type: 'increase',
       status: 'submitted',
-      financePartnerId: user.financePartnerId ?? 'moneymart',
+      financePartnerId: getFinancePartnerIdForCountry(user.countryCode),
       employment: 'existing-customer',
       monthlyIncome: payload.monthlyIncome,
       requestedAmount: payload.increaseAmount,

@@ -11,8 +11,6 @@ import { getProviderHoursSummary } from '@/utils/provider-hours'
 import { route } from '@/router/routes'
 import type { Provider } from '@/types/provider.types'
 
-const NEARBY_PREVIEW = 3
-
 const categories: Array<{
   id: string
   label: string
@@ -131,8 +129,6 @@ export function FindServiceScreen() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
   const [focused, setFocused] = useState(false)
-  const [openNowOnly, setOpenNowOnly] = useState(false)
-  const [nearbyExpanded, setNearbyExpanded] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const { isMobile } = useResponsive()
   const { data: providers = [], isLoading, isError } = useProviders()
@@ -184,28 +180,12 @@ export function FindServiceScreen() {
   }, [isSearching, providers, trimmedQuery])
 
   const position = useLocationStore(s => s.position)
-  const { getLabel, getKm } = useDrivingDistances(position, providers)
+  const { getLabel } = useDrivingDistances(position, providers)
 
   useEffect(() => {
     useLocationStore.getState().requestLocation(true)
   }, [])
 
-  const nearbySorted = useMemo(() => {
-    let list = [...providers]
-    if (openNowOnly) list = list.filter(provider => provider.status === 'open')
-    if (position) {
-      list = list
-        .map(provider => ({
-          ...provider,
-          _distKm: getKm(provider) ?? Number.MAX_SAFE_INTEGER,
-        }))
-        .sort((a, b) => a._distKm - b._distKm)
-    }
-    return list
-  }, [providers, position, getKm, openNowOnly])
-
-  const nearbyVisible = nearbyExpanded ? nearbySorted : nearbySorted.slice(0, NEARBY_PREVIEW)
-  const canExpandNearby = nearbySorted.length > NEARBY_PREVIEW
 
   const openProvider = (provider: Provider) => {
     navigate(`/app/services/provider/${provider.id}`, { state: { provider } })
@@ -376,7 +356,7 @@ export function FindServiceScreen() {
                         {cat.icon}
                       </div>
                       <div>
-                        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>{cat.label}</div>
+                        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>{cat.label}</div>
                         <div style={{ fontSize: '12px', color: C.textSub, marginTop: '3px', lineHeight: 1.4 }}>{cat.desc}</div>
                       </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto' }}>
@@ -422,63 +402,6 @@ export function FindServiceScreen() {
               </span>
             </div>
 
-            <GGCard padding="20px 22px">
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Nearby verified providers</div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <button
-                    type="button"
-                    onClick={() => setOpenNowOnly(v => !v)}
-                    style={{
-                      padding: '5px 12px',
-                      borderRadius: radius.full,
-                      border: `1.5px solid ${openNowOnly ? C.blue500 : C.border}`,
-                      background: openNowOnly ? C.blue100 : '#fff',
-                      color: openNowOnly ? C.blue500 : C.textSub,
-                      fontSize: 12,
-                      fontWeight: openNowOnly ? 700 : 600,
-                      fontFamily: font.family,
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Open now
-                  </button>
-                  {canExpandNearby && (
-                    <button
-                      type="button"
-                      onClick={() => setNearbyExpanded(v => !v)}
-                      style={{ all: 'unset', fontSize: 13, color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family }}
-                    >
-                      {nearbyExpanded ? 'Show less' : 'See all →'}
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {isError ? (
-                <div style={{ fontSize: '13px', color: C.error }}>
-                  We could not load providers right now.
-                </div>
-              ) : nearbyVisible.length === 0 ? (
-                <div style={{ fontSize: '13px', color: C.textSub }}>
-                  {isLoading
-                    ? 'Loading providers…'
-                    : openNowOnly
-                      ? 'No providers are open right now. Turn off Open now to see the full shortlist.'
-                      : 'No verified providers are available yet.'}
-                </div>
-              ) : (
-                nearbyVisible.map((provider, index) => (
-                  <ProviderRow
-                    key={provider.id}
-                    provider={provider}
-                    distanceLabel={getLabel(provider)}
-                    onOpen={() => openProvider(provider)}
-                    isLast={index === nearbyVisible.length - 1}
-                  />
-                ))
-              )}
-            </GGCard>
           </>
         )}
       </div>

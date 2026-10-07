@@ -52,14 +52,15 @@ export function GGButton({
     transition: 'all 0.16s ease',
     width: fullWidth ? '100%' : 'auto',
     opacity: disabled ? 0.5 : 1,
-    letterSpacing: '-0.01em',
+    letterSpacing: 0,
   }
 
   const variants: Record<ButtonVariant, CSSProperties> = {
     primary: {
-      background: hovered ? '#3B9FD4' : C.blue500,
+      // Deep cyan keeps white text readable (the light brand cyan was too faint).
+      background: hovered ? 'linear-gradient(135deg, #1690D8 0%, #0A6EAD 100%)' : 'linear-gradient(135deg, #1A9BE6 0%, #0B7BC0 100%)',
       color: '#fff',
-      boxShadow: hovered ? '0 4px 16px rgba(74,173,223,0.45)' : '0 2px 6px rgba(74,173,223,0.22)',
+      boxShadow: hovered ? '0 6px 16px rgba(11,123,192,0.32)' : '0 3px 10px rgba(11,123,192,0.22)',
       transform: pressed ? 'scale(0.98)' : 'scale(1)',
     },
     navy: {

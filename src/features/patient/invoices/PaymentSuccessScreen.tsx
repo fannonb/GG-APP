@@ -88,10 +88,10 @@ export function PaymentSuccessScreen() {
             <svg width="44" height="44" viewBox="0 0 44 44" fill="none"><path d="M8 22l9 9 19-17" stroke={C.success} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
 
-          <div style={{ fontSize: '26px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '8px' }}>
+          <div style={{ fontSize: '26px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
             {isPartialPay ? 'Partial Payment Confirmed' : 'Payment Confirmed'}
           </div>
-          <div style={{ fontSize: '40px', fontWeight: 800, color: C.success, letterSpacing: '-0.04em', marginBottom: '4px' }}>{formatCurrency(walletPaid)}</div>
+          <div style={{ fontSize: '40px', fontWeight: 800, color: C.success, letterSpacing: '-0.02em', marginBottom: '4px' }}>{formatCurrency(walletPaid)}</div>
           <div style={{ fontSize: '14px', color: C.textSub, marginBottom: '32px' }}>
             {isPartialPay
               ? `Paid from your GG'APP allocation. Please settle the remaining ${formatCurrency(offAppDue)} directly with ${inv.provider.name}.`

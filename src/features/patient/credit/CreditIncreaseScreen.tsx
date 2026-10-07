@@ -7,7 +7,7 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency } from '@/utils/format'
 import { getCountryByCode } from '@/config/countries'
 import { ROUTES } from '@/router/routes'
-import { getFinancePartnerSummary } from './credit.constants'
+import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from './credit.constants'
 import { FinancePartnerLockedCard } from './components/FinancePartnerLockedCard'
 import { useUserStore } from '@/store/user.store'
 import { useCreditStatus, useIncreaseCreditMutation } from '@/hooks/api'
@@ -26,7 +26,7 @@ export function CreditIncreaseScreen() {
   const u = useUserStore(s => s.user)
   const country = getCountryByCode(u.countryCode)
   const currency = country?.currencySymbol ?? 'Z$'
-  const partnerId = u.financePartnerId ?? 'moneymart'
+  const partnerId = getFinancePartnerIdForCountry(u.countryCode)
   const partner = getFinancePartnerSummary(partnerId)
 
   const [form, setForm] = useState({
@@ -196,7 +196,7 @@ export function CreditIncreaseScreen() {
               gap: '8px',
             }}>
               <span style={{ fontSize: '12px', color: C.textSub }}>New limit if approved</span>
-              <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.03em' }}>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.015em' }}>
                 {formatCurrency(newLimit, currency)}
               </span>
             </div>

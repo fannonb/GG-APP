@@ -131,7 +131,7 @@ function ConfirmationModal({
             )}
           </svg>
         </div>
-        <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px' }}>{content.title}</div>
+        <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', marginBottom: '8px' }}>{content.title}</div>
         <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '22px' }}>{content.message}</div>
         <div style={{ background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, padding: '16px', marginBottom: '22px', textAlign: 'left' }}>
           {content.rows.map(row => (

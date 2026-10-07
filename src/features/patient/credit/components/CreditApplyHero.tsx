@@ -52,7 +52,7 @@ export function CreditApplyHero({ onStartApplication }: CreditApplyHeroProps) {
           fontSize: isMobile ? '28px' : '36px',
           fontWeight: 900,
           color: '#fff',
-          letterSpacing: '-0.04em',
+          letterSpacing: '-0.02em',
           lineHeight: 1.12,
           margin: '0 0 14px',
           fontFamily: font.family,

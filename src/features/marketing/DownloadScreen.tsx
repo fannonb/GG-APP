@@ -70,7 +70,7 @@ export function DownloadScreen() {
           style={{ objectFit: 'contain', display: 'block', margin: '0 auto 18px' }}
         />
 
-        <h1 style={{ margin: 0, color: C.text, fontSize: 26, fontWeight: 700, letterSpacing: '-0.02em' }}>
+        <h1 style={{ margin: 0, color: C.text, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>
           Get the GG&apos;APP mobile app
         </h1>
         <p style={{ margin: '10px 0 26px', color: C.textSub, fontSize: 15, lineHeight: 1.55 }}>

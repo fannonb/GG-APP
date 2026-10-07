@@ -13,6 +13,8 @@ import { SPBottomNav } from './SPBottomNav'
 interface SPLayoutProps {
   children: ReactNode
   title: string
+  /** Shown before the title in the desktop top bar. */
+  titleIcon?: ReactNode
   status?: string
   /** @deprecated Prefer `status` for actionable counts. Ignored in the top bar. */
   subtitle?: string
@@ -20,7 +22,7 @@ interface SPLayoutProps {
   back?: boolean
 }
 
-export function SPLayout({ children, title, status, back = false }: SPLayoutProps) {
+export function SPLayout({ children, title, titleIcon, status, back = false }: SPLayoutProps) {
   const { isDesktop } = useResponsive()
   const navigate = useNavigate()
   const logoutMutation = useLogoutMutation()
@@ -154,7 +156,7 @@ export function SPLayout({ children, title, status, back = false }: SPLayoutProp
             </button>
           )}
           <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ fontSize: dark ? '18px' : '22px', fontWeight: 800, color: dark ? '#fff' : C.text, fontFamily: font.family, letterSpacing: '-0.03em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: dark ? '18px' : '22px', fontWeight: 800, color: dark ? '#fff' : C.text, fontFamily: font.family, letterSpacing: '-0.015em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {title}
             </div>
             {status && (
@@ -281,7 +283,7 @@ export function SPLayout({ children, title, status, back = false }: SPLayoutProp
       }}>
         <SPSidebar />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-          <SPTopBar title={title} status={status} back={back} />
+          <SPTopBar title={title} titleIcon={titleIcon} status={status} back={back} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '0 8px 24px 8px' }}>
             {children}
           </main>

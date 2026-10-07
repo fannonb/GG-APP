@@ -120,19 +120,19 @@ function buildSPDashboard(mode: UserMode): SPDashboardData {
 }
 
 function buildMockProfile(mode: UserMode = 'existing'): ProviderProfileResponse {
-  const dashboard = buildSPDashboard(mode)
+  const sp = mode === 'new' ? MOCK_SP_NEW : MOCK_SP
 
   if (mode === 'new') {
     return {
       id: 1,
-      name: dashboard.sp.name,
-      email: dashboard.sp.email,
+      name: sp.name,
+      email: sp.email,
       phone: '',
       category: '',
       isPharmacyOnly: false,
       about: '',
       address: '',
-      country: dashboard.sp.country,
+      country: sp.country,
       status: 'closed',
       verified: true,
       languages: [],
@@ -149,21 +149,21 @@ function buildMockProfile(mode: UserMode = 'existing'): ProviderProfileResponse 
         Sat: { open: false, from: '08:00', to: '13:00' },
         Sun: { open: false, from: '', to: '' },
       },
-      license: dashboard.sp.license,
+      license: sp.license,
     }
   }
 
   return {
     id: 1,
-    name: dashboard.sp.name,
-    email: dashboard.sp.email,
-    phone: dashboard.sp.phone,
-    category: dashboard.sp.type,
+    name: sp.name,
+    email: sp.email,
+    phone: sp.phone,
+    category: sp.type,
     isPharmacyOnly: false,
     about:
       'City Medical Centre is a multi-disciplinary outpatient facility serving Harare with evidence-based primary care.',
     address: '12 Samora Machel Avenue, Harare',
-    country: dashboard.sp.country,
+    country: sp.country,
     status: 'open',
     verified: true,
     languages: ['English', 'Shona'],
@@ -180,7 +180,7 @@ function buildMockProfile(mode: UserMode = 'existing'): ProviderProfileResponse 
       Sat: { open: true, from: '08:00', to: '13:00' },
       Sun: { open: false, from: '', to: '' },
     },
-    license: dashboard.sp.license,
+    license: sp.license,
   }
 }
 

@@ -26,7 +26,7 @@ export function CreditDisclaimerScreen() {
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke={C.blue500} strokeWidth="1.5"/><line x1="12" y1="8" x2="12" y2="13" stroke={C.blue500} strokeWidth="2" strokeLinecap="round"/><circle cx="12" cy="16" r="1" fill={C.blue500}/></svg>
             </div>
             <div>
-              <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>Important Disclosure</div>
+              <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>Important Disclosure</div>
               <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px' }}>Please read carefully before proceeding</div>
             </div>
           </div>

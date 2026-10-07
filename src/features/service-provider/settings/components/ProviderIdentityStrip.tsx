@@ -51,7 +51,7 @@ export function ProviderIdentityStrip({
 
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
-              <div style={{ fontSize: 17, fontWeight: 800, color: C.text, fontFamily: font.family, letterSpacing: '-0.02em' }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: C.text, fontFamily: font.family, letterSpacing: '-0.01em' }}>
                 {settings.profile.name}
               </div>
               {settings.profile.verified !== false && <GGBadge type="info">Verified</GGBadge>}

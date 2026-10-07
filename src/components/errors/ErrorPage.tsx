@@ -135,7 +135,7 @@ export function ErrorPage({
             fontSize: '22px',
             fontWeight: 700,
             color: '#FFFFFF',
-            letterSpacing: '-0.015em',
+            letterSpacing: 0,
             lineHeight: 1.3,
           }}
         >

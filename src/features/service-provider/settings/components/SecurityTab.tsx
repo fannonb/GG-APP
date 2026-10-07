@@ -3,6 +3,7 @@ import { GGButton, GGCard, GGInput, PhonePrefixInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
 import { getCountryByName, getCountryDial, splitPhonePrefix } from '@/config/countries'
+import { ChangeEmailCard } from '@/components/ChangeEmailCard'
 
 function isValidEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)
@@ -28,10 +29,8 @@ export function SecurityTab({
   country,
   onSaveAccountAccess,
   onChangePassword,
-  onSignOut,
   accountAccessPending,
   passwordPending,
-  logoutPending,
 }: {
   email: string
   phone: string
@@ -42,10 +41,8 @@ export function SecurityTab({
     newPassword: string
     confirmPassword: string
   }) => Promise<void>
-  onSignOut: () => void
   accountAccessPending: boolean
   passwordPending: boolean
-  logoutPending: boolean
 }) {
   const { isMobile } = useResponsive()
   const [isEditingAccess, setIsEditingAccess] = useState(false)
@@ -200,11 +197,8 @@ export function SecurityTab({
               label="Email"
               type="email"
               value={accessForm.email}
-              placeholder="you@example.com"
-              onChange={event => {
-                setAccessSuccess(null)
-                setAccessForm(current => ({ ...current, email: event.target.value }))
-              }}
+              disabled
+              hint="Use “Change email” below."
             />
             {(() => {
               const countryCode = getCountryByName(country)?.code ?? 'ZW'
@@ -340,6 +334,8 @@ export function SecurityTab({
         )}
       </GGCard>
 
+      <ChangeEmailCard currentEmail={email} />
+
       <GGCard padding={isMobile ? '18px' : '28px'}>
         <div style={{ marginBottom: 18 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: C.text, fontFamily: font.family }}>Change password</div>
@@ -430,19 +426,6 @@ export function SecurityTab({
         </div>
       </GGCard>
 
-      <GGCard padding={isMobile ? '18px' : '22px'} style={{ border: `1px solid ${C.error}33` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-          <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: C.text, fontFamily: font.family }}>Danger zone</div>
-            <div style={{ fontSize: 12, color: C.textSub, marginTop: 3, fontFamily: font.family }}>
-              Sign out of the provider portal on this device.
-            </div>
-          </div>
-          <GGButton variant="danger" size="sm" onClick={onSignOut} disabled={logoutPending}>
-            {logoutPending ? 'Signing out...' : 'Sign out'}
-          </GGButton>
-        </div>
-      </GGCard>
     </div>
   )
 }

@@ -10,6 +10,7 @@ import { consumeGooglePkceVerifier } from '@/lib/google-pkce'
 import { AuthBrandPanel } from './components/AuthBrandPanel'
 import { AuthCompactBrandHeader } from './components/AuthCompactBrandHeader'
 import { EntityTabBar } from './components/EntityTabBar'
+import { InstallAppPrompt } from '@/components/InstallApp'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useLoginMutation, useGoogleLoginMutation, useGoogleCallbackMutation } from '@/hooks/api'
 import { ApiError } from '@/api/types'
@@ -105,7 +106,7 @@ export function LoginScreen() {
         minHeight: '100vh',
         overflow: compactBrand ? 'visible' : 'hidden',
         fontFamily: font.family,
-        background: C.bg,
+        background: compactBrand ? '#EAF5FD' : C.bg,
       }}
     >
       <AuthBrandPanel tab={tab} />
@@ -117,6 +118,9 @@ export function LoginScreen() {
           overflowY: compactBrand ? 'visible' : 'auto',
           background: C.surface,
           position: 'relative',
+          // On phones the form sits on a white sheet that overlaps the light header.
+          borderRadius: compactBrand ? '24px 24px 0 0' : 0,
+          boxShadow: compactBrand ? '0 -6px 24px rgba(13,30,66,0.06)' : 'none',
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -129,7 +133,7 @@ export function LoginScreen() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: compactBrand ? 'flex-start' : 'center',
-            padding: compactBrand ? '12px 12px 16px' : '36px 40px 24px',
+            padding: compactBrand ? '8px 12px calc(16px + env(safe-area-inset-bottom))' : '36px 40px 24px',
             boxSizing: 'border-box',
           }}
         >
@@ -137,7 +141,8 @@ export function LoginScreen() {
             style={{
               width: '100%',
               maxWidth: 440,
-              padding: compactBrand ? '12px 8px 8px' : '32px 28px',
+              padding: compactBrand ? '16px 8px 8px' : '32px 28px',
+              flex: compactBrand ? 1 : undefined,
               display: 'flex',
               flexDirection: 'column',
               boxSizing: 'border-box',
@@ -170,18 +175,21 @@ export function LoginScreen() {
                   label="Email Address"
                   placeholder={tab === 'patient' ? 'you@example.com' : 'practice@domain.com'}
                   type="email"
+                  inputMode="email"
+                  autoComplete="email"
+                  enterKeyHint="next"
                   name={emailField.name}
                   onChange={emailField.onChange}
                   onBlur={emailField.onBlur}
                   inputRef={emailField.ref}
                   error={errors.email?.message}
-                  required
                   focusColor={FOCUS}
                   focusShadow={FOCUS_SHADOW}
                 />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <label
+                      htmlFor="login-password"
                       style={{
                         fontSize: 13,
                         fontWeight: 600,
@@ -190,7 +198,7 @@ export function LoginScreen() {
                         fontFamily: font.family,
                       }}
                     >
-                      Password <span style={{ color: C.error }}>*</span>
+                      Password
                     </label>
                     <Link
                       to={`${ROUTES.FORGOT_PASSWORD}?role=${tab}&email=${encodeURIComponent(emailValue)}`}
@@ -206,29 +214,37 @@ export function LoginScreen() {
                     </Link>
                   </div>
                   <GGInput
-                    placeholder="••••••••"
+                    id="login-password"
+                    placeholder="Your password"
                     type={showPw ? 'text' : 'password'}
+                    autoComplete="current-password"
+                    enterKeyHint="go"
                     name={passwordField.name}
                     onChange={passwordField.onChange}
                     onBlur={passwordField.onBlur}
                     inputRef={passwordField.ref}
                     error={errors.password?.message}
-                    required
                     focusColor={FOCUS}
                     focusShadow={FOCUS_SHADOW}
                     rightEl={
-                      <span
+                      <button
+                        type="button"
                         onClick={() => setShowPw(s => !s)}
+                        aria-label={showPw ? 'Hide password' : 'Show password'}
                         style={{
                           fontSize: 12,
                           color: FOCUS,
                           fontWeight: 600,
                           cursor: 'pointer',
                           userSelect: 'none',
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          fontFamily: font.family,
                         }}
                       >
                         {showPw ? 'Hide' : 'Show'}
-                      </span>
+                      </button>
                     }
                   />
                 </div>
@@ -245,7 +261,7 @@ export function LoginScreen() {
                 disabled={loading}
                 style={{
                   width: '100%',
-                  height: 44,
+                  height: compactBrand ? 50 : 46,
                   display: 'inline-flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -256,10 +272,10 @@ export function LoginScreen() {
                   cursor: loading ? 'not-allowed' : 'pointer',
                   opacity: loading ? 0.7 : 1,
                   letterSpacing: '-0.01em',
-                  fontSize: 14,
+                  fontSize: 15,
                   color: '#fff',
-                  background: C.blue500,
-                  boxShadow: 'none',
+                  background: 'linear-gradient(135deg, #1A9BE6 0%, #0B7BC0 100%)',
+                  boxShadow: '0 6px 16px rgba(11,123,192,0.25)',
                   transition: 'opacity 0.15s ease',
                 }}
               >
@@ -279,7 +295,7 @@ export function LoginScreen() {
                     disabled={loading}
                     style={{
                       width: '100%',
-                      padding: '11px 20px',
+                      height: compactBrand ? 50 : 46, padding: '0 20px',
                       background: '#fff',
                       border: `1.5px solid ${C.border}`,
                       borderRadius: radius.sm,
@@ -343,24 +359,18 @@ export function LoginScreen() {
                 </Link>
               </div>
             </form>
-          </div>
-        </div>
 
-        <div
-          style={{
-            padding: '12px 16px 16px',
-            textAlign: 'center',
-            fontSize: 11,
-            color: C.textSub,
-            opacity: 0.7,
-          }}
-        >
-          <Link
-            to={ROUTES.ADMIN_LOGIN}
-            style={{ color: 'inherit', textDecoration: 'none', fontWeight: 500 }}
-          >
-            Admin Portal
-          </Link>
+            {compactBrand && (
+              <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <InstallAppPrompt variant="slim" />
+                <div style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 12.5 }}>
+                  <Link to={ROUTES.TERMS} style={{ color: C.textSub, textDecoration: 'none' }}>Terms</Link>
+                  <Link to={ROUTES.PRIVACY_POLICY} style={{ color: C.textSub, textDecoration: 'none' }}>Privacy</Link>
+                  <a href="mailto:support@gatewayglobal.africa" style={{ color: C.textSub, textDecoration: 'none' }}>Help</a>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

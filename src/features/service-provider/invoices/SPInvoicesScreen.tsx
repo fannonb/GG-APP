@@ -88,7 +88,7 @@ export function SPInvoicesScreen() {
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: font.family }}>
                 {item.label}
               </div>
-              <div style={{ fontSize: '28px', fontWeight: 800, color: item.color, marginTop: '8px', letterSpacing: '-0.04em', fontFamily: font.family }}>
+              <div style={{ fontSize: '28px', fontWeight: 800, color: item.color, marginTop: '8px', letterSpacing: '-0.02em', fontFamily: font.family }}>
                 {item.value}
               </div>
             </GGCard>

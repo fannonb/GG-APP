@@ -10,6 +10,8 @@ import type { CountryCode } from './CountryPhoneInput'
 import { LocationPickerInput } from './LocationPickerInput'
 import type { LocationSuggestion } from './LocationPickerInput'
 import { PasswordStrength } from './PasswordStrength'
+import { RegisterStepProgress, StickyActions } from './RegisterChrome'
+import { guessCountry } from '@/utils/guess-country'
 
 const STEPS = ['Practice & account', 'Services & hours', 'Verification & payout']
 const STEP_BLURBS = [
@@ -64,53 +66,6 @@ const DEFAULT_HOURS: Record<Day, DayHours> = {
   Sun: { open: false, from: '', to: '' },
 }
 
-function StepProgress({ step }: { step: number }) {
-  return (
-    <div style={{ marginBottom: 20 }}>
-      <div
-        style={{
-          fontSize: 12,
-          fontWeight: 700,
-          color: C.blue500,
-          fontFamily: font.family,
-          letterSpacing: '0.02em',
-          marginBottom: 4,
-        }}
-      >
-        Step {step + 1} of {STEPS.length}
-      </div>
-      <div
-        style={{
-          fontSize: 16,
-          fontWeight: 700,
-          color: C.text,
-          fontFamily: font.family,
-          letterSpacing: '-0.02em',
-          marginBottom: 4,
-        }}
-      >
-        {STEPS[step]}
-      </div>
-      <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.45, marginBottom: 12 }}>
-        {STEP_BLURBS[step]}
-      </div>
-      <div style={{ display: 'flex', gap: 6 }}>
-        {STEPS.map((_, i) => (
-          <div
-            key={i}
-            style={{
-              flex: 1,
-              height: 3,
-              borderRadius: 999,
-              background: i <= step ? C.blue500 : C.border,
-              transition: 'background 0.2s ease',
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  )
-}
 
 interface SPRegisterFlowProps {
   onStarted?: () => void
@@ -130,7 +85,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
     emailSecondary: '',
     phone: '',
     password: '',
-    country: '',
+    country: guessCountry(),
     serviceTypes: [],
     licenseNumber: '',
     hours: DEFAULT_HOURS,
@@ -265,7 +220,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <StepProgress step={step} />
+      <RegisterStepProgress steps={STEPS} blurbs={STEP_BLURBS} step={step} />
 
       {submitError && (
         <div
@@ -287,7 +242,8 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
         <>
           <GGInput
             label="Practice / Organisation Name"
-            placeholder="City Medical Centre"
+            placeholder="e.g. City Medical Centre"
+            autoComplete="organization"
             value={form.practiceName}
             onChange={event => setField('practiceName', event.target.value)}
             required
@@ -297,7 +253,9 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
           <GGInput
             label="Primary Email"
             type="email"
-            placeholder="admin@practice.com"
+            placeholder="e.g. admin@practice.com"
+            inputMode="email"
+            autoComplete="email"
             value={form.email}
             onChange={event => setField('email', event.target.value)}
             required
@@ -308,7 +266,8 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
           <GGInput
             label="Secondary Email"
             type="email"
-            placeholder="billing@practice.com (optional)"
+            placeholder="Optional, e.g. billing@practice.com"
+            inputMode="email"
             value={form.emailSecondary}
             onChange={event => setField('emailSecondary', event.target.value)}
             focusColor={focusColor}
@@ -333,6 +292,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
             label="Password"
             type={showPassword ? 'text' : 'password'}
             placeholder="Minimum 8 characters"
+            autoComplete="new-password"
             value={form.password}
             onChange={event => {
               setPasswordError(null)
@@ -345,14 +305,16 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
             rightEl={showToggle(showPassword, () => setShowPassword(v => !v))}
           />
           <PasswordStrength password={form.password} />
-          <GGButton
-            variant="primary"
-            size="md"
-            fullWidth
-            onClick={continueFromStep0}
-          >
-            Continue
-          </GGButton>
+          <StickyActions>
+            <GGButton
+              variant="primary"
+              size="md"
+              fullWidth
+              onClick={continueFromStep0}
+            >
+              Continue
+            </GGButton>
+          </StickyActions>
         </>
       )}
 
@@ -506,6 +468,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
             </div>
           </div>
 
+          <StickyActions>
           <div style={{ display: 'flex', gap: '10px' }}>
             <GGButton variant="secondary" size="md" onClick={() => setStep(0)} style={{ flex: 1 }}>
               Back
@@ -519,6 +482,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
               Continue
             </GGButton>
           </div>
+          </StickyActions>
         </>
       )}
 

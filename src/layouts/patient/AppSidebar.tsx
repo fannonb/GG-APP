@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import { LOGO, ROUTES } from '@/router/routes'
+import { LOGO_WORDMARK, ROUTES } from '@/router/routes'
 import { C, font } from '@/design-system/tokens'
 import { useLogoutMutation } from '@/hooks/api'
 import { PATIENT_NAV, PatientNavIcon, isPatientNavActive } from './patientNav'
@@ -39,9 +39,9 @@ export function AppSidebar() {
         }}
       >
         <img
-          src={LOGO}
+          src={LOGO_WORDMARK}
           alt="GG'APP"
-          style={{ width: 80, height: 80, objectFit: 'contain' }}
+          style={{ height: 30, width: 'auto', display: 'block', margin: '14px 0 6px' }}
         />
       </div>
 

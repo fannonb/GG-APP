@@ -63,6 +63,8 @@ export function AdminLayout({ children, title, status, back = false }: AdminLayo
   const pendingCreditCount = creditApplications.filter(app => app.status === 'submitted').length
   const unreadCreditNotifications = getUnreadCreditBannerItems(notifications)
   const registrationNotifications = getUnreadPatientRegistrationItems(notifications)
+  // Requests from patients and providers that need an admin decision.
+  const requestNotifications = notifications.filter(n => !n.read && (n.screen === 'admin-email-changes' || n.screen === 'admin-applications' || n.screen === 'admin-payments'))
   const scopedApplications = country === 'all'
     ? applications
     : applications.filter(app => app.country === country)
@@ -72,11 +74,13 @@ export function AdminLayout({ children, title, status, back = false }: AdminLayo
   const unreadCount = actionableApplications.filter(app => !readIds.has(app.id)).length
     + unreadCreditNotifications.length
     + registrationNotifications.length
+    + requestNotifications.length
 
   const markAllRead = () => {
     setReadIds(new Set(scopedApplications.map(app => app.id)))
     unreadCreditNotifications.forEach(item => markNotificationRead.mutate(item.id))
     registrationNotifications.forEach(item => markNotificationRead.mutate(item.id))
+    requestNotifications.forEach(item => markNotificationRead.mutate(item.id))
   }
 
   const handleRegistrationClick = (id: string, screen?: string) => {
@@ -232,7 +236,7 @@ export function AdminLayout({ children, title, status, back = false }: AdminLayo
               )}
 
               <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <h1 style={{ fontSize: isDesktop ? '28px' : '20px', fontWeight: 800, color: C.navy800, fontFamily: font.family, letterSpacing: '-0.035em', lineHeight: 1.15, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</h1>
+                <h1 style={{ fontSize: isDesktop ? '28px' : '20px', fontWeight: 800, color: C.navy800, fontFamily: font.family, letterSpacing: '-0.015em', lineHeight: 1.15, margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</h1>
                 {status && (
                   <span style={{
                     flexShrink: 0,
@@ -399,6 +403,26 @@ export function AdminLayout({ children, title, status, back = false }: AdminLayo
                   </div>
 
                   <div style={{ overflowY: 'auto', flex: 1 }}>
+                    {requestNotifications.map(item => (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          markNotificationRead.mutate(item.id)
+                          setNotifOpen(false)
+                          navigate(item.screen === 'admin-email-changes' ? ROUTES.ADMIN_EMAIL_CHANGES : item.screen === 'admin-payments' ? ROUTES.ADMIN_PAYMENTS : ROUTES.ADMIN_APPLICATIONS)
+                        }}
+                        style={{ padding: '12px 18px', borderBottom: `1px solid ${C.border}`, background: 'rgba(245,158,11,0.07)', cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: '12px' }}
+                      >
+                        <div style={{ width: 30, height: 30, borderRadius: radius.sm, flexShrink: 0, background: 'rgba(245,158,11,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#B45309', fontSize: '10px', fontWeight: 800 }}>
+                          {item.screen === 'admin-email-changes' ? '@' : item.screen === 'admin-payments' ? 'Pay' : 'SP'}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: '12.5px', fontWeight: 700, color: C.text }}>{item.title}</div>
+                          <div style={{ fontSize: '12px', color: C.textSub, marginTop: '3px', lineHeight: 1.45 }}>{item.body}</div>
+                        </div>
+                      </div>
+                    ))}
+
                     {registrationNotifications.map(item => (
                       <div
                         key={item.id}

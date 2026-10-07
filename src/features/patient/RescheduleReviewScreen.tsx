@@ -109,7 +109,7 @@ export function RescheduleReviewScreen() {
                 <path d="M5 12l5 5 9-9" stroke="#22C98A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
-            <div style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
+            <div style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em', marginBottom: '8px' }}>
               Appointment Confirmed
             </div>
             <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '24px' }}>
@@ -190,7 +190,7 @@ export function RescheduleReviewScreen() {
               <div style={{ fontSize: '10px', fontWeight: 700, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
                 {d.toLocaleDateString('en-US', { weekday: 'short' })}
               </div>
-              <div style={{ fontSize: '34px', fontWeight: 900, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.04em' }}>
+              <div style={{ fontSize: '34px', fontWeight: 900, color: '#fff', lineHeight: 1.1, letterSpacing: '-0.02em' }}>
                 {d.getDate()}
               </div>
               <div style={{ fontSize: '10px', fontWeight: 800, color: 'rgba(255,255,255,0.65)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
@@ -201,7 +201,7 @@ export function RescheduleReviewScreen() {
               <div style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '4px' }}>
                 Proposed New Time
               </div>
-              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fff', letterSpacing: '-0.03em', marginBottom: '4px' }}>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: '#fff', letterSpacing: '-0.015em', marginBottom: '4px' }}>
                 {dayName}
               </div>
               <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.75)', fontWeight: 600 }}>
@@ -309,7 +309,7 @@ export function RescheduleReviewScreen() {
           <div style={{ background: '#fff', borderRadius: radius.xl, padding: '28px', width: '100%', maxWidth: '420px', boxShadow: shadow.xl, fontFamily: font.family }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
               <div>
-                <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>Cancel Appointment</div>
+                <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>Cancel Appointment</div>
                 <div style={{ fontSize: '13px', color: C.textSub, marginTop: '3px' }}>Please tell us why you're cancelling</div>
               </div>
               <button

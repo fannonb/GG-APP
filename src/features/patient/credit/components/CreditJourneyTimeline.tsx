@@ -14,7 +14,7 @@ export function CreditJourneyTimeline({ sectionRef, onStartApplication }: Credit
   return (
     <div ref={sectionRef}>
       <div style={{ marginBottom: '18px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', fontFamily: font.family }}>
+        <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', fontFamily: font.family }}>
           Your application journey
         </div>
         <div style={{ fontSize: '13px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>

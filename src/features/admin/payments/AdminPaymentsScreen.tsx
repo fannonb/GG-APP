@@ -1,361 +1,405 @@
-import { useEffect, useMemo, useState } from 'react'
-import { GGButton, GGCard } from '@/design-system'
-import { C, font, radius, shadow } from '@/design-system/tokens'
-import { PaymentAlertBanner } from '@/components/PaymentAlertBanner'
+import { useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
-import { useAdminNotifications, useAdminPayments } from '@/hooks/api/useAdminQueries'
-import { useMarkAdminNotificationReadMutation } from '@/hooks/api/useAdminMutations'
-import { formatDate } from '@/utils/format'
-import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
-import type { AdminPayment, AdminPaymentStatus } from '@/types/admin.types'
-import { CountryBadge, countryCode, COUNTRY_CURRENCIES } from '@/features/admin/AdminShared'
 import { useAdminCountry } from '@/features/admin/AdminCountryContext'
+import { useAdminNotifications } from '@/hooks/api/useAdminQueries'
+import { useMarkAdminNotificationReadMutation } from '@/hooks/api/useAdminMutations'
+import { useOwedByProvider, usePayoutDetail, usePayoutList, usePayoutSummary, useRecordPayout } from '@/hooks/api/useAdminPayouts'
+import { CountryLabel, InsightsHeader } from '@/features/admin/metrics/MetricsKit'
+import { countryName, exportCsv, money, toMetricsCountry } from '@/features/admin/metrics/metricsFormat'
+import { PanelSection, Pager, PlainHeader, SearchBox, SidePanel, StatusTabs } from '@/features/admin/accounts/AccountListKit'
+import { ROUTES } from '@/router/routes'
+import { formatDate, formatRelativeTime } from '@/utils/format'
+import type { OwedByProvider, PayoutInvoice, PayoutTab } from '@/api/services/admin-payouts.service'
+import type { MetricsCountry } from '@/types/admin-metrics.types'
 
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const
+const CYAN_DEEP = '#0B7BC0'
+const PAGE_SIZE = 25
+const METHOD: Record<string, string> = { MPESA: 'M-Pesa', BANK: 'Bank', MOBILE_MONEY: 'Mobile money' }
 
-function formatAmt(amount: number, country: string) {
-  const sym = COUNTRY_CURRENCIES[country] ?? 'Z$'
-  return sym + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
+const amountOf = (inv: Pick<PayoutInvoice, 'provider' | 'amount'>) => (inv.provider.country ? money(inv.provider.country, inv.amount) : inv.amount.toLocaleString('en-US'))
+
+const btn = (tone: 'primary' | 'plain' = 'plain'): React.CSSProperties => ({
+  height: 38,
+  padding: '0 14px',
+  borderRadius: radius.sm,
+  border: tone === 'plain' ? `1px solid ${C.border}` : 'none',
+  background: tone === 'primary' ? `linear-gradient(135deg, #1A9BE6, ${CYAN_DEEP})` : '#fff',
+  color: tone === 'primary' ? '#fff' : C.text,
+  fontSize: 13.5,
+  fontWeight: 700,
+  fontFamily: font.family,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+})
+
+function SourcePill({ payout }: { payout: PayoutInvoice['payout'] }) {
+  if (!payout) return null
+  const style = payout.mismatch
+    ? { label: 'Check amount', fg: '#B45309', bg: '#FEF3C7' }
+    : payout.source === 'partner'
+      ? { label: payout.partner ? `${payout.partner.charAt(0).toUpperCase()}${payout.partner.slice(1)}` : 'Partner', fg: '#15803D', bg: '#DCFCE7' }
+      : { label: payout.source === 'manual' ? 'Recorded' : 'Earlier', fg: C.textSub, bg: C.bg }
+  return <span style={{ fontSize: 11.5, fontWeight: 700, color: style.fg, background: style.bg, padding: '2px 8px', borderRadius: radius.full, whiteSpace: 'nowrap' }}>{style.label}</span>
 }
 
-const STATUS_STYLE: Record<AdminPaymentStatus, { color: string; label: string }> = {
-  paid: { color: C.success, label: 'Paid' },
-  authorized: { color: C.success, label: 'Paid' },
-  pending: { color: C.success, label: 'Paid' },
-  failed: { color: C.error, label: 'Failed' },
-}
+// ── record payout dialog ────────────────────────────────────────────────────
 
-function StatCard({ icon, label, value, note, accent = false }: {
-  icon: React.ReactElement
-  label: string
-  value: string
-  note: string
-  accent?: boolean
+function RecordPayoutDialog({ providerName, country, invoiceIds, total, onClose, onDone }: {
+  providerName: string
+  country: MetricsCountry | null
+  invoiceIds: string[]
+  total: number
+  onClose: () => void
+  onDone: (message: string) => void
 }) {
-  return (
-    <div style={{
-      padding: '20px 22px',
-      background: '#fff',
-      borderRadius: radius.sm,
-      border: `1px solid ${C.border}`,
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '14px',
-    }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div style={{ fontSize: '10px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.12em' }}>
-          {label}
-        </div>
-        <div style={{
-          width: 36, height: 36, borderRadius: radius.xs,
-          background: accent ? C.blue500 : C.blue100,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          flexShrink: 0,
-        }}>
-          <span style={{ color: accent ? '#fff' : C.blue500, display: 'flex' }}>{icon}</span>
-        </div>
-      </div>
-      <div>
-        <div style={{
-          fontSize: '26px', fontWeight: 800,
-          color: C.text,
-          letterSpacing: '-0.04em', lineHeight: 1,
-        }}>
-          {value}
-        </div>
-        <div style={{ fontSize: '11px', color: C.textLight, marginTop: '5px' }}>{note}</div>
-      </div>
-    </div>
-  )
-}
+  const record = useRecordPayout()
+  const [reference, setReference] = useState('')
+  const [paidAt, setPaidAt] = useState(() => new Date().toISOString().slice(0, 10))
+  const [note, setNote] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const input: React.CSSProperties = { width: '100%', boxSizing: 'border-box', height: 40, padding: '0 12px', border: `1px solid ${C.border}`, borderRadius: radius.sm, fontSize: 14, fontFamily: font.family }
 
-function PaymentRow({ payment }: { payment: AdminPayment }) {
-  const statusStyle = STATUS_STYLE[payment.status]
-
-  return (
-    <div
-      style={{
-        display: 'flex',
-        background: '#fff',
-        borderRadius: radius.sm,
-        border: `1px solid ${C.border}`,
-        overflow: 'hidden',
-        transition: 'box-shadow 0.15s',
-      }}
-      onMouseEnter={e => (e.currentTarget.style.boxShadow = shadow.md)}
-      onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
-    >
-      <div style={{ flex: 1, padding: '16px 22px', minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>{payment.patient}</span>
-          <svg width="16" height="10" viewBox="0 0 16 10" fill="none" style={{ flexShrink: 0 }}>
-            <path d="M1 5h12M10 1l4 4-4 4" stroke={C.textLight} strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-          <span style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>{payment.provider}</span>
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '12px', fontWeight: 700, color: C.blue500 }}>{payment.invoiceId}</span>
-          <span style={{ color: C.border }}>·</span>
-          <CountryBadge code={countryCode(payment.country)} showName name={payment.country} size={14} />
-          <span style={{ color: C.border }}>·</span>
-          <span style={{ fontSize: '11px', color: C.textLight }}>{formatDate(payment.date)}</span>
-          {payment.paymentRef && (
-            <>
-              <span style={{ color: C.border }}>·</span>
-              <span style={{ fontSize: '11px', color: C.textSub }}>{payment.paymentRef}</span>
-            </>
-          )}
-        </div>
-      </div>
-      <div style={{
-        padding: '0 28px',
-        background: C.blue100,
-        borderLeft: `1px solid ${C.blue500}22`,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-end',
-        justifyContent: 'center',
-        flexShrink: 0,
-        gap: '4px',
-        minWidth: 160,
-      }}>
-        <div style={{
-          fontSize: '20px', fontWeight: 800,
-          color: C.text,
-          whiteSpace: 'nowrap', letterSpacing: '-0.02em',
-        }}>
-          {formatAmt(payment.amount, payment.country)}
-        </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: 5, height: 5, borderRadius: '50%', background: statusStyle.color, display: 'inline-block' }} />
-          <span style={{ fontSize: '10px', fontWeight: 700, color: statusStyle.color, textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-            {statusStyle.label}
-          </span>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const VOLUME_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-    <rect x="2" y="5.5" width="16" height="11" rx="2" stroke="currentColor" strokeWidth="1.5"/>
-    <path d="M2 9.5h16" stroke="currentColor" strokeWidth="1.3"/>
-    <circle cx="15.5" cy="13.5" r="1.5" fill="currentColor"/>
-    <path d="M5 13.5h4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
-  </svg>
-)
-
-const TXN_ICON = (
-  <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-    <rect x="3" y="2" width="14" height="16" rx="2" stroke="currentColor" strokeWidth="1.4"/>
-    <path d="M6.5 7h7M6.5 10.5h7M6.5 14h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
-  </svg>
-)
-
-export function AdminPaymentsScreen() {
-  const { isMobile } = useResponsive()
-  const { country } = useAdminCountry()
-  const { data: notifications = [] } = useAdminNotifications()
-  const markNotificationRead = useMarkAdminNotificationReadMutation()
-
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState<number>(10)
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(search.trim()), 300)
-    return () => window.clearTimeout(timer)
-  }, [search])
-
-  useEffect(() => {
-    setPage(1)
-  }, [debouncedSearch, country, pageSize])
-
-  const { data, isLoading, isError, error, isFetching } = useAdminPayments({
-    page,
-    limit: pageSize,
-    search: debouncedSearch,
-    country,
-  })
-
-  const payments = data?.items ?? []
-  const pagination = data?.pagination
-  const summary = data?.summary
-
-  const fmt = (n: number, sym = 'Z$') =>
-    sym + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n)
-
-  const volumeCards = useMemo(() => {
-    const volumes = summary?.volumeByCountry ?? []
-    if (country === 'all') {
-      return volumes.map(entry => ({
-        label: `Volume · ${entry.country}`,
-        value: fmt(entry.volume, COUNTRY_CURRENCIES[entry.country] ?? 'Z$'),
-        note: `${entry.count} transaction${entry.count === 1 ? '' : 's'}`,
-        accent: false,
-      }))
+  const save = async () => {
+    setError(null)
+    if (reference.trim().length < 3) { setError('Enter the bank or M-Pesa payment reference.'); return }
+    try {
+      const res = await record.mutateAsync({ invoiceIds, reference: reference.trim(), paidAt: new Date(paidAt).toISOString(), note: note.trim() || undefined })
+      onDone(`Recorded ${country ? money(country, res.amount) : res.amount} to ${providerName} for ${res.invoices} invoice${res.invoices === 1 ? '' : 's'}.`)
+      onClose()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Couldn’t record the payout.')
     }
-
-    const entry = volumes.find(item => item.country === country) ?? { country, volume: 0, count: 0 }
-    return [{
-      label: `Volume · ${country}`,
-      value: fmt(entry.volume, COUNTRY_CURRENCIES[country] ?? 'Z$'),
-      note: `${entry.count} transaction${entry.count === 1 ? '' : 's'}`,
-      accent: true,
-    }]
-  }, [summary, country])
-
-  const totalRecords = summary?.totalTransactions ?? 0
-  const totalPages = pagination?.totalPages ?? 0
-  const currentPage = pagination?.page ?? page
-  const canGoPrev = currentPage > 1
-  const canGoNext = totalPages > 0 && currentPage < totalPages
-  const paymentItems = getUnreadPaymentBannerItems(notifications)
-
-  const handlePaymentBannerAction = (items: { id: string }[]) => {
-    items.forEach(item => markNotificationRead.mutate(item.id))
   }
 
   return (
-    <AdminLayout title="Payments">
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', fontFamily: font.family }}>
-
-        {paymentItems.length > 0 && (
-          <PaymentAlertBanner
-            audience="admin"
-            items={paymentItems}
-            onAction={handlePaymentBannerAction}
-          />
-        )}
-
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${volumeCards.length + 1}, 1fr)`, gap: '14px' }}>
-          {volumeCards.map((vc, index) => (
-            <StatCard
-              key={vc.label}
-              accent={vc.accent || (country !== 'all' && index === 0)}
-              label={vc.label}
-              value={vc.value}
-              note={vc.note}
-              icon={VOLUME_ICON}
-            />
-          ))}
-          <StatCard
-            label="Transactions"
-            value={totalRecords.toString()}
-            note={country === 'all' ? 'total across all countries' : `in ${country}`}
-            icon={TXN_ICON}
-          />
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, zIndex: 1200, background: 'rgba(9,28,68,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div role="dialog" aria-modal="true" aria-label="Record payout" onClick={e => e.stopPropagation()} style={{ width: '100%', maxWidth: 480, background: '#fff', borderRadius: radius.lg, padding: 22, fontFamily: font.family, boxShadow: '0 20px 50px rgba(13,30,66,0.25)' }}>
+        <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>Record payout to {providerName}</h2>
+        <p style={{ margin: '6px 0 0', fontSize: 13.5, color: C.textSub, lineHeight: 1.55 }}>
+          {invoiceIds.length} invoice{invoiceIds.length === 1 ? '' : 's'} · <strong style={{ color: C.text }}>{country ? money(country, total) : total}</strong>.
+          Use this for payments made outside the finance partner integration; partner payments are recorded automatically.
+        </p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16 }}>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, fontWeight: 600, color: C.text }}>
+            Payment reference
+            <input autoFocus style={input} value={reference} onChange={e => setReference(e.target.value)} placeholder="e.g. QJK7H2LM9X or bank transfer ref" />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, fontWeight: 600, color: C.text }}>
+            Date paid
+            <input type="date" style={input} value={paidAt} max={new Date().toISOString().slice(0, 10)} onChange={e => setPaidAt(e.target.value)} />
+          </label>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, fontSize: 13, fontWeight: 600, color: C.text }}>
+            Note (optional)
+            <input style={input} value={note} onChange={e => setNote(e.target.value)} />
+          </label>
+          {error && <div role="alert" style={{ padding: '9px 12px', borderRadius: radius.sm, background: '#FEF2F2', color: '#B91C1C', fontSize: 13 }}>{error}</div>}
         </div>
-
-        <div style={{ background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
-          <div style={{ borderBottom: `1px solid ${C.border}`, position: 'relative', display: 'flex', alignItems: 'center' }}>
-            <svg width="15" height="15" viewBox="0 0 16 16" fill="none" style={{ position: 'absolute', left: 16, pointerEvents: 'none' }}>
-              <circle cx="7" cy="7" r="5.5" stroke={C.textLight} strokeWidth="1.3"/>
-              <path d="M11 11l3 3" stroke={C.textLight} strokeWidth="1.3" strokeLinecap="round"/>
-            </svg>
-            <input
-              value={search}
-              onChange={event => setSearch(event.target.value)}
-              placeholder="Search by patient, provider or invoice number…"
-              style={{ width: '100%', padding: '13px 16px 13px 40px', fontSize: '13px', fontFamily: font.family, color: C.text, background: 'transparent', border: 'none', outline: 'none', boxSizing: 'border-box' }}
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                style={{ position: 'absolute', right: 14, background: C.bg, border: `1px solid ${C.border}`, borderRadius: radius.full, width: 22, height: 22, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
-              >
-                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                  <path d="M2 2l6 6M8 2L2 8" stroke={C.textSub} strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-              </button>
-            )}
-          </div>
-
-          <div style={{ padding: '10px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-            <span style={{ fontSize: '11px', fontWeight: 600, color: C.textSub }}>
-              {country !== 'all' && <CountryBadge code={countryCode(country)} showName name={country} size={14} />}
-            </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: C.textSub }}>
-                Show
-                <select
-                  value={pageSize}
-                  onChange={event => setPageSize(Number(event.target.value))}
-                  style={{
-                    padding: '6px 10px',
-                    borderRadius: radius.xs,
-                    border: `1px solid ${C.border}`,
-                    background: '#fff',
-                    fontSize: '12px',
-                    fontFamily: font.family,
-                    color: C.text,
-                  }}
-                >
-                  {PAGE_SIZE_OPTIONS.map(size => (
-                    <option key={size} value={size}>{size}</option>
-                  ))}
-                </select>
-                per page
-              </label>
-              <span style={{ fontSize: '12px', color: C.textSub }}>
-                {totalRecords} record{totalRecords !== 1 ? 's' : ''}
-                {isFetching ? ' · refreshing…' : ''}
-              </span>
-            </div>
-          </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+          <button type="button" style={btn()} onClick={onClose}>Cancel</button>
+          <button type="button" style={btn('primary')} disabled={record.isPending} onClick={() => void save()}>{record.isPending ? 'Saving…' : 'Record payout'}</button>
         </div>
-
-        {isLoading && !data ? (
-          <GGCard padding="32px">
-            <div style={{ textAlign: 'center', color: C.textSub, fontSize: '13px' }}>Loading payments…</div>
-          </GGCard>
-        ) : isError && !data ? (
-          <GGCard padding="32px">
-            <div style={{ textAlign: 'center', color: C.error, fontSize: '13px' }}>
-              {error instanceof Error ? error.message : 'Unable to load payments.'}
-            </div>
-          </GGCard>
-        ) : payments.length === 0 ? (
-          <div style={{ padding: '56px', textAlign: 'center', color: C.textSub, fontSize: '13px', background: '#fff', borderRadius: radius.sm, border: `1px solid ${C.border}` }}>
-            No payments match your filters.
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {payments.map(payment => <PaymentRow key={payment.id} payment={payment} />)}
-          </div>
-        )}
-
-        {totalPages > 0 && (
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
-            flexWrap: 'wrap',
-            padding: '14px 16px',
-            background: '#fff',
-            borderRadius: radius.sm,
-            border: `1px solid ${C.border}`,
-          }}>
-            <span style={{ fontSize: '12px', color: C.textSub }}>
-              Page {currentPage} of {totalPages}
-            </span>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <GGButton variant="secondary" size="sm" disabled={!canGoPrev} onClick={() => setPage(current => Math.max(1, current - 1))}>
-                Previous
-              </GGButton>
-              <GGButton variant="secondary" size="sm" disabled={!canGoNext} onClick={() => setPage(current => current + 1)}>
-                Next
-              </GGButton>
-            </div>
-          </div>
-        )}
-
       </div>
+    </div>
+  )
+}
+
+// ── detail panel ────────────────────────────────────────────────────────────
+
+function InvoicePanel({ id }: { id: string }) {
+  const navigate = useNavigate()
+  const { data, isLoading } = usePayoutDetail(id)
+  if (isLoading || !data) return <div style={{ padding: 24, color: C.textSub, fontSize: 14 }}>Loading…</div>
+  const c = data.provider.country
+  const statusText: Record<string, string> = { authorized: 'Approved · to pay out', paid: 'Paid out', pending_auth: 'Waiting for patient', disputed: 'Disputed', rejected: 'Rejected' }
+  return (
+    <div>
+      <header style={{ padding: '22px 22px 18px', background: '#fff', borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ fontSize: 13, color: C.textSub, paddingRight: 44 }}>{data.reference} · {statusText[data.status] ?? data.status}</div>
+        <div style={{ fontSize: 26, fontWeight: 800, color: C.text, marginTop: 4 }}>{amountOf(data)}</div>
+        <div style={{ fontSize: 14, color: C.text, marginTop: 6 }}>
+          <button type="button" onClick={() => navigate(`${ROUTES.ADMIN_USERS}?open=${data.patientUserId}`)} style={{ all: 'unset', fontWeight: 700, color: CYAN_DEEP, cursor: 'pointer' }}>{data.patient}</button>
+          {data.forFamily && <span style={{ color: C.textSub }}> · for {data.forFamily.name}{data.forFamily.relation ? ` (${data.forFamily.relation})` : ''}</span>}
+          <span style={{ color: C.textSub }}> → </span>
+          <button type="button" onClick={() => navigate(`${ROUTES.ADMIN_PROVIDERS}?open=${data.provider.id}`)} style={{ all: 'unset', fontWeight: 700, color: CYAN_DEEP, cursor: 'pointer' }}>{data.provider.name}</button>
+        </div>
+      </header>
+      <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <PanelSection title="What was billed">
+          {data.lineItems.length === 0 ? <div style={{ fontSize: 13.5, color: C.textSub }}>{data.service ?? 'No line items.'}</div> : (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {data.lineItems.map((li, i) => (
+                <li key={`${li.name}-${i}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '8px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none', fontSize: 14 }}>
+                  <span>{li.name}</span><span style={{ fontWeight: 700 }}>{c ? money(c, li.amount) : li.amount}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </PanelSection>
+        <PanelSection title="Timeline">
+          <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {data.timeline.map((t, i) => (
+              <li key={`${t.label}-${i}`} style={{ display: 'flex', gap: 10, padding: '7px 0' }}>
+                <span aria-hidden style={{ width: 8, height: 8, marginTop: 6, borderRadius: '50%', background: CYAN_DEEP, flexShrink: 0 }} />
+                <div>
+                  <div style={{ fontSize: 14, color: C.text, fontWeight: 600 }}>{t.label}</div>
+                  <div style={{ fontSize: 12.5, color: C.textSub }}>{formatDate(t.at)}{t.note ? ` · ${t.note}` : ''}</div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </PanelSection>
+        {data.payout && (
+          <PanelSection title="Payout" action={<SourcePill payout={data.payout} />}>
+            <div style={{ fontSize: 14, color: C.text }}>Reference <strong>{data.payout.reference}</strong>{data.paidAt ? ` · ${formatDate(data.paidAt)}` : ''}</div>
+            {data.payout.mismatch && <div style={{ fontSize: 13, color: '#B45309', marginTop: 6 }}>The partner’s amount didn’t match the invoices it covered. Check with the finance partner.</div>}
+          </PanelSection>
+        )}
+        <PanelSection title="Provider’s payout account">
+          {data.payoutAccount
+            ? <div style={{ fontSize: 14, color: C.text }}>{METHOD[data.payoutAccount.method] ?? data.payoutAccount.method} · {data.payoutAccount.accountName} · {data.payoutAccount.accountNumber}</div>
+            : <div style={{ fontSize: 13.5, color: '#B45309' }}>No payout account set.</div>}
+        </PanelSection>
+        {(data.disputeReason || data.rejectionReason) && (
+          <PanelSection title={data.disputeReason ? 'Dispute' : 'Rejection'}>
+            <div style={{ fontSize: 14, color: C.text }}>{data.disputeReason ?? data.rejectionReason}</div>
+          </PanelSection>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── page ────────────────────────────────────────────────────────────────────
+
+export function AdminPaymentsScreen() {
+  const { isMobile, isDesktop } = useResponsive()
+  const { country, range } = useAdminCountry()
+  const code = toMetricsCountry(country)
+  const [view, setView] = useState<'invoices' | 'providers'>('invoices')
+  const [tab, setTab] = useState<PayoutTab>('to_pay')
+  const [query, setQuery] = useState('')
+  const [page, setPage] = useState(0)
+  const [selected, setSelected] = useState<Set<string>>(new Set())
+  // ?invoice=<id> opens that invoice directly (used by the patient's credit activity).
+  const [searchParams] = useSearchParams()
+  const [openId, setOpenId] = useState<string | null>(searchParams.get('invoice'))
+  const [recordFor, setRecordFor] = useState<{ providerName: string; country: MetricsCountry | null; invoiceIds: string[]; total: number } | null>(null)
+  const [done, setDone] = useState<string | null>(null)
+
+  const { data: summary = [] } = usePayoutSummary(code, range)
+  const { data: list, isLoading, error } = usePayoutList({ tab, country: code, range, q: query, page, pageSize: PAGE_SIZE })
+  const { data: owed = [] } = useOwedByProvider(code, view === 'providers')
+  const { data: notifications = [] } = useAdminNotifications()
+  const markRead = useMarkAdminNotificationReadMutation()
+  const alerts = notifications.filter(n => !n.read && n.title === 'Payout needs checking')
+
+  const items = useMemo(() => list?.items ?? [], [list])
+  const selectedRows = items.filter(i => selected.has(i.id))
+  const selectedProviders = new Set(selectedRows.map(r => r.provider.id))
+  const selectedTotal = selectedRows.reduce((s, r) => s + r.amount, 0)
+
+  const switchTab = (t: PayoutTab) => { setTab(t); setPage(0); setSelected(new Set()) }
+  const toggle = (id: string) => setSelected(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const dateLabel = tab === 'to_pay' ? 'Approved' : tab === 'paid' ? 'Paid out' : 'Sent'
+  const dateOf = (i: PayoutInvoice) => (tab === 'to_pay' ? i.approvedAt : tab === 'paid' ? i.paidAt : i.submittedAt)
+  const td: React.CSSProperties = { padding: '11px 12px', borderTop: `1px solid ${C.border}`, verticalAlign: 'middle', fontSize: 13.5 }
+
+  return (
+    <AdminLayout title="Payments">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: font.family }}>
+        <InsightsHeader
+          subtitle="Provider payouts"
+          extra={
+            <div role="tablist" aria-label="View" style={{ display: 'inline-flex', padding: 3, gap: 2, background: '#E3ECF6', borderRadius: radius.sm }}>
+              {(['invoices', 'providers'] as const).map(v => (
+                <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} style={{ height: 32, padding: '0 12px', border: 'none', borderRadius: 7, background: view === v ? '#fff' : 'transparent', boxShadow: view === v ? '0 1px 3px rgba(13,30,66,0.12)' : 'none', color: view === v ? C.text : C.textSub, fontSize: 13, fontWeight: 700, fontFamily: font.family, cursor: 'pointer' }}>
+                  {v === 'invoices' ? 'Invoices' : 'Owed by provider'}
+                </button>
+              ))}
+            </div>
+          }
+        />
+
+        {alerts.map(a => (
+          <div key={a.id} role="alert" style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '12px 14px', borderRadius: radius.md, background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+            <div style={{ flex: 1, fontSize: 13.5, color: '#92400E', lineHeight: 1.5 }}><strong>{a.title}.</strong> {a.body}</div>
+            <button type="button" onClick={() => markRead.mutate(a.id)} style={{ background: 'none', border: 'none', color: '#B45309', fontWeight: 700, fontSize: 13, fontFamily: font.family, cursor: 'pointer' }}>Dismiss</button>
+          </div>
+        ))}
+        {done && <div role="status" style={{ padding: '10px 14px', borderRadius: radius.md, background: '#F0FDF4', color: '#15803D', fontSize: 13.5 }}>{done}</div>}
+
+        {/* Money per country, never added across currencies. */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : `repeat(${Math.max(summary.length, 1)}, minmax(0, 1fr))`, gap: 12 }}>
+          {summary.map(s => (
+            <section key={s.country} style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg, padding: '14px 16px' }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}><CountryLabel code={s.country} /></div>
+              <div style={{ marginTop: 10 }}>
+                <div style={{ fontSize: 12, color: C.textSub }}>To pay out now</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: s.owed > 0 ? C.text : C.textLight }}>{money(s.country, s.owed)}</div>
+                <div style={{ fontSize: 12, color: C.textSub }}>{s.owedCount} invoice{s.owedCount === 1 ? '' : 's'}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 16, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.border}`, fontSize: 12.5, color: C.textSub }}>
+                <span>Approved <strong style={{ color: C.text }}>{money(s.country, s.approved, true)}</strong></span>
+                <span>Paid out <strong style={{ color: C.text }}>{money(s.country, s.paidOut, true)}</strong></span>
+              </div>
+            </section>
+          ))}
+        </div>
+
+        {view === 'providers' ? (
+          <section style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg }}>
+            {owed.length === 0 ? (
+              <div style={{ padding: '36px 16px', textAlign: 'center', fontSize: 14, color: C.textSub }}>No provider is waiting for a payout.</div>
+            ) : owed.map((g: OwedByProvider, i) => (
+              <div key={g.provider.id} style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: 12, padding: '14px 18px', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>{g.provider.name}</div>
+                  <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 2 }}>
+                    {countryName(g.provider.country)} · {g.invoiceCount} invoice{g.invoiceCount === 1 ? '' : 's'}{g.oldestApprovedAt ? ` · oldest approved ${formatRelativeTime(g.oldestApprovedAt)}` : ''}
+                  </div>
+                  <div style={{ fontSize: 12.5, marginTop: 2, color: g.payoutAccount ? C.textSub : '#B45309' }}>
+                    {g.payoutAccount ? `${METHOD[g.payoutAccount.method] ?? g.payoutAccount.method} · ${g.payoutAccount.accountName} · ${g.payoutAccount.accountNumber}` : 'No payout account set'}
+                  </div>
+                </div>
+                <div style={{ fontSize: 18, fontWeight: 800, color: C.text, whiteSpace: 'nowrap' }}>{g.provider.country ? money(g.provider.country, g.owed) : g.owed}</div>
+                <button type="button" style={btn('primary')} onClick={() => setRecordFor({ providerName: g.provider.name, country: g.provider.country, invoiceIds: g.invoiceIds, total: g.owed })}>Record payout</button>
+              </div>
+            ))}
+          </section>
+        ) : (
+          <>
+            <StatusTabs<PayoutTab>
+              tabs={[
+                { id: 'to_pay', label: 'To pay out', count: list?.counts.to_pay ?? 0 },
+                { id: 'paid', label: 'Paid out', count: list?.counts.paid ?? 0 },
+                { id: 'waiting', label: 'Waiting for patient', count: list?.counts.waiting ?? 0 },
+                { id: 'disputed', label: 'Disputed', count: list?.counts.disputed ?? 0 },
+                { id: 'rejected', label: 'Rejected', count: list?.counts.rejected ?? 0 },
+              ]}
+              value={tab}
+              onChange={switchTab}
+            />
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+              <SearchBox value={query} onChange={v => { setQuery(v); setPage(0) }} placeholder="Search invoice, patient, provider or payout ref" />
+              <button type="button" style={btn()} onClick={() => exportCsv(`payments-${tab}.csv`, items.map(i => ({
+                Invoice: i.reference, Patient: i.patient, For: i.forFamily?.name ?? 'Self', Provider: i.provider.name, Country: countryName(i.provider.country),
+                Service: i.service ?? '', Amount: i.amount, Currency: i.currency ?? '', Approved: i.approvedAt?.slice(0, 10) ?? '', 'Paid out': i.paidAt?.slice(0, 10) ?? '',
+                'Payout ref': i.payout?.reference ?? '', Source: i.payout?.source ?? '',
+              })))}>Export CSV</button>
+            </div>
+
+            {tab === 'to_pay' && selectedRows.length > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', padding: '10px 14px', borderRadius: radius.md, background: C.blue100 }}>
+                <span style={{ flex: 1, fontSize: 13.5, color: C.text }}>
+                  <strong>{selectedRows.length}</strong> selected
+                  {selectedProviders.size === 1 && selectedRows[0].provider.country ? ` · ${money(selectedRows[0].provider.country, selectedTotal)} to ${selectedRows[0].provider.name}` : ''}
+                </span>
+                {selectedProviders.size > 1
+                  ? <span style={{ fontSize: 13, color: '#B45309' }}>A payout goes to one provider. Select invoices for a single provider.</span>
+                  : <button type="button" style={btn('primary')} onClick={() => setRecordFor({ providerName: selectedRows[0].provider.name, country: selectedRows[0].provider.country, invoiceIds: selectedRows.map(r => r.id), total: selectedTotal })}>Record payout</button>}
+              </div>
+            )}
+
+            <section style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg, padding: isMobile ? 0 : '12px 6px 10px' }}>
+              {isLoading ? <div style={{ padding: 24, fontSize: 14, color: C.textSub }}>Loading…</div>
+                : error ? <div style={{ padding: 24, fontSize: 14, color: '#B91C1C' }}>{error instanceof Error ? error.message : 'Couldn’t load payments.'}</div>
+                : items.length === 0 ? <div style={{ padding: '36px 16px', textAlign: 'center', fontSize: 14, color: C.textSub }}>{tab === 'to_pay' ? 'Nothing waiting to be paid out.' : 'Nothing here for this period.'}</div>
+                : isMobile ? (
+                  <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                    {items.map((i, idx) => (
+                      <li key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', borderTop: idx > 0 ? `1px solid ${C.border}` : 'none' }}>
+                        {tab === 'to_pay' && <input type="checkbox" aria-label={`Select ${i.reference}`} checked={selected.has(i.id)} onChange={() => toggle(i.id)} />}
+                        <button type="button" onClick={() => setOpenId(i.id)} style={{ all: 'unset', flex: 1, minWidth: 0, cursor: 'pointer' }}>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{i.provider.name}</div>
+                          <div style={{ fontSize: 12.5, color: C.textSub }}>{i.patient} · {i.reference}</div>
+                        </button>
+                        <div style={{ fontSize: 14, fontWeight: 800, color: C.text, whiteSpace: 'nowrap' }}>{amountOf(i)}</div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <div className="hide-scrollbar" style={{ overflowX: 'auto', overflowY: 'hidden' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 860 }}>
+                      <thead>
+                        <tr>
+                          {tab === 'to_pay' && (
+                            <th style={{ padding: '0 0 10px 12px', width: 28 }}>
+                              <input type="checkbox" aria-label="Select all" checked={items.length > 0 && items.every(i => selected.has(i.id))} onChange={e => setSelected(e.target.checked ? new Set(items.map(i => i.id)) : new Set())} />
+                            </th>
+                          )}
+                          <PlainHeader label={dateLabel} />
+                          <PlainHeader label="Invoice" />
+                          <PlainHeader label="Patient" />
+                          <PlainHeader label="Provider" />
+                          <PlainHeader label="Amount" align="right" />
+                          {tab === 'paid' && <PlainHeader label="Payout" />}
+                          {(tab === 'disputed' || tab === 'rejected') && <PlainHeader label="Reason" />}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map(i => (
+                          <tr key={i.id} className="pay-row" onClick={() => setOpenId(i.id)} style={{ cursor: 'pointer', background: selected.has(i.id) ? '#F2F8FD' : undefined }}>
+                            {tab === 'to_pay' && (
+                              <td style={{ ...td, paddingRight: 0 }} onClick={e => e.stopPropagation()}>
+                                <input type="checkbox" aria-label={`Select ${i.reference}`} checked={selected.has(i.id)} onChange={() => toggle(i.id)} />
+                              </td>
+                            )}
+                            <td style={{ ...td, whiteSpace: 'nowrap', color: C.textSub }}>{dateOf(i) ? formatDate(dateOf(i)!) : '—'}</td>
+                            <td style={td}>
+                              <div style={{ fontWeight: 700, color: C.text }}>{i.reference}</div>
+                              {i.service && <div style={{ fontSize: 12, color: C.textSub, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{i.service}</div>}
+                            </td>
+                            <td style={td}>
+                              <div style={{ color: C.text }}>{i.patient}</div>
+                              {i.forFamily && <div style={{ fontSize: 12, color: '#7C3AED' }}>for {i.forFamily.name}</div>}
+                            </td>
+                            <td style={td}>
+                              <div style={{ color: C.text }}>{i.provider.name}</div>
+                              <div style={{ fontSize: 12, color: C.textSub }}>{countryName(i.provider.country)}</div>
+                            </td>
+                            <td style={{ ...td, textAlign: 'right', fontWeight: 800, color: C.text, whiteSpace: 'nowrap' }}>{amountOf(i)}</td>
+                            {tab === 'paid' && (
+                              <td style={td}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                  <span style={{ fontFamily: 'ui-monospace, Menlo, monospace', fontSize: 12.5 }}>{i.payout?.reference ?? '—'}</span>
+                                  <SourcePill payout={i.payout} />
+                                </div>
+                              </td>
+                            )}
+                            {(tab === 'disputed' || tab === 'rejected') && <td style={{ ...td, color: C.textSub, maxWidth: 260 }}>{i.disputeReason ?? i.rejectionReason ?? '—'}</td>}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              <div style={{ padding: isMobile ? '0 14px 12px' : '0 8px' }}>
+                <Pager page={page} pageSize={PAGE_SIZE} total={list?.total ?? 0} onPage={p => { setPage(p); setSelected(new Set()) }} />
+              </div>
+            </section>
+            {isDesktop && tab === 'to_pay' && items.length > 0 && (
+              <p style={{ margin: 0, fontSize: 12.5, color: C.textSub }}>
+                Payouts made by the finance partner are recorded here automatically. Use <strong>Record payout</strong> only for payments made outside that integration.
+              </p>
+            )}
+            <style>{'.pay-row:hover { background: #F5F9FD; }'}</style>
+          </>
+        )}
+      </div>
+
+      <SidePanel open={!!openId} onClose={() => setOpenId(null)} label="Invoice">
+        {openId && <InvoicePanel id={openId} />}
+      </SidePanel>
+      {recordFor && (
+        <RecordPayoutDialog
+          {...recordFor}
+          onClose={() => setRecordFor(null)}
+          onDone={msg => { setDone(msg); setSelected(new Set()); setTimeout(() => setDone(null), 5000) }}
+        />
+      )}
     </AdminLayout>
   )
 }

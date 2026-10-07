@@ -43,7 +43,7 @@ def analyze_colors(image_path):
 if __name__ == '__main__':
     # Try both possible logo files
     workspace_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    logo1 = os.path.join(workspace_dir, "GG'APP Main Logo.png")
+    logo1 = os.path.join(workspace_dir, "docs", "brand", "GG'APP Main Logo.png")
     logo2 = os.path.join(workspace_dir, "public", "logo.png")
     
     print("Analyzing GG'APP Main Logo.png...")

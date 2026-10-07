@@ -1,4 +1,4 @@
-import { IsDateString, IsOptional, IsString, MinLength } from 'class-validator'
+import { IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator'
 
 export class CreateNewsArticleDto {
   @IsString()
@@ -23,6 +23,11 @@ export class CreateNewsArticleDto {
 
   @IsDateString()
   date!: string
+
+  /** Save as a draft instead of publishing straight away. */
+  @IsOptional()
+  @IsIn(['draft', 'published'])
+  status?: 'draft' | 'published'
 }
 
 export class UpdateNewsArticleDto {
@@ -48,4 +53,8 @@ export class UpdateNewsArticleDto {
 
   @IsDateString()
   date!: string
+}
+export class NewsStatusDto {
+  @IsIn(['draft', 'published', 'archived'])
+  status!: 'draft' | 'published' | 'archived'
 }

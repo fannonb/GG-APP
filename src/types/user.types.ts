@@ -49,6 +49,7 @@ export interface NewsItem {
   body: string
   url?: string
   status?: 'draft' | 'published' | 'archived'
+  updatedAt?: string
 }
 
 export type NotificationType = 'payment' | 'invoice' | 'appointment' | 'credit' | 'system' | 'prescription' | 'ledger'

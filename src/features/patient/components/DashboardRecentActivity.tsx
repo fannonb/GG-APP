@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { GGBadge, GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
-import { formatCurrency, formatDate } from '@/utils/format'
+import { formatAmount, formatDate } from '@/utils/format'
 import { ROUTES, route } from '@/router/routes'
 import type { Transaction } from '@/types/user.types'
 
@@ -11,10 +11,16 @@ interface DashboardRecentActivityProps {
   style?: React.CSSProperties
 }
 
+/** Only unsettled payments get a label — "Paid" on every row is noise. */
 function statusMeta(status: Transaction['status']) {
-  if (status === 'failed') return { label: 'Failed', badge: 'error' as const, iconBg: C.errorBg, icon: C.error }
-  if (status === 'pending') return { label: 'Pending', badge: 'pending' as const, iconBg: C.bg, icon: C.textSub }
-  return { label: 'Paid', badge: 'primary' as const, iconBg: C.blue100, icon: C.blue500 }
+  if (status === 'failed') return { label: 'Failed', badge: 'error' as const }
+  if (status === 'pending') return { label: 'Pending', badge: 'pending' as const }
+  return null
+}
+
+function initials(name: string) {
+  const words = name.replace(/[^A-Za-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean)
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '•'
 }
 
 function PaymentIcon({ color }: { color: string }) {
@@ -37,8 +43,8 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
     <GGCard padding="20px 22px" style={{ height: '100%', display: 'flex', flexDirection: 'column', ...style }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12, marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>
-            Recent transactions
+          <div style={{ fontSize: 16, fontWeight: 800, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
+            Recent activity
           </div>
           <div style={{ fontSize: 12, color: C.textSub, marginTop: 2, fontFamily: font.family }}>
             Last payments from your healthcare credit
@@ -47,7 +53,7 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
         <button
           type="button"
           onClick={() => navigate(ROUTES.TRANSACTIONS)}
-          style={{ all: 'unset', fontSize: 13, color: C.blue500, fontWeight: 700, cursor: 'pointer', fontFamily: font.family, flexShrink: 0, marginTop: 2 }}
+          style={{ all: 'unset', fontSize: 13, color: '#0B7BC0', fontWeight: 700, cursor: 'pointer', fontFamily: font.family, flexShrink: 0, marginTop: 2 }}
         >
           View all →
         </button>
@@ -103,22 +109,26 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
               onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
             >
               <div
+                aria-hidden
                 style={{
                   width: 40,
                   height: 40,
                   borderRadius: 12,
-                  background: meta.iconBg,
+                  background: tx.status === 'failed' ? C.errorBg : C.blue100,
+                  color: tx.status === 'failed' ? C.error : '#0B7BC0',
+                  fontSize: 13,
+                  fontWeight: 800,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
                 }}
               >
-                <PaymentIcon color={meta.icon} />
+                {initials(tx.provider)}
               </div>
 
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: 0 }}>
                   {tx.service}
                 </div>
                 <div style={{ fontSize: 12, color: C.textSub, marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -127,12 +137,14 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
               </div>
 
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 800, color: tx.status === 'failed' ? C.error : C.navy800, letterSpacing: '-0.02em' }}>
-                  {formatCurrency(tx.amount, currency)}
+                <div style={{ fontSize: 14, fontWeight: 800, color: tx.status === 'failed' ? C.error : C.navy800, letterSpacing: '-0.01em' }}>
+                  {formatAmount(tx.amount, currency)}
                 </div>
-                <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
-                  <GGBadge type={meta.badge}>{meta.label}</GGBadge>
-                </div>
+                {meta && (
+                  <div style={{ marginTop: 4, display: 'flex', justifyContent: 'flex-end' }}>
+                    <GGBadge type={meta.badge}>{meta.label}</GGBadge>
+                  </div>
+                )}
               </div>
             </button>
           )

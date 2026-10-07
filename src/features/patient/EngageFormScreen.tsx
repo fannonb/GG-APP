@@ -73,6 +73,8 @@ export function EngageFormScreen() {
       provider?: Provider
       providerId?: number
       rebook?: AppointmentRebookNavigationState['rebook']
+      /** Set when the patient already chose on the provider page, so the service picker is skipped. */
+      intent?: 'appointment' | 'prescription'
     }
   }
   const providerId = state?.providerId ?? state?.provider?.id
@@ -90,9 +92,12 @@ export function EngageFormScreen() {
   // Service mode: null = not yet chosen (picker shown), 'appointment' = standard form, 'prescription' = pharmacy flow
   const hasPharmacy = providerHasCategory(p, 'pharmacy')
   const isPharmacyOnly = providerIsPharmacyOnly(p)
+  const intent = state?.intent
   const [serviceMode, setServiceMode] = useState<'appointment' | 'prescription' | null>(
-    isPharmacyOnly ? 'prescription' : (hasPharmacy ? null : 'appointment'),
+    isPharmacyOnly ? 'prescription' : intent ?? (hasPharmacy ? null : 'appointment'),
   )
+  // Only offer "back to service selection" when the patient actually came through the picker.
+  const cameThroughPicker = hasPharmacy && !isPharmacyOnly && !intent
 
   const [form, setForm] = useState({
     description: rebook?.description ?? '',
@@ -271,11 +276,11 @@ export function EngageFormScreen() {
   // ── Prescription-only mode (pure pharmacy or user chose prescription) ────────
   if (serviceMode === 'prescription') {
     return (
-      <AppLayout title="Upload Prescription" back notifCount={1}>
+      <AppLayout title="Send a prescription" back notifCount={1}>
         <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
           <GGCard padding="36px">
             {ProviderHeader}
-            {hasPharmacy && !isPharmacyOnly && (
+            {cameThroughPicker && (
               <button
                 type="button"
                 onClick={() => setServiceMode(null)}
@@ -396,12 +401,12 @@ export function EngageFormScreen() {
 
   // ── Standard appointment form ────────────────────────────────────────────────
   return (
-    <AppLayout title="Engagement Request" back notifCount={1}>
+    <AppLayout title="Book a visit" back notifCount={1}>
       <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="36px">
           {ProviderHeader}
 
-          {hasPharmacy && !isPharmacyOnly && (
+          {cameThroughPicker && (
             <button
               type="button"
               onClick={() => setServiceMode(null)}

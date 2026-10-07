@@ -51,7 +51,7 @@ export function AppointmentReminderBanner({
           </svg>
         </div>
         <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E', marginBottom: '3px', letterSpacing: '-0.01em' }}>
+          <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E', marginBottom: '3px', letterSpacing: 0 }}>
             New Booking Request
             {urgency ? ` · ${urgency.label}` : ''}
           </div>
@@ -121,7 +121,7 @@ export function AppointmentReminderBanner({
         </svg>
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: '13px', fontWeight: 800, color: accentDark, marginBottom: '3px', letterSpacing: '-0.01em' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: accentDark, marginBottom: '3px', letterSpacing: 0 }}>
           {headline}
         </div>
         <div style={{ fontSize: '13px', color: isToday || isTomorrow ? accentDark : C.textSub, lineHeight: 1.5 }}>

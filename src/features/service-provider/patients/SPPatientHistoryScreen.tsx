@@ -112,7 +112,7 @@ export function SPPatientHistoryScreen() {
               <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.family }}>
                 Total Patients
               </div>
-              <div style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, fontFamily: font.family, marginTop: '2px', letterSpacing: '-0.02em' }}>
+              <div style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, fontFamily: font.family, marginTop: '2px', letterSpacing: '-0.01em' }}>
                 {stats.totalPatients}
               </div>
             </div>
@@ -142,7 +142,7 @@ export function SPPatientHistoryScreen() {
               <div style={{ fontSize: isMobile ? '10px' : '11px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.family }}>
                 Total Encounters
               </div>
-              <div style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, fontFamily: font.family, marginTop: '2px', letterSpacing: '-0.02em' }}>
+              <div style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, fontFamily: font.family, marginTop: '2px', letterSpacing: '-0.01em' }}>
                 {stats.totalVisits} <span style={{ fontSize: '11px', fontWeight: 500, color: C.textSub }}>visits</span>
               </div>
             </div>

@@ -50,6 +50,18 @@ export interface SPApplication {
   documents: UploadedDocument[]
   submitted: string
   status: SPApplicationStatus
+  /** True when the provider replied to an info request and it's back in the queue. */
+  resubmitted?: boolean
+  messages?: ApplicationMessage[]
+}
+
+export interface ApplicationMessage {
+  id: string
+  author: 'admin' | 'provider'
+  kind: 'info_requested' | 'reply' | 'approved' | 'rejected' | string
+  body: string
+  attachments?: Array<{ name: string; size: string }>
+  at: string
 }
 
 export interface AdminUser {
@@ -69,6 +81,16 @@ export interface AdminUser {
   memberSince: string
   status: AdminUserStatus
   idDocuments: UploadedDocument[]
+  firstName?: string
+  lastName?: string
+  countryCode?: 'KE' | 'ZW' | 'ZM' | null
+  gender?: string | null
+  emailVerified?: boolean
+  signUpMethod?: 'email' | 'google'
+  suspendedReason?: string | null
+  suspendedAt?: string | null
+  lastActivityAt?: string | null
+  family?: Array<{ name: string; relation: string }>
 }
 
 export interface AdminProvider {
@@ -96,6 +118,37 @@ export interface AdminProvider {
   bankBranch?: string
   documents?: UploadedDocument[]
   description?: string
+  categories?: string[]
+  openStatus?: 'open' | 'closed'
+  about?: string
+  hoursText?: string
+  countryCode?: 'KE' | 'ZW' | 'ZM' | null
+  payoutAccount?: { method: 'MPESA' | 'BANK' | 'MOBILE_MONEY'; accountName: string; accountNumber: string } | null
+  suspendedReason?: string | null
+  hasLogin?: boolean
+}
+
+export interface AccountHistoryEntry {
+  id: string
+  action: string
+  at: string
+  by: string
+  metadata: Record<string, unknown> | null
+}
+
+export interface EmailChangeRequest {
+  id: string
+  userId: string
+  role: 'patient' | 'provider'
+  name: string
+  providerId: number | null
+  currentEmail: string
+  newEmail: string
+  reason: string | null
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  decisionNote: string | null
+  createdAt: string
+  decidedAt: string | null
 }
 
 export interface AdminPayment {

@@ -1571,20 +1571,18 @@ export class SpService {
     const email = dto.email?.toLowerCase().trim()
     const phone = dto.phone?.trim()
 
-    if (email) {
-      const existingEmail = await this.prisma.user.findUnique({ where: { email } })
-      if (existingEmail && existingEmail.id !== userId) {
-        throw new BadRequestException('An account already exists for that email address')
+    // The sign-in email only changes through an admin-approved request (Settings → Security).
+    if (email && provider.authUserId) {
+      const current = await this.prisma.user.findUnique({ where: { id: provider.authUserId }, select: { email: true } })
+      if (current && email !== current.email.toLowerCase()) {
+        throw new BadRequestException('To change your sign-in email, use “Change email” in Settings → Security. An admin approves the change.')
       }
     }
 
-    if (provider.authUserId && (email || phone !== undefined)) {
+    if (provider.authUserId && phone !== undefined) {
       await this.prisma.user.update({
         where: { id: provider.authUserId },
-        data: {
-          ...(email ? { email } : {}),
-          ...(phone !== undefined ? { phone: phone || null } : {}),
-        },
+        data: { phone: phone || null },
       })
     }
 
@@ -2378,6 +2376,7 @@ export class SpService {
       firstName: string
       lastName: string
       dateOfBirth: Date
+      gender?: string | null
       countryCode?: string | null
       beneficiaries: Array<{
         name: string
@@ -2502,7 +2501,7 @@ export class SpService {
       countryCode: patient.patientProfile.countryCode ?? '',
       email: patient.email,
       dob: patient.patientProfile.dateOfBirth.toISOString(),
-      gender: 'Not specified',
+      gender: patient.patientProfile.gender ?? 'Not specified',
       address: '',
       bloodType: 'Unknown',
       lastVisit: patient.appointments[0]?.date.toISOString() ?? new Date().toISOString(),

@@ -1,6 +1,7 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { GGButton, GGCard } from '@/design-system'
+import { GGButton, GGCard, GGInput } from '@/design-system'
+import { authService } from '@/api/services/auth.service'
 import { C, font, radius } from '@/design-system/tokens'
 import { useSPApplicationStatus } from '@/hooks/api'
 import { ROUTES } from '@/router/routes'
@@ -20,7 +21,7 @@ export function SPPendingScreen() {
   const state = (location.state as PendingState | null) ?? null
   const applicationId = searchParams.get('applicationId') ?? state?.applicationId
 
-  const { data: liveStatus, isLoading } = useSPApplicationStatus(applicationId)
+  const { data: liveStatus, isLoading, refetch } = useSPApplicationStatus(applicationId)
 
   const status = liveStatus?.status ?? state?.status ?? 'pending'
   const submittedAt = liveStatus?.submittedAt ?? state?.submittedAt
@@ -150,7 +151,7 @@ export function SPPendingScreen() {
               )}
             </svg>
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '-0.04em', marginBottom: '8px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em', marginBottom: '8px' }}>
             {hero.title}
           </div>
           <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.78)', lineHeight: 1.7, marginBottom: '16px' }}>
@@ -250,6 +251,10 @@ export function SPPendingScreen() {
           </GGCard>
         )}
 
+        {status === 'info_requested' && applicationId && (
+          <ReplyCard applicationId={applicationId} onSent={() => void refetch()} />
+        )}
+
         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <GGButton variant="secondary" size="md" onClick={() => navigate(ROUTES.LOGIN)} style={{ flex: 1 }}>
             Back to Login
@@ -270,5 +275,74 @@ export function SPPendingScreen() {
         </div>
       </div>
     </div>
+  )
+}
+
+/**
+ * Lets an applicant answer "more information needed". They can't sign in while
+ * under review, so the reply is confirmed with the email and password they registered with.
+ */
+function ReplyCard({ applicationId, onSent }: { applicationId: string; onSent: () => void }) {
+  const [message, setMessage] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [sent, setSent] = useState(false)
+
+  const submit = async () => {
+    setError(null)
+    if (message.trim().length < 3) { setError('Write a short reply to the review team.'); return }
+    if (!email.trim() || !password) { setError('Enter the email and password you registered with.'); return }
+    setBusy(true)
+    try {
+      await authService.replyToApplication(applicationId, { email: email.trim(), password, message: message.trim() })
+      setSent(true)
+      onSent()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'We couldn’t send your reply.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (sent) {
+    return (
+      <GGCard padding="20px">
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Reply sent</div>
+        <div style={{ fontSize: 13.5, color: C.textSub, marginTop: 4, lineHeight: 1.6 }}>Your application is back with the review team. We’ll email you once it’s decided.</div>
+      </GGCard>
+    )
+  }
+
+  return (
+    <GGCard padding="20px">
+      <div style={{ fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Reply to the review team</div>
+          <div style={{ fontSize: 13, color: C.textSub, marginTop: 4, lineHeight: 1.6 }}>
+            Answer the note above. If they asked for a document, describe it here and email it to support@gatewayglobal.africa with your reference number.
+          </div>
+        </div>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Your reply</span>
+          <textarea
+            value={message}
+            onChange={e => setMessage(e.target.value)}
+            rows={4}
+            placeholder="e.g. Our renewed licence number is MCZ-2026-0142; the certificate was emailed today."
+            style={{ width: '100%', boxSizing: 'border-box', padding: 10, borderRadius: radius.sm, border: `1.5px solid ${C.border}`, fontSize: 14, fontFamily: font.family, resize: 'vertical', outline: 'none' }}
+          />
+        </label>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+          <GGInput label="Registered email" type="email" inputMode="email" autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} />
+          <GGInput label="Password" type="password" autoComplete="current-password" value={password} onChange={e => setPassword(e.target.value)} />
+        </div>
+        {error && <div role="alert" style={{ padding: '9px 12px', borderRadius: radius.sm, background: C.errorBg, color: C.error, fontSize: 13 }}>{error}</div>}
+        <GGButton variant="primary" size="md" fullWidth disabled={busy} onClick={() => void submit()}>
+          {busy ? 'Sending…' : 'Send reply for review'}
+        </GGButton>
+      </div>
+    </GGCard>
   )
 }

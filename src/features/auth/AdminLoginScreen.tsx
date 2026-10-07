@@ -92,7 +92,7 @@ export function AdminLoginScreen() {
             </svg>
             Admin Console
           </div>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: DARK, letterSpacing: '-0.03em', marginBottom: '6px' }}>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: DARK, letterSpacing: '-0.015em', marginBottom: '6px' }}>
             Admin Sign In
           </div>
           <div style={{ fontSize: '13px', color: '#5E6E8C', textAlign: 'center', lineHeight: 1.5 }}>
@@ -127,7 +127,7 @@ export function AdminLoginScreen() {
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: DARK, letterSpacing: '-0.01em', fontFamily: font.family }}>
+                <label style={{ fontSize: '13px', fontWeight: 600, color: DARK, letterSpacing: 0, fontFamily: font.family }}>
                   Password <span style={{ color: '#E5474D' }}>*</span>
                 </label>
                 <Link
@@ -175,7 +175,7 @@ export function AdminLoginScreen() {
               color: '#fff',
               cursor: loading ? 'not-allowed' : 'pointer',
               fontFamily: font.family,
-              letterSpacing: '-0.01em',
+              letterSpacing: 0,
               transition: 'background 0.15s',
             }}
           >

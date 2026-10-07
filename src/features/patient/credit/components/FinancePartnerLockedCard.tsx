@@ -65,7 +65,7 @@ export function FinancePartnerLockedCard({ partnerId, subtitle }: FinancePartner
         </div>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.02em', fontFamily: font.family }}>
+          <div style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.01em', fontFamily: font.family }}>
             {partner.name}
           </div>
           <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px', lineHeight: 1.5, fontFamily: font.family }}>

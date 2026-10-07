@@ -20,6 +20,8 @@ interface FinancePartnerSelectorProps {
   onSelect: (id: string) => void
   error?: string
   stepComplete?: boolean
+  /** When set and only one partner is offered, the copy explains it is the lender for this country. */
+  countryName?: string
 }
 
 export function FinancePartnerSelector({
@@ -28,8 +30,10 @@ export function FinancePartnerSelector({
   onSelect,
   error,
   stepComplete = false,
+  countryName,
 }: FinancePartnerSelectorProps) {
   const { isMobile } = useResponsive()
+  const single = partners.length === 1
 
   return (
     <div>
@@ -38,7 +42,7 @@ export function FinancePartnerSelector({
           width: 28,
           height: 28,
           borderRadius: '50%',
-          background: stepComplete ? C.navy800 : C.blue500,
+          background: stepComplete ? '#16A34A' : C.blue500,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -50,18 +54,21 @@ export function FinancePartnerSelector({
             : <span style={{ fontSize: '11px', fontWeight: 800, color: '#fff' }}>1</span>}
         </div>
         <div>
-          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>
-            Choose Your Finance Partner
+          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
+            {single ? 'Your finance partner' : 'Choose Your Finance Partner'}
           </div>
           <div style={{ fontSize: '12px', color: C.textSub, marginTop: '1px', fontFamily: font.family }}>
-            Select the lender you'd like to apply with
+            {single
+              ? `Healthcare credit${countryName ? ` in ${countryName}` : ''} is provided by ${partners[0].name}`
+              : "Select the lender you'd like to apply with"}
           </div>
         </div>
       </div>
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
+        gridTemplateColumns: isMobile || single ? '1fr' : '1fr 1fr',
+        maxWidth: single ? 560 : undefined,
         gap: '16px',
         alignItems: 'stretch',
       }}>
@@ -124,7 +131,7 @@ export function FinancePartnerSelector({
                 fontFamily: font.family,
               }}>
                 <div>
-                  <div style={{ fontSize: '14px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '6px' }}>
+                  <div style={{ fontSize: '14px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em', marginBottom: '6px' }}>
                     {p.name}
                   </div>
                   <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.65 }}>

@@ -8,6 +8,7 @@ import { ROUTES } from '@/router/routes'
 
 interface SPTopBarProps {
   title: string
+  titleIcon?: React.ReactNode
   status?: string
   back?: boolean
   backLabel?: string
@@ -29,7 +30,7 @@ function getProviderInitials(name: string): string {
   return parts.slice(0, 2).map(part => part[0]).join('').toUpperCase()
 }
 
-export function SPTopBar({ title, status, back = false, backLabel = 'Back' }: SPTopBarProps) {
+export function SPTopBar({ title, titleIcon, status, back = false, backLabel = 'Back' }: SPTopBarProps) {
   const navigate = useNavigate()
   const { spNotifs, openPanel } = useNotificationsStore()
   const unreadCount = spNotifs.filter(n => !n.read).length
@@ -129,13 +130,14 @@ export function SPTopBar({ title, status, back = false, backLabel = 'Back' }: SP
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            {titleIcon}
             <h1
               style={{
                 fontSize: '28px',
                 fontWeight: 800,
                 color: C.navy800,
                 fontFamily: font.family,
-                letterSpacing: '-0.035em',
+                letterSpacing: '-0.015em',
                 lineHeight: 1.15,
                 margin: 0,
                 overflow: 'hidden',

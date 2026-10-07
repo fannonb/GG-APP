@@ -31,7 +31,15 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   )
-  app.use(express.json({ limit: '25mb' }))
+  app.use(
+    express.json({
+      limit: '25mb',
+      // Keep the exact bytes so finance-partner webhooks can be signature-checked.
+      verify: (req, _res, buf) => {
+        ;(req as express.Request & { rawBody?: Buffer }).rawBody = buf
+      },
+    }),
+  )
   app.use(express.urlencoded({ extended: true, limit: '25mb' }))
   app.enableCors({
     origin: (origin, callback) => {

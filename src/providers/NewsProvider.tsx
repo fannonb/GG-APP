@@ -12,9 +12,10 @@ export function NewsProvider({ children }: { children: ReactNode }) {
   return <>{children}</>
 }
 
-function normalizeNewsItem(item: Omit<NewsItem, 'id'>): Omit<NewsItem, 'id'> {
+/** Only the fields the API accepts; extra keys like id/status are rejected by validation. */
+function normalizeNewsItem(item: Omit<NewsItem, 'id'>) {
   return {
-    ...item,
+    date: item.date,
     title: item.title.trim(),
     source: item.source.trim(),
     tag: item.tag.trim(),

@@ -4,7 +4,8 @@ import { GGCard, GGButton, GGBadge } from '@/design-system'
 import { C, font } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { ROUTES } from '@/router/routes'
-import { getFinancePartnerSummary } from './credit.constants'
+import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from './credit.constants'
+import { useUserStore } from '@/store/user.store'
 import type { BadgeType } from '@/design-system/GGBadge'
 import { useCreditStatus } from '@/hooks/api'
 import { formatCurrency, formatDate } from '@/utils/format'
@@ -37,11 +38,12 @@ export function CreditStatusScreen() {
   const [searchParams] = useSearchParams()
   const isIncrease = searchParams.get('type') === 'increase'
   const { data, isLoading } = useCreditStatus()
+  const countryCode = useUserStore(s => s.user.countryCode)
 
   const application = data?.application ?? null
   const status = mapUiStatus(application?.status, data?.creditStatus)
   const refNum = application?.reference ?? data?.creditAccountRef ?? '—'
-  const partner = getFinancePartnerSummary(application?.financePartnerId ?? data?.financePartnerId ?? 'moneymart')
+  const partner = getFinancePartnerSummary(getFinancePartnerIdForCountry(countryCode))
   const partnerName = partner?.name ?? 'your finance partner'
 
   const sc = useMemo(() => {

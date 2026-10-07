@@ -96,7 +96,7 @@ export function PrescriptionReadyAlertBanner({
               fontSize: '14px',
               fontWeight: 800,
               color: C.navy800,
-              letterSpacing: '-0.01em',
+              letterSpacing: 0,
             }}
           >
             {title}

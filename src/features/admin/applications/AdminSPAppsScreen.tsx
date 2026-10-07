@@ -14,7 +14,7 @@ import {
   useRequestAdminApplicationInfoMutation,
 } from '@/hooks/api/useAdminMutations'
 import { formatDate, formatPhone } from '@/utils/format'
-import type { SPApplication, SPApplicationStatus, UploadedDocument } from '@/types/admin.types'
+import type { ApplicationMessage, SPApplication, SPApplicationStatus, UploadedDocument } from '@/types/admin.types'
 
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
@@ -49,6 +49,39 @@ function StatusBadge({ status }: { status: SPApplicationStatus }) {
       <span style={{ width: 5, height: 5, borderRadius: '50%', background: s.color, display: 'inline-block' }} />
       {s.label}
     </span>
+  )
+}
+
+const THREAD_LABEL: Record<string, string> = {
+  info_requested: 'You asked for more information',
+  reply: 'Applicant replied',
+  approved: 'You approved',
+  rejected: 'You rejected',
+}
+
+/** Admin requests and provider replies, oldest first, so the back-and-forth reads like a chat. */
+function ApplicationThread({ messages }: { messages: ApplicationMessage[] }) {
+  return (
+    <ol style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {messages.map(m => {
+        const mine = m.author === 'admin'
+        return (
+          <li key={m.id} style={{ alignSelf: mine ? 'flex-end' : 'flex-start', maxWidth: '88%' }}>
+            <div style={{ fontSize: 11.5, color: C.textSub, marginBottom: 3, textAlign: mine ? 'right' : 'left' }}>
+              {THREAD_LABEL[m.kind] ?? m.kind} · {formatDate(m.at)}
+            </div>
+            <div style={{ padding: '10px 12px', borderRadius: 12, background: mine ? C.blue100 : '#F1F5F9', color: C.text, fontSize: 13.5, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+              {m.body}
+              {m.attachments && m.attachments.length > 0 && (
+                <div style={{ marginTop: 6, fontSize: 12, color: C.textSub }}>
+                  Attached: {m.attachments.map(a => `${a.name} (${a.size})`).join(', ')}
+                </div>
+              )}
+            </div>
+          </li>
+        )
+      })}
+    </ol>
   )
 }
 
@@ -361,7 +394,12 @@ export function AdminSPAppsScreen() {
                       <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{app.name}</div>
                       <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>{app.serviceTypes.join(' · ')} · {app.country}</div>
                     </div>
-                    <StatusBadge status={app.status} />
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                      <StatusBadge status={app.status} />
+                      {app.resubmitted && (
+                        <span style={{ fontSize: '10.5px', fontWeight: 700, color: '#B45309', background: '#FEF3C7', padding: '2px 7px', borderRadius: 999 }}>Provider replied</span>
+                      )}
+                    </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '7px' }}>
                     {pendingLike ? (
@@ -401,7 +439,7 @@ export function AdminSPAppsScreen() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
                   <div style={{ flex: 1, minWidth: 180 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                      <span style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{selected.name}</span>
+                      <span style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{selected.name}</span>
                       <StatusBadge status={selected.status} />
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
@@ -584,6 +622,13 @@ export function AdminSPAppsScreen() {
                   </div>
                 )}
               </CollapsibleCard>
+
+              {(selected.messages?.length ?? 0) > 0 && (
+                <GGCard padding="22px">
+                  <SectionLabel>Conversation with the applicant</SectionLabel>
+                  <ApplicationThread messages={selected.messages ?? []} />
+                </GGCard>
+              )}
 
               {/* Decision note */}
               <GGCard padding="22px">

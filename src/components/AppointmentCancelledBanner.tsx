@@ -42,7 +42,7 @@ export function AppointmentCancelledBanner({ items, onAction, onDismiss }: Appoi
         </svg>
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: '13px', fontWeight: 800, color: '#B91C1C', marginBottom: '3px', letterSpacing: '-0.01em' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: '#B91C1C', marginBottom: '3px', letterSpacing: 0 }}>
           {count > 1 ? `${count} appointments cancelled` : 'Appointment cancelled by provider'}
         </div>
         <div style={{ fontSize: '13px', color: '#991B1B', lineHeight: 1.5 }}>

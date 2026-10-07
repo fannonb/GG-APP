@@ -61,7 +61,7 @@ export function EmailVerifyScreen() {
             </svg>
           </div>
 
-          <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '8px' }}>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
             Check Your Email
           </div>
           <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '28px' }}>

@@ -189,7 +189,7 @@ export function AdminCreditAppsScreen() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>{selected.patientName}</div>
+                  <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>{selected.patientName}</div>
                   <div style={{ fontSize: '13px', color: C.textSub, marginTop: '4px' }}>
                     {selected.reference} · {selected.type === 'increase' ? 'Limit increase' : 'Initial application'}
                   </div>

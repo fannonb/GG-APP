@@ -329,7 +329,7 @@ export function SPInvoiceUploadScreen() {
                 <path d="M10 15v-4a6 6 0 0112 0v4" stroke={C.warning} strokeWidth="1.8" strokeLinecap="round" />
               </svg>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px', textAlign: 'center' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', marginBottom: '8px', textAlign: 'center' }}>
               {editInvoice ? 'Invoice Resubmitted!' : 'Invoice Submitted!'}
             </div>
             <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '24px', textAlign: 'center' }}>
@@ -388,7 +388,7 @@ export function SPInvoiceUploadScreen() {
                 <path d="M2 9h20M8 2v4M16 2v4" stroke={C.blue500} strokeWidth="1.4" strokeLinecap="round"/>
               </svg>
             </div>
-            <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, textAlign: 'center', letterSpacing: '-0.03em', marginBottom: '8px' }}>
+            <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, textAlign: 'center', letterSpacing: '-0.015em', marginBottom: '8px' }}>
               Record a visit first
             </div>
             <div style={{ fontSize: '14px', color: C.textSub, textAlign: 'center', lineHeight: 1.6, marginBottom: '24px' }}>

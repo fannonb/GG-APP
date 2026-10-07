@@ -36,8 +36,8 @@ function InfoRow({ label, val, last }: { label: string; val: React.ReactNode; la
 
 function NoteBlock({ label, text, borderColor, bg, textColor }: { label: string; text: string; borderColor: string; bg: string; textColor: string }) {
   return (
-    <div style={{ borderLeft: `4px solid ${borderColor}`, borderRadius: '0 8px 8px 0', background: bg, padding: '14px 16px' }}>
-      <div style={{ fontSize: '11px', fontWeight: 700, color: textColor, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '6px', fontFamily: font.family }}>{label}</div>
+    <div style={{ border: `1px solid ${borderColor}`, borderRadius: '10px', background: bg, padding: '14px 16px' }}>
+      <div style={{ fontSize: '13px', fontWeight: 700, color: textColor, marginBottom: '4px', fontFamily: font.family }}>{label}</div>
       <div style={{ fontSize: '13px', color: C.text, lineHeight: 1.7, fontFamily: font.family }}>{text}</div>
     </div>
   )
@@ -223,7 +223,7 @@ export function SPInvoiceDetailScreen() {
           <GGAvatar name={inv.patient.replace(/\s*\(.*\)/, '')} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>{inv.patient}</div>
+              <div style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>{inv.patient}</div>
               {inv.isPrescription && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', padding: '3px 10px', borderRadius: radius.full, background: C.blue100, border: '1px solid rgba(74,173,223,0.25)', fontSize: '11px', fontWeight: 700, color: '#1A5D8A', fontFamily: font.family }}>
                   Prescription Order
@@ -315,7 +315,7 @@ export function SPInvoiceDetailScreen() {
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', marginTop: '4px', borderTop: `2px solid ${C.navy800}` }}>
             <span style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>Total</span>
-            <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.02em', fontFamily: font.family }}>{formatCurrency(inv.amount)}</span>
+            <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.01em', fontFamily: font.family }}>{formatCurrency(inv.amount)}</span>
           </div>
         </div>
       </GGCard>

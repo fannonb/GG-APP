@@ -9,7 +9,7 @@ export function CreditPartnerStrip() {
   return (
     <div>
       <div style={{ marginBottom: '16px' }}>
-        <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', fontFamily: font.family }}>
+        <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', fontFamily: font.family }}>
           Choose your finance partner
         </div>
         <div style={{ fontSize: '13px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>
@@ -46,7 +46,7 @@ export function CreditPartnerStrip() {
               <FinancePartnerLogo partnerId={partner.id} />
             </div>
             <div style={{ padding: '16px 20px 18px' }}>
-              <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>
+              <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
                 {partner.name}
               </div>
               <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.6, marginTop: '4px', fontFamily: font.family }}>

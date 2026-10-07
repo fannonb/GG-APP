@@ -1,8 +1,7 @@
-import { GGButton, GGCard } from '@/design-system'
+import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import {
   buildGoogleMapsDirectionsUrl,
-  buildGoogleMapsViewUrl,
   buildOpenStreetMapEmbedUrl,
   hasMappableLocation,
   type MapLocationInput,
@@ -17,21 +16,31 @@ export function ProviderLocationMap({ location }: ProviderLocationMapProps) {
 
   const hasCoordinates = location.lat != null && location.lng != null
   const directionsUrl = buildGoogleMapsDirectionsUrl(location)
-  const viewUrl = buildGoogleMapsViewUrl(location)
 
   return (
     <GGCard padding="0" style={{ overflow: 'hidden' }}>
-      <div style={{ padding: '24px 24px 16px' }}>
-        <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '4px', fontFamily: font.family }}>
-          Location
+      <div style={{ padding: '20px 24px 16px', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '4px', fontFamily: font.family }}>
+            Location
+          </div>
+          <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, fontFamily: font.family }}>
+            {location.address || `${location.lat?.toFixed(5)}, ${location.lng?.toFixed(5)}`}
+          </div>
         </div>
-        <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, fontFamily: font.family }}>
-          {location.address || `${location.lat?.toFixed(5)}, ${location.lng?.toFixed(5)}`}
-        </div>
+        <a
+          href={directionsUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 14px', borderRadius: radius.sm, border: '1px solid rgba(11,123,192,0.35)', color: '#0B7BC0', fontSize: 13, fontWeight: 700, textDecoration: 'none', fontFamily: font.family, flexShrink: 0 }}
+        >
+          Directions
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden><path d="M1.5 9.5L9.5 1.5M9.5 1.5H4M9.5 1.5V7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+        </a>
       </div>
 
       {hasCoordinates && (
-        <div style={{ position: 'relative', height: 220, background: C.bg, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        <div style={{ position: 'relative', height: 220, background: C.bg, borderTop: `1px solid ${C.border}` }}>
           <iframe
             title={`Map showing ${location.name}`}
             src={buildOpenStreetMapEmbedUrl(location.lat!, location.lng!)}
@@ -67,30 +76,6 @@ export function ProviderLocationMap({ location }: ProviderLocationMapProps) {
         </div>
       )}
 
-      <div style={{ padding: '16px 24px 24px', display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-        <GGButton
-          variant="primary"
-          size="md"
-          onClick={() => window.open(directionsUrl, '_blank', 'noopener,noreferrer')}
-          style={{ flex: '1 1 180px' }}
-        >
-          Get Directions
-        </GGButton>
-        <GGButton
-          variant="secondary"
-          size="md"
-          onClick={() => window.open(viewUrl, '_blank', 'noopener,noreferrer')}
-          style={{ flex: '1 1 140px' }}
-        >
-          Open in Maps
-        </GGButton>
-      </div>
-
-      <div style={{ padding: '0 24px 18px', fontSize: '11px', color: C.textLight, lineHeight: 1.5, fontFamily: font.family }}>
-        Directions open in Google Maps using this provider&apos;s saved address
-        {hasCoordinates ? ' and map pin.' : '.'}
-        {!hasCoordinates && ' Add map coordinates in provider settings for a more precise pin.'}
-      </div>
     </GGCard>
   )
 }

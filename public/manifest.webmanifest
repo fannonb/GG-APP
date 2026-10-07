@@ -1,32 +1,72 @@
 {
   "id": "/",
-  "name": "GG'APP — Healthcare Access Platform",
+  "name": "GG'APP — Get care today, pay over time",
   "short_name": "GG'APP",
-  "description": "Healthcare access platform connecting patients, providers, and administrators.",
-  "theme_color": "#091C44",
-  "background_color": "#EEF4FB",
+  "description": "Book verified hospitals, clinics, pharmacies and labs, and pay with healthcare credit.",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": [
+    "health",
+    "medical",
+    "finance"
+  ],
+  "theme_color": "#0D1E42",
+  "background_color": "#F4F9FD",
   "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "portrait-primary",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "icons": [
     {
-      "src": "/icons.svg",
-      "sizes": "512x512",
-      "type": "image/svg+xml",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/icons.svg",
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/svg+xml",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/maskable-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
       "purpose": "maskable"
     },
     {
-      "src": "/logo.png",
-      "sizes": "1869x1744",
+      "src": "/icons/maskable-512.png",
+      "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/mobile-dashboard.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your credit, visits and invoices in one place"
+    },
+    {
+      "src": "/screenshots/mobile-ledger.png",
+      "sizes": "780x1688",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "Your health record, shared only with your PIN"
+    },
+    {
+      "src": "/screenshots/desktop-dashboard.png",
+      "sizes": "1366x768",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "GG'APP dashboard"
     }
   ]
 }

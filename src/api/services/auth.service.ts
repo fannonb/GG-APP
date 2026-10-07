@@ -28,6 +28,18 @@ function buildMockSession(role: UserRole): AuthSession {
   }
 }
 
+export interface EmailChangeStatusResponse {
+  id: string
+  currentEmail: string
+  newEmail: string
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled'
+  decisionNote: string | null
+  createdAt: string
+  decidedAt: string | null
+}
+
+let inflightRefresh: Promise<AuthSession | null> | null = null
+
 export const authService = {
   /** Persist a session returned by the API. When the backend used cookie mode
    * the refresh token is intentionally empty in the body — the httpOnly cookie
@@ -193,7 +205,17 @@ export const authService = {
     }
   },
 
-  async refreshSession(): Promise<AuthSession | null> {
+  /**
+   * Shares one in-flight refresh between callers. Refresh tokens rotate, so a second
+   * concurrent call (e.g. StrictMode running the bootstrap effect twice) would replay
+   * the old token, which the backend treats as reuse and revokes the whole session.
+   */
+  refreshSession(): Promise<AuthSession | null> {
+    inflightRefresh ??= this.doRefreshSession().finally(() => { inflightRefresh = null })
+    return inflightRefresh
+  },
+
+  async doRefreshSession(): Promise<AuthSession | null> {
     const stored = tokenStorage.getSession()
     if (!stored) return null
     const cookieMode = isSessionCookieMode()
@@ -260,6 +282,35 @@ export const authService = {
     const { data } = await apiClient.post<{ message: string }>(
       `/auth/sessions/${sessionId}/revoke`,
     )
+    return data
+  },
+
+  /** The latest sign-in email change request for the signed-in user, if any. */
+  async getEmailChange(): Promise<EmailChangeStatusResponse | null> {
+    if (isMockApi) return null
+    const { data } = await apiClient.get<EmailChangeStatusResponse | null>('/auth/email-change')
+    return data || null
+  },
+
+  async requestEmailChange(payload: { newEmail: string; password?: string; reason?: string }): Promise<EmailChangeStatusResponse> {
+    const { data } = await apiClient.post<EmailChangeStatusResponse>('/auth/email-change', payload)
+    return data
+  },
+
+  async cancelEmailChange(): Promise<{ message: string }> {
+    const { data } = await apiClient.post<{ message: string }>('/auth/email-change/cancel')
+    return data
+  },
+
+  /** A provider answering "more information needed" while their application is under review. */
+  async replyToApplication(applicationId: string, payload: { email: string; password: string; message: string }): Promise<{ message: string }> {
+    const { data } = await apiClient.post<{ message: string }>(`/auth/register/sp/${applicationId}/reply`, payload)
+    return data
+  },
+
+  async getApplicationMessages(applicationId: string): Promise<Array<{ id: string; author: 'admin' | 'provider'; kind: string; body: string; at: string }>> {
+    if (isMockApi) return []
+    const { data } = await apiClient.get(`/auth/register/sp/${applicationId}/messages`)
     return data
   },
 

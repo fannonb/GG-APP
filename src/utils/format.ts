@@ -15,6 +15,20 @@ export function formatCurrency(amount: number, currencySymbol = ''): string {
   return currencySymbol + new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount)
 }
 
+/**
+ * Glanceable money for summary surfaces ("KSh 7,600", "KSh 1,250.50").
+ * Drops ".00" on whole amounts; use formatCurrency where exact cents matter.
+ */
+export function formatAmount(amount: number, currencySymbol = ''): string {
+  const symbol = currencySymbol.replace(/\.$/, '').replace(/^Ksh$/i, 'KSh')
+  const whole = Number.isInteger(Math.round(amount * 100) / 100)
+  const value = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: whole ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(amount)
+  return symbol ? `${symbol} ${value}` : value
+}
+
 export function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {
   const d = toDate(date)
   if (options) {

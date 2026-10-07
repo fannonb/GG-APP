@@ -3,7 +3,7 @@ import { C, font } from '@/design-system/tokens'
 export function LockedField({
   label,
   value,
-  hint = 'Managed by GG\'APP',
+  hint,
 }: {
   label: string
   value: string
@@ -21,7 +21,7 @@ export function LockedField({
       <div style={{ fontSize: 15, fontWeight: 600, color: C.text, lineHeight: 1.45, wordBreak: 'break-word', fontFamily: font.family }}>
         {value || '—'}
       </div>
-      <div style={{ fontSize: 11, color: C.textLight, marginTop: 4, fontFamily: font.family }}>{hint}</div>
+      {hint && <div style={{ fontSize: 11, color: C.textLight, marginTop: 4, fontFamily: font.family }}>{hint}</div>}
     </div>
   )
 }

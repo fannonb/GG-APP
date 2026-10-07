@@ -30,7 +30,7 @@ export function CountryPhoneInput({ required, countryCode, onCountryChange, digi
   }, [])
 
   const FieldLabel = ({ text }: { text: string }) => (
-    <label style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
+    <label style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: 0, fontFamily: font.family }}>
       {text}{required && <span style={{ color: C.error }}> *</span>}
     </label>
   )

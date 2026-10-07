@@ -1,16 +1,11 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGButton, GGCard } from '@/design-system'
+import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
+import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
 import { FlagImg } from '@/components/FlagImg'
 import { getCountryByName } from '@/config/countries'
-import { AppointmentReminderBanner } from '@/components/AppointmentReminderBanner'
-import { RejectedInvoiceAlertBanner } from '@/components/RejectedInvoiceAlertBanner'
-import { PaymentAlertBanner } from '@/components/PaymentAlertBanner'
-import { PrescriptionDecisionBanner } from '@/components/PrescriptionDecisionBanner'
-import { PrescriptionReadyAlertBanner } from '@/components/PrescriptionReadyAlertBanner'
-import { SPActionBanner } from '@/components/SPActionBanner'
 import { useHealthNews, useMarkPrescriptionReadyMutation, useSPDashboard } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
@@ -25,15 +20,16 @@ import {
 } from '@/utils/sp-notifications'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route, ROUTES } from '@/router/routes'
-import { getAppointmentDisplayStatus, isUpcomingScheduleItem } from '@/utils/appointments'
+import { getAppointmentDisplayStatus, getAppointmentUrgency, isUpcomingScheduleItem } from '@/utils/appointments'
 import {
   useAuthStore,
 } from '@/store/auth.store'
 import { useSpOnboardingProgress } from '@/hooks/useSpOnboardingProgress'
 import { useResponsive } from '@/hooks/useResponsive'
-import { formatCurrency } from '@/utils/format'
+import { formatAmount, formatDate, formatTime12h } from '@/utils/format'
 import { SPNewDashboardScreen } from './SPNewDashboardScreen'
 import { SPDashboardWorkspace } from './SPDashboardWorkspace'
+import { InstallAppPrompt } from '@/components/InstallApp'
 
 const SEEN_CANCELLED_APPT_KEY = 'ggapp.spSeenCancelledAppointmentNotifications'
 
@@ -87,7 +83,7 @@ const SETUP_STEP_DEFS = [
 
 export function SPDashboardScreen() {
   const navigate = useNavigate()
-  const { isMobile } = useResponsive()
+  const { isMobile, isDesktop } = useResponsive()
   const { spMode } = useAuthStore()
   const { data, isLoading } = useSPDashboard()
   const { data: healthNews } = useHealthNews()
@@ -172,6 +168,7 @@ export function SPDashboardScreen() {
 
   const { sp, invoices, isPharmacy, isPharmacyOnly } = data
   const countryConfig = getCountryByName(sp?.country || '')
+  const currency = countryConfig?.currencySymbol ?? ''
   const rejectedInvoices = invoices.filter(invoice => invoice.status === 'rejected')
   const rejectedInvoiceItems = rejectedInvoices.map(invoice => ({
     id: invoice.id,
@@ -285,13 +282,11 @@ export function SPDashboardScreen() {
     navigate(target?.startsWith('/sp/') ? target : ROUTES.SP_INVOICES)
   }
 
-  const prescriptionReadyForPickupItems = useMemo(() => {
-    return buildPrescriptionReadyForPickupBannerItems(
-      data?.notifications ?? [],
-      data?.prescriptionRequests ?? [],
-      seenPrescriptionPaidIds,
-    )
-  }, [data?.notifications, data?.prescriptionRequests, seenPrescriptionPaidIds])
+  const prescriptionReadyForPickupItems = buildPrescriptionReadyForPickupBannerItems(
+    data.notifications ?? [],
+    data.prescriptionRequests ?? [],
+    seenPrescriptionPaidIds,
+  )
 
   const markPrescriptionPaidSeen = (id: string) => {
     setSeenPrescriptionPaidIds(prev => {
@@ -341,15 +336,6 @@ export function SPDashboardScreen() {
     day: 'numeric',
   })
 
-  const primaryKind =
-    rejectedInvoiceItems.length > 0
-      ? 'rejected'
-      : !isPharmacyOnly && newRequestAppointment
-        ? 'new-request'
-        : newPrescriptionRequest
-          ? 'new-prescription'
-          : null
-
   const handleCancelledApptAction = (items: { id: string; screen?: string }[]) => {
     items.forEach(item => markCancelledApptSeen(item.id))
     const target = items[0]?.screen
@@ -376,8 +362,180 @@ export function SPDashboardScreen() {
     items.forEach(item => markNewReviewSeen(item.id))
   }
 
+  const andMore = (detail: string, count: number) =>
+    count > 1 ? `${detail.replace(/\.\s*$/, '')} · +${count - 1} more` : detail
+  const attentionItems: AttentionItem[] = []
+
+  if (rejectedInvoiceItems.length > 0) {
+    const n = rejectedInvoiceItems.length
+    const primary = rejectedInvoiceItems[0]
+    attentionItems.push({
+      id: 'invoice-rejected',
+      tone: 'alert',
+      icon: 'invoice',
+      title: n > 1 ? `${n} invoices rejected by patients` : 'Invoice rejected by patient',
+      meta: primary.amount != null ? formatAmount(primary.amount, currency) : undefined,
+      detail: andMore(
+        primary.detail.startsWith('Patient reason:') ? `${primary.headline} · ${primary.detail}` : primary.headline,
+        n,
+      ),
+      actionLabel: 'Fix & resubmit',
+      onAction: () => navigate(route.spInvoice(primary.id)),
+    })
+  }
+
+  if (!isPharmacyOnly && newRequestAppointment) {
+    const n = newRequestAppointments.length
+    const urgency = getAppointmentUrgency(newRequestAppointment.date)
+    attentionItems.push({
+      id: 'new-request',
+      tone: 'action',
+      icon: 'calendar',
+      title: n > 1 ? `${n} new booking requests` : 'New booking request',
+      meta: urgency ? urgency.label.charAt(0) + urgency.label.slice(1).toLowerCase() : undefined,
+      detail: andMore(
+        `${newRequestAppointment.patient} requested ${newRequestAppointment.service} on ${formatDate(newRequestAppointment.date)} at ${formatTime12h(newRequestAppointment.time)}`,
+        n,
+      ),
+      actionLabel: 'Review request',
+      onAction: () => navigate(n > 1 ? ROUTES.SP_APPOINTMENTS : route.spAppointment(newRequestAppointment.id)),
+    })
+  }
+
+  if (newPrescriptionRequest) {
+    const n = prescriptionRequests.filter(request => request.status === 'submitted').length
+    attentionItems.push({
+      id: 'new-prescription',
+      tone: 'action',
+      icon: 'prescription',
+      title: n > 1 ? `${n} prescriptions awaiting a quote` : 'New prescription upload',
+      detail: andMore(
+        `${newPrescriptionRequest.patient ?? 'A patient'} uploaded a prescription (${newPrescriptionRequest.id}). Check availability and send a quote.`,
+        n,
+      ),
+      actionLabel: 'Send quote',
+      onAction: () => navigate(n > 1 ? ROUTES.SP_PRESCRIPTIONS : route.spPrescription(newPrescriptionRequest.id)),
+    })
+  }
+
+  if (prescriptionReadyForPickupItems.length > 0) {
+    const n = prescriptionReadyForPickupItems.length
+    const primary = prescriptionReadyForPickupItems[0]
+    const delivery = primary.fulfillmentMode === 'delivery'
+    attentionItems.push({
+      id: 'rx-paid',
+      tone: 'action',
+      icon: 'prescription',
+      title: n > 1
+        ? `${n} paid prescriptions ready to hand off`
+        : delivery ? 'Prescription paid · prepare for delivery' : 'Prescription paid · prepare for pickup',
+      detail: andMore(primary.detail, n),
+      actionLabel: delivery ? 'Mark ready for delivery' : 'Mark ready for pickup',
+      onAction: () => handleMarkPrescriptionReady(primary),
+      secondaryAction: { label: 'View order', onAction: () => handleViewPrescriptionReady(primary) },
+      onDismiss: () => handlePrescriptionReadyDismiss(prescriptionReadyForPickupItems),
+    })
+  }
+
+  if (prescriptionDeclinedItems.length > 0) {
+    const n = prescriptionDeclinedItems.length
+    attentionItems.push({
+      id: 'rx-declined',
+      tone: 'alert',
+      icon: 'prescription',
+      title: n > 1 ? `${n} quotes declined` : 'Quote declined',
+      detail: andMore(prescriptionDeclinedItems[0].detail, n),
+      actionLabel: 'View request',
+      onAction: () => handlePrescriptionDeclinedAction(prescriptionDeclinedItems),
+      onDismiss: () => handlePrescriptionDeclinedDismiss(prescriptionDeclinedItems),
+    })
+  }
+
+  if (cancelledApptItems.length > 0) {
+    const n = cancelledApptItems.length
+    attentionItems.push({
+      id: 'appt-cancelled',
+      tone: 'alert',
+      icon: 'calendar-x',
+      title: n > 1 ? `${n} appointments cancelled` : 'Appointment cancelled',
+      detail: andMore(cancelledApptItems[0].detail, n),
+      actionLabel: 'View appointments',
+      onAction: () => handleCancelledApptAction(cancelledApptItems),
+      onDismiss: () => handleCancelledApptDismiss(cancelledApptItems),
+    })
+  }
+
+  if (prescriptionAcceptedItems.length > 0) {
+    const n = prescriptionAcceptedItems.length
+    attentionItems.push({
+      id: 'rx-accepted',
+      tone: 'success',
+      icon: 'prescription',
+      title: n > 1 ? `${n} quotes accepted` : 'Quote accepted',
+      detail: andMore(prescriptionAcceptedItems[0].detail, n),
+      actionLabel: 'Upload invoice',
+      onAction: () => handlePrescriptionAcceptedAction(prescriptionAcceptedItems),
+      onDismiss: () => handlePrescriptionAcceptedDismiss(prescriptionAcceptedItems),
+    })
+  }
+
+  if (paymentItems.length > 0) {
+    const n = paymentItems.length
+    const primary = paymentItems[0]
+    attentionItems.push({
+      id: 'payment',
+      tone: 'success',
+      icon: 'payment',
+      title: n > 1 ? `${n} new patient payments` : 'Payment authorized by patient',
+      meta: primary.amount != null ? formatAmount(primary.amount, primary.currency ?? currency) : undefined,
+      detail: andMore(primary.detail, n),
+      actionLabel: n > 1 ? 'View payments' : 'View payment',
+      onAction: () => handlePaymentBannerAction(paymentItems),
+    })
+  }
+
+  if (rescheduleAcceptedItems.length > 0) {
+    const n = rescheduleAcceptedItems.length
+    attentionItems.push({
+      id: 'reschedule-accepted',
+      tone: 'success',
+      icon: 'calendar',
+      title: n > 1 ? `${n} reschedules accepted` : 'Reschedule accepted',
+      detail: andMore(rescheduleAcceptedItems[0].detail, n),
+      actionLabel: 'View appointment',
+      onAction: () => handleRescheduleAcceptedAction(rescheduleAcceptedItems),
+      onDismiss: () => handleRescheduleAcceptedDismiss(rescheduleAcceptedItems),
+    })
+  }
+
+  if (newReviewItems.length > 0) {
+    const n = newReviewItems.length
+    attentionItems.push({
+      id: 'new-review',
+      tone: 'info',
+      icon: 'star',
+      title: n > 1 ? `${n} new patient reviews` : 'New patient review',
+      detail: andMore(newReviewItems[0].detail, n),
+      actionLabel: 'View review',
+      onAction: () => handleNewReviewAction(newReviewItems),
+      onDismiss: () => handleNewReviewDismiss(newReviewItems),
+    })
+  }
+
+  const greetingLine = `${greeting}, ${sp.name}`
+  const countryFlag = (size: number) =>
+    countryConfig && (
+      <span title={countryConfig.name} style={{ display: 'inline-flex', flexShrink: 0 }}>
+        <FlagImg code={countryConfig.code} size={size} style={{ borderRadius: '3px' }} />
+      </span>
+    )
+
   return (
-    <SPLayout title="Dashboard" notifCount={unreadCount}>
+    <SPLayout
+      title={isDesktop ? greetingLine : 'Dashboard'}
+      titleIcon={isDesktop ? countryFlag(22) : undefined}
+      notifCount={unreadCount}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
         <div
           style={{
@@ -390,31 +548,28 @@ export function SPDashboardScreen() {
           }}
         >
           <div style={{ minWidth: 0, flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div
-                style={{
-                  fontSize: isMobile ? '20px' : '28px',
-                  fontWeight: 800,
-                  color: C.text,
-                  letterSpacing: '-0.04em',
-                  fontFamily: font.family,
-                }}
-              >
-                {greeting}, {sp.name}
+            {/* On desktop the greeting is the page title in the top bar */}
+            {!isDesktop && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
+                {countryFlag(16)}
+                <div
+                  style={{
+                    fontSize: '20px',
+                    fontWeight: 800,
+                    color: C.text,
+                    letterSpacing: '-0.02em',
+                    fontFamily: font.family,
+                  }}
+                >
+                  {greetingLine}
+                </div>
               </div>
-              {countryConfig && (
-                <FlagImg
-                  code={countryConfig.code}
-                  size={isMobile ? 16 : 20}
-                  style={{ borderRadius: '3px' }}
-                />
-              )}
-            </div>
-            <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px', fontFamily: font.family }}>
-              {today}
-            </div>
+            )}
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '13px', color: C.textSub, fontFamily: font.family, marginRight: '4px' }}>
+                {today}
+              </span>
               {(sp.categories && sp.categories.length > 0 ? sp.categories : [sp.type]).map(categoryLabel => (
                 <span
                   key={categoryLabel}
@@ -440,158 +595,7 @@ export function SPDashboardScreen() {
           </div>
         </div>
 
-        {primaryKind === 'rejected' && (
-          <RejectedInvoiceAlertBanner
-            items={rejectedInvoiceItems}
-            onAction={item => navigate(route.spInvoice(item.id))}
-          />
-        )}
-
-        {primaryKind === 'new-request' && newRequestAppointment && (
-          <AppointmentReminderBanner
-            appointment={newRequestAppointment}
-            variant="new-request"
-            onView={() => navigate(route.spAppointment(newRequestAppointment.id))}
-          />
-        )}
-
-        {primaryKind === 'new-prescription' && newPrescriptionRequest && (
-          <div
-            style={{
-              padding: isMobile ? '14px 16px' : '18px 22px',
-              background: 'linear-gradient(90deg, rgba(245,158,11,0.08), rgba(245,158,11,0.02))',
-              borderRadius: radius.lg,
-              border: '1.5px solid rgba(245,158,11,0.24)',
-              display: 'flex',
-              gap: '14px',
-              alignItems: 'center',
-              flexWrap: 'wrap',
-              fontFamily: font.family,
-            }}
-          >
-            <div style={{
-              width: isMobile ? 38 : 46,
-              height: isMobile ? 38 : 46,
-              borderRadius: '12px',
-              background: '#F59E0B',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              flexShrink: 0,
-              boxShadow: '0 3px 10px rgba(245,158,11,0.35)',
-            }}>
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <rect x="4" y="2" width="14" height="18" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
-                <path d="M8 7h6M8 11h6M8 15h3.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 180 }}>
-              <div style={{ fontSize: '13px', fontWeight: 800, color: '#92400E', marginBottom: '3px' }}>
-                New prescription upload
-              </div>
-              <div style={{ fontSize: '13px', color: '#B45309', lineHeight: 1.5 }}>
-                {newPrescriptionRequest.patient ?? 'A patient'} uploaded a prescription ({newPrescriptionRequest.id}). Review availability and send a quote.
-              </div>
-            </div>
-            <GGButton
-              variant="primary"
-              size="sm"
-              onClick={() => navigate(route.spPrescription(newPrescriptionRequest.id))}
-              style={{
-                background: '#F59E0B',
-                border: 'none',
-                boxShadow: '0 2px 8px rgba(245,158,11,0.30)',
-                flexShrink: 0,
-                width: isMobile ? '100%' : 'auto',
-              }}
-            >
-              Review Prescription →
-            </GGButton>
-          </div>
-        )}
-
-        {prescriptionReadyForPickupItems.length > 0 && (
-          <PrescriptionReadyAlertBanner
-            items={prescriptionReadyForPickupItems}
-            onMarkReady={handleMarkPrescriptionReady}
-            onView={handleViewPrescriptionReady}
-            onDismiss={handlePrescriptionReadyDismiss}
-          />
-        )}
-
-        {paymentItems.length > 0 && (
-          <PaymentAlertBanner
-            audience="sp"
-            items={paymentItems}
-            onAction={handlePaymentBannerAction}
-          />
-        )}
-
-        {prescriptionAcceptedItems.length > 0 && (
-          <PrescriptionDecisionBanner
-            variant="accepted"
-            items={prescriptionAcceptedItems}
-            onAction={handlePrescriptionAcceptedAction}
-            onDismiss={handlePrescriptionAcceptedDismiss}
-          />
-        )}
-
-        {prescriptionDeclinedItems.length > 0 && (
-          <PrescriptionDecisionBanner
-            variant="declined"
-            items={prescriptionDeclinedItems}
-            onAction={handlePrescriptionDeclinedAction}
-            onDismiss={handlePrescriptionDeclinedDismiss}
-          />
-        )}
-
-        {cancelledApptItems.length > 0 && (
-          <SPActionBanner
-            items={cancelledApptItems}
-            title={count => count > 1 ? `${count} appointments cancelled` : 'Appointment cancelled'}
-            actionLabel="View appointments"
-            icon={
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke="#fff" strokeWidth="1.5"/>
-                <path d="M2 8.5h18M7 2v3M15 2v3" stroke="#fff" strokeWidth="1.4" strokeLinecap="round"/>
-                <path d="M8.5 9l5 5M13.5 9l-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round"/>
-              </svg>
-            }
-            onAction={handleCancelledApptAction}
-            onDismiss={handleCancelledApptDismiss}
-          />
-        )}
-
-        {rescheduleAcceptedItems.length > 0 && (
-          <SPActionBanner
-            items={rescheduleAcceptedItems}
-            title={count => count > 1 ? `${count} reschedules accepted` : 'Reschedule accepted'}
-            actionLabel="View appointment"
-            icon={
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <circle cx="11" cy="11" r="8" stroke="#fff" strokeWidth="1.5"/>
-                <path d="M11 7v4l2.5 1.5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round"/>
-              </svg>
-            }
-            onAction={handleRescheduleAcceptedAction}
-            onDismiss={handleRescheduleAcceptedDismiss}
-          />
-        )}
-
-        {newReviewItems.length > 0 && (
-          <SPActionBanner
-            items={newReviewItems}
-            title={count => count > 1 ? `${count} new patient reviews` : 'New patient review'}
-            actionLabel="View review"
-            icon={
-              <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                <path d="M11 3.5l2.1 4.3 4.7.7-3.4 3.3.8 4.7L11 14.3 6.8 16.5l.8-4.7-3.4-3.3 4.7-.7L11 3.5z" stroke="#fff" strokeWidth="1.5" strokeLinejoin="round"/>
-              </svg>
-            }
-            onAction={handleNewReviewAction}
-            onDismiss={handleNewReviewDismiss}
-          />
-        )}
+        <DashboardAttention items={attentionItems} />
 
         <button
           type="button"
@@ -607,8 +611,8 @@ export function SPDashboardScreen() {
             <div style={{ fontSize: '11px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '6px', fontFamily: font.family }}>
               This Month
             </div>
-            <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
-              {formatCurrency(sp.monthlyEarnings)}
+            <div style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>
+              {formatAmount(sp.monthlyEarnings, currency)}
             </div>
             <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px', fontFamily: font.family }}>
               Authorized this month · View payments
@@ -622,12 +626,14 @@ export function SPDashboardScreen() {
           showAppointments={!isPharmacyOnly}
           showPrescriptions={Boolean(isPharmacyOnly || isPharmacy || sp.isPharmacy)}
           recentPayments={recentPayments}
+          currency={currency}
           onboardingComplete={onboardingComplete}
           setupSteps={setupSteps}
           doneCount={doneCount}
           onStepAction={handleStepAction}
         />
 
+        <InstallAppPrompt variant="card" />
         <HealthNewsSection articles={healthNews} />
       </div>
     </SPLayout>

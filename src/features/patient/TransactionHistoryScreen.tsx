@@ -68,7 +68,7 @@ export function TransactionHistoryScreen() {
           ].map(s => (
             <GGCard key={s.label} padding="18px 22px">
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>{s.label}</div>
-              <div style={{ fontSize: '24px', fontWeight: 800, color: s.color, letterSpacing: '-0.04em' }}>{s.val}</div>
+              <div style={{ fontSize: '24px', fontWeight: 800, color: s.color, letterSpacing: '-0.02em' }}>{s.val}</div>
             </GGCard>
           ))}
         </div>
@@ -85,7 +85,7 @@ export function TransactionHistoryScreen() {
               ))}
             </div>
           </div>
-          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <div style={{ overflowX: 'auto', overflowY: 'hidden', WebkitOverflowScrolling: 'touch' }}>
             <table style={{ width: '100%', tableLayout: 'fixed', borderCollapse: 'collapse', fontFamily: font.family }}>
               <colgroup>
                 {TABLE_COLUMNS.map(col => (

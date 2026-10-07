@@ -71,7 +71,7 @@ export function ResetPasswordScreen() {
                 <circle cx="16" cy="21" r="1" fill={C.error} />
               </svg>
             </div>
-            <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '8px' }}>
+            <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
               Invalid Reset Link
             </div>
             <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '24px' }}>
@@ -136,7 +136,7 @@ export function ResetPasswordScreen() {
             )}
           </div>
 
-          <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', marginBottom: '8px' }}>
+          <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
             {success ? 'Password Reset Complete' : 'Set New Password'}
           </div>
           <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '28px' }}>

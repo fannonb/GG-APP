@@ -204,7 +204,7 @@ export function PINAuthScreen() {
               </div>
               <div style={{ fontSize: '18px', fontWeight: 700, color: C.error, marginBottom: '8px' }}>Session Locked</div>
               <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>Too many incorrect PIN entries. Please try again in:</div>
-              <div style={{ fontSize: '40px', fontWeight: 800, color: C.error, letterSpacing: '-0.03em', marginBottom: '8px' }}>
+              <div style={{ fontSize: '40px', fontWeight: 800, color: C.error, letterSpacing: '-0.015em', marginBottom: '8px' }}>
                 {String(Math.floor(lockTimer / 60)).padStart(2, '0')}:{String(lockTimer % 60).padStart(2, '0')}
               </div>
               <div style={{ fontSize: '12px', color: C.textSub }}>The platform admin has been notified of this event.</div>
@@ -219,7 +219,7 @@ export function PINAuthScreen() {
                 <div style={{ fontSize: '11px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: '4px' }}>
                   {isPartialPay ? 'Authorizing In-App Portion' : 'Authorizing Payment'}
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em' }}>{formatCurrency(walletPayAmount)}</div>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{formatCurrency(walletPayAmount)}</div>
                 <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>to {inv.provider.name}</div>
                 {isPartialPay && (
                   <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>

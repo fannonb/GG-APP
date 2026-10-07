@@ -1,9 +1,11 @@
-import { useState } from 'react'
-import type { ReactElement } from 'react'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
 import { resolvePatientNotificationRoute } from '@/features/patient/notification-routing'
 import { useMarkPatientNotificationReadMutation } from '@/hooks/api/usePatientMutations'
+import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
+import { useResponsive } from '@/hooks/useResponsive'
+import { ROUTES } from '@/router/routes'
 import { useNotificationsStore } from '@/store/notifications.store'
 import type { Notification, NotificationType } from '@/types/user.types'
 import { formatRelativeTime } from '@/utils/format'
@@ -12,16 +14,18 @@ interface Props {
   role: 'patient' | 'sp'
 }
 
-type IconFactory = () => ReactElement
+const CYAN_DEEP = '#0B7BC0'
+const DAY = 86_400_000
 
-const TYPE_ICON: Record<NotificationType, IconFactory> = {
-  payment: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="3.5" width="14" height="9" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M1 6.5h14" stroke="currentColor" strokeWidth="1.2"/><circle cx="11.5" cy="9.5" r="1.3" fill="currentColor"/></svg>,
-  invoice: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2" y="1" width="12" height="14" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M5 5h6M5 8h6M5 11h4" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round"/></svg>,
-  appointment: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1" y="2.5" width="14" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><path d="M1 6.5h14M5 1v3M11 1v3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/><circle cx="8" cy="10" r="1.5" fill="currentColor"/></svg>,
-  credit: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
-  system: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 7v4M8 5v.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>,
-  prescription: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="2" width="10" height="12" rx="2" stroke="currentColor" strokeWidth="1.3"/><line x1="8" y1="5" x2="8" y2="11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/><line x1="5" y1="8" x2="11" y2="8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/></svg>,
-  ledger: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="7" width="9" height="7" rx="1.5" stroke="currentColor" strokeWidth="1.3"/><path d="M5.5 7V5.2a2.5 2.5 0 015 0V7" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/></svg>,
+const s = { stroke: 'currentColor', strokeWidth: 1.4, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+const TYPE_STYLE: Record<NotificationType, { fg: string; bg: string; icon: () => ReactElement }> = {
+  invoice: { fg: '#B45309', bg: '#FEF3C7', icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="2.5" y="1.5" width="11" height="13" rx="2" {...s} /><path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" {...s} /></svg> },
+  payment: { fg: '#15803D', bg: '#DCFCE7', icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="3.5" width="13" height="9" rx="2" {...s} /><path d="M1.5 6.5h13" {...s} /><path d="M10.5 9.5h1.5" {...s} /></svg> },
+  appointment: { fg: CYAN_DEEP, bg: C.blue100, icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="1.5" y="2.5" width="13" height="12" rx="2" {...s} /><path d="M1.5 6.5h13M5 1v3M11 1v3" {...s} /></svg> },
+  prescription: { fg: '#0F766E', bg: '#CCFBF1', icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3" y="1.5" width="10" height="13" rx="2" {...s} /><path d="M8 5v6M5 8h6" {...s} /></svg> },
+  credit: { fg: '#1D4ED8', bg: '#DBEAFE', icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" {...s} /><path d="M8 4.5v7M10 6.2c-.4-.6-1.1-.9-2-.9-1.1 0-2 .6-2 1.4 0 1.9 4 .9 4 2.8 0 .8-.9 1.4-2 1.4-.9 0-1.6-.3-2-.9" {...s} /></svg> },
+  ledger: { fg: '#7C3AED', bg: '#EDE9FE', icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="7" width="9" height="7" rx="1.5" {...s} /><path d="M5.5 7V5.2a2.5 2.5 0 015 0V7" {...s} /></svg> },
+  system: { fg: C.textSub, bg: C.bg, icon: () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6.5" {...s} /><path d="M8 7.2v4M8 4.8v.2" {...s} strokeWidth={1.7} /></svg> },
 }
 
 const SP_SCREEN_MAP: Record<string, string> = {
@@ -32,344 +36,335 @@ const SP_SCREEN_MAP: Record<string, string> = {
   settings: '/sp/settings',
 }
 
-const TYPE_LABEL: Record<NotificationType, string> = {
-  payment: 'Payment',
-  invoice: 'Invoice',
-  appointment: 'Appointment',
-  credit: 'Balance',
-  system: 'System',
-  prescription: 'Prescription',
-  ledger: 'Ledger',
+/** A short call to action for notifications that are waiting on the reader. */
+function actionLabel(n: Notification, role: 'patient' | 'sp') {
+  if (n.read) return null
+  const text = `${n.title} ${n.body}`.toLowerCase()
+  if (role === 'patient') {
+    if (n.type === 'invoice' && /pending|authori[sz]|approve|review/.test(text)) return 'Review invoice'
+    if (/reschedul|new time/.test(text)) return 'See new time'
+    if (n.type === 'prescription' && /quote|price/.test(text)) return 'Review quote'
+    if (n.type === 'ledger' && /expir/.test(text)) return 'Set new PIN'
+    return null
+  }
+  if (n.type === 'appointment' && /new appointment request|requested/.test(text)) return 'Respond'
+  if (n.type === 'prescription' && /new prescription|uploaded/.test(text)) return 'Send quote'
+  return null
 }
 
-function groupNotifications(notifications: Notification[]) {
-  const sorted = [...notifications].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
-  const now = new Date()
-  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const yesterdayStart = todayStart - 24 * 60 * 60 * 1000
-  const today: Notification[] = []
-  const yesterday: Notification[] = []
-  const earlier: Notification[] = []
+function groupLabel(iso: string, now: number) {
+  const date = new Date(iso)
+  const today = new Date(now)
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const time = date.getTime()
+  if (time >= start) return 'Today'
+  if (time >= start - DAY) return 'Yesterday'
+  if (time >= start - 6 * DAY) return 'This week'
+  return date.toLocaleDateString('en-GB', { month: 'long', year: date.getFullYear() === today.getFullYear() ? undefined : 'numeric' })
+}
 
-  sorted.forEach(notification => {
-    const time = new Date(notification.time).getTime()
-    if (time >= todayStart) {
-      today.push(notification)
-    } else if (time >= yesterdayStart) {
-      yesterday.push(notification)
-    } else {
-      earlier.push(notification)
-    }
-  })
+function groupNotifications(list: Notification[], now: number) {
+  const groups: Array<{ title: string; items: Notification[] }> = []
+  for (const n of [...list].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())) {
+    const title = groupLabel(n.time, now)
+    const last = groups[groups.length - 1]
+    if (last?.title === title) last.items.push(n)
+    else groups.push({ title, items: [n] })
+  }
+  return groups
+}
 
-  return [
-    today.length > 0 ? { title: 'Today', items: today } : null,
-    yesterday.length > 0 ? { title: 'Yesterday', items: yesterday } : null,
-    earlier.length > 0 ? { title: 'Earlier', items: earlier } : null,
-  ].filter(Boolean) as Array<{ title: string; items: Notification[] }>
+/** Mark many as read without firing every request at once. */
+async function inBatches(ids: string[], run: (id: string) => Promise<unknown>, size = 4) {
+  for (let i = 0; i < ids.length; i += size) {
+    await Promise.allSettled(ids.slice(i, i + size).map(run))
+  }
+}
+
+function RowMenu({ unread, onRead, onDismiss }: { unread: boolean; onRead: () => void; onDismiss: () => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => { if (!ref.current?.contains(event.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+  const item: React.CSSProperties = { display: 'block', width: '100%', textAlign: 'left', padding: '9px 14px', background: 'none', border: 'none', fontSize: 13.5, color: C.text, fontFamily: font.family, cursor: 'pointer', whiteSpace: 'nowrap' }
+  return (
+    <div ref={ref} style={{ position: 'relative', flexShrink: 0 }} onClick={event => event.stopPropagation()}>
+      <button
+        type="button"
+        aria-label="More options"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen(value => !value)}
+        style={{ width: 32, height: 32, borderRadius: radius.full, border: 'none', background: open ? C.bg : 'transparent', color: C.textSub, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      >
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden><circle cx="3.5" cy="8" r="1.3" /><circle cx="8" cy="8" r="1.3" /><circle cx="12.5" cy="8" r="1.3" /></svg>
+      </button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 34, zIndex: 5, background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.sm, boxShadow: '0 8px 24px rgba(13,30,66,0.14)', padding: '4px 0', minWidth: 150 }}>
+          {unread && <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); onRead() }}>Mark as read</button>}
+          <button type="button" role="menuitem" style={item} onClick={() => { setOpen(false); onDismiss() }}>Dismiss</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NotificationRow({ n, role, onOpen, onRead, onDismiss }: { n: Notification; role: 'patient' | 'sp'; onOpen: () => void; onRead: () => void; onDismiss: () => void }) {
+  const { isMobile } = useResponsive()
+  const style = TYPE_STYLE[n.type] ?? TYPE_STYLE.system
+  const Icon = style.icon
+  const cta = actionLabel(n, role)
+  // Swipe left on touch screens to dismiss.
+  const startX = useRef<number | null>(null)
+  const [dx, setDx] = useState(0)
+  const [swiping, setSwiping] = useState(false)
+
+  return (
+    <li style={{ position: 'relative', overflow: 'hidden', borderBottom: `1px solid ${C.border}` }}>
+      {dx < 0 && (
+        <div aria-hidden style={{ position: 'absolute', inset: 0, background: '#FEE2E2', color: '#B91C1C', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 20, fontSize: 13, fontWeight: 700 }}>
+          Dismiss
+        </div>
+      )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={event => { if (event.key === 'Enter') onOpen() }}
+        onTouchStart={event => { startX.current = event.touches[0].clientX; setSwiping(true) }}
+        onTouchMove={event => {
+          if (startX.current == null) return
+          setDx(Math.min(0, event.touches[0].clientX - startX.current))
+        }}
+        onTouchEnd={() => {
+          if (dx < -90) onDismiss()
+          setDx(0)
+          setSwiping(false)
+          startX.current = null
+        }}
+        className="notif-row"
+        style={{
+          position: 'relative',
+          display: 'flex',
+          gap: 12,
+          padding: isMobile ? '14px 12px 14px 16px' : '14px 12px 14px 20px',
+          background: n.read ? '#fff' : '#F5FAFE',
+          cursor: 'pointer',
+          transform: dx ? `translateX(${dx}px)` : 'none',
+          transition: swiping ? 'none' : 'transform 0.2s ease',
+          outline: 'none',
+        }}
+      >
+        <span aria-hidden style={{ width: 36, height: 36, borderRadius: radius.full, background: style.bg, color: style.fg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+          <Icon />
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: n.read ? 600 : 800, color: C.text, lineHeight: 1.35 }}>{n.title}</span>
+            <span style={{ fontSize: 12, color: C.textLight, whiteSpace: 'nowrap', flexShrink: 0 }}>{formatRelativeTime(n.time)}</span>
+          </div>
+          <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.45, marginTop: 2, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            {n.body}
+          </div>
+          {cta && (
+            <span style={{ display: 'inline-block', marginTop: 8, padding: '6px 12px', borderRadius: radius.sm, background: CYAN_DEEP, color: '#fff', fontSize: 12.5, fontWeight: 700 }}>
+              {cta}
+            </span>
+          )}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+          <RowMenu unread={!n.read} onRead={onRead} onDismiss={onDismiss} />
+          {!n.read && <span aria-label="Unread" style={{ width: 8, height: 8, borderRadius: '50%', background: C.blue500 }} />}
+        </div>
+      </div>
+    </li>
+  )
 }
 
 export function NotificationPanel({ role }: Props) {
+  const panelOpen = useNotificationsStore(state => state.panelOpen)
+  // Mounted only while open, so the clock, filter and focus start fresh each time.
+  return panelOpen ? <PanelBody role={role} /> : null
+}
+
+function PanelBody({ role }: Props) {
   const navigate = useNavigate()
-  const {
-    patientNotifs,
-    spNotifs,
-    panelOpen,
-    closePanel,
-    dismiss,
-    markAllRead,
-    markRead,
-  } = useNotificationsStore()
-  const markPatientNotificationRead = useMarkPatientNotificationReadMutation()
+  const { isMobile } = useResponsive()
+  const { patientNotifs, spNotifs, dismissed, closePanel, dismiss, markRead } = useNotificationsStore()
+  const markPatientRead = useMarkPatientNotificationReadMutation()
+  const markSPRead = useMarkSPNotificationReadMutation()
   const [filter, setFilter] = useState<'all' | 'unread'>('all')
+  const [markingAll, setMarkingAll] = useState(false)
+  const [now] = useState(() => Date.now())
+  const dialogRef = useRef<HTMLDivElement>(null)
 
-  if (!panelOpen) return null
-
-  const notifications = role === 'patient' ? patientNotifs : spNotifs
-  const unreadCount = notifications.filter(notification => !notification.read).length
-  const filteredNotifications = filter === 'unread'
-    ? notifications.filter(notification => !notification.read)
-    : notifications
-  const groupedNotifications = groupNotifications(filteredNotifications)
-
-  const handleMarkAll = async () => {
-    if (role === 'patient') {
-      const unreadNotifications = patientNotifs.filter(notification => !notification.read)
-      await Promise.all(
-        unreadNotifications.map(notification => markPatientNotificationRead.mutateAsync(notification.id)),
-      )
-      return
+  useEffect(() => {
+    dialogRef.current?.focus()
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') closePanel() }
+    // Keep the page behind still while the panel is open.
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', onKey)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
     }
+  }, [closePanel])
 
-    markAllRead(role)
+  const hidden = new Set(dismissed[role])
+  const notifications = (role === 'patient' ? patientNotifs : spNotifs).filter(n => !hidden.has(n.id))
+  const unread = notifications.filter(n => !n.read)
+  const shown = filter === 'unread' ? unread : notifications
+  const groups = groupNotifications(shown, now)
+
+  const readOne = (n: Notification) => {
+    if (n.read) return
+    if (role === 'patient') markPatientRead.mutate(n.id)
+    else markSPRead.mutate(n.id)
   }
 
-  const handleNotificationClick = (notification: Notification) => {
-    if (role === 'patient') {
-      if (!notification.read) {
-        markPatientNotificationRead.mutate(notification.id)
-      }
-      closePanel()
-      navigate(resolvePatientNotificationRoute(notification))
-      return
-    }
+  const markAll = async () => {
+    setMarkingAll(true)
+    const ids = unread.map(n => n.id)
+    // Optimistic: clear the dots now, then save in small batches.
+    ids.forEach(id => markRead(id, role))
+    await inBatches(ids, id => (role === 'patient' ? markPatientRead.mutateAsync(id) : markSPRead.mutateAsync(id)))
+    setMarkingAll(false)
+  }
 
-    if (!notification.read) {
-      markRead(notification.id, role)
-    }
+  const open = (n: Notification) => {
+    readOne(n)
     closePanel()
-    if (notification.screen.startsWith('/')) {
-      navigate(notification.screen)
+    if (role === 'patient') {
+      navigate(resolvePatientNotificationRoute(n))
       return
     }
-    const destination = SP_SCREEN_MAP[notification.screen]
-    if (destination) navigate(destination)
+    if (n.screen.startsWith('/')) navigate(n.screen)
+    else if (SP_SCREEN_MAP[n.screen]) navigate(SP_SCREEN_MAP[n.screen])
   }
 
-  const handleMarkSingle = (notification: Notification) => {
-    if (role === 'patient') {
-      markPatientNotificationRead.mutate(notification.id)
-      return
-    }
-    markRead(notification.id, role)
+  const remove = (n: Notification) => {
+    // A dismissed item shouldn't keep the bell badge lit.
+    readOne(n)
+    dismiss(n.id, role)
   }
 
   return (
     <>
       <style>{`
-        @keyframes slideInPanel {
-          from { transform: translateX(100%); }
-          to { transform: translateX(0); }
-        }
-        @keyframes fadeInBackdrop {
-          from { opacity: 0; }
-          to { opacity: 1; }
-        }
-        .notif-card {
-          transition: all 0.2s ease;
-        }
-        .notif-card:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 4px 14px rgba(13, 30, 66, 0.08);
-          border-color: ${C.blue500};
-        }
-        .notif-actions {
-          opacity: 0;
-          max-height: 0;
-          overflow: hidden;
-          transition: all 0.2s ease;
-        }
-        .notif-card:hover .notif-actions {
-          opacity: 1;
-          max-height: 24px;
-          margin-top: 8px;
-        }
+        @keyframes notifSlideIn { from { transform: translateX(100%) } to { transform: none } }
+        @keyframes notifSlideUp { from { transform: translateY(100%) } to { transform: none } }
+        @keyframes notifFade { from { opacity: 0 } to { opacity: 1 } }
+        .notif-row:hover { background: #F2F7FC !important; }
+        .notif-row:focus-visible { box-shadow: inset 0 0 0 2px ${CYAN_DEEP}; }
       `}</style>
 
-      <div
-        onClick={closePanel}
-        style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 1000,
-          background: 'rgba(9, 28, 68, 0.4)',
-          backdropFilter: 'blur(5px)',
-          animation: 'fadeInBackdrop 0.25s ease forwards',
-        }}
-      />
+      <div onClick={closePanel} style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(9,28,68,0.35)', animation: 'notifFade 0.2s ease' }} />
 
       <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Notifications"
+        tabIndex={-1}
         style={{
           position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
-          width: 'min(420px, 100vw)',
           zIndex: 1001,
           display: 'flex',
           flexDirection: 'column',
-          background: C.bg,
-          boxShadow: '-8px 0 48px rgba(9, 28, 68, 0.15)',
-          animation: 'slideInPanel 0.3s ease forwards',
+          background: '#fff',
           fontFamily: font.family,
+          outline: 'none',
+          ...(isMobile
+            ? { left: 0, right: 0, bottom: 0, height: '88vh', borderRadius: `${radius.lg} ${radius.lg} 0 0`, animation: 'notifSlideUp 0.25s ease', boxShadow: '0 -8px 40px rgba(9,28,68,0.18)' }
+            : { top: 0, right: 0, bottom: 0, width: 420, animation: 'notifSlideIn 0.25s ease', boxShadow: '-8px 0 40px rgba(9,28,68,0.15)' }),
         }}
       >
-        <div style={{ background: '#fff', padding: '20px 20px 16px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <div style={{ fontSize: '18px', fontWeight: 800, color: C.text }}>Notifications</div>
-                {unreadCount > 0 && (
-                  <span style={{ background: C.blue500, color: '#fff', fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: radius.full }}>
-                    {unreadCount} new
-                  </span>
-                )}
-              </div>
-              <div style={{ fontSize: '12px', color: C.textSub, marginTop: '3px', fontWeight: 500 }}>
-                {unreadCount > 0 ? `${unreadCount} unread notification${unreadCount > 1 ? 's' : ''}` : 'All caught up'}
-              </div>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              {unreadCount > 0 && (
-                <button
-                  onClick={() => { void handleMarkAll() }}
-                  style={{ background: 'none', border: 'none', padding: '6px 10px', color: C.blue500, fontSize: '12px', fontWeight: 700, cursor: 'pointer', fontFamily: font.family, borderRadius: '8px' }}
-                >
-                  Mark all read
-                </button>
-              )}
-              <button
-                onClick={closePanel}
-                style={{ width: 32, height: 32, borderRadius: '50%', background: 'transparent', border: 'none', color: C.textSub, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-              >
-                <svg width="12" height="12" viewBox="0 0 14 14" fill="none">
-                  <path d="M1 1l12 12M13 1L1 13" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                </svg>
-              </button>
-            </div>
+        {isMobile && (
+          <div aria-hidden style={{ display: 'flex', justifyContent: 'center', padding: '8px 0 0' }}>
+            <span style={{ width: 40, height: 4, borderRadius: 2, background: C.border }} />
           </div>
+        )}
 
-          <div style={{ display: 'flex', background: 'rgba(9, 28, 68, 0.04)', borderRadius: '10px', padding: '3px' }}>
-            {(['all', 'unread'] as const).map(value => (
-              <button
-                key={value}
-                onClick={() => setFilter(value)}
-                style={{
-                  flex: 1,
-                  padding: '8px 12px',
-                  background: filter === value ? '#fff' : 'transparent',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: 'pointer',
-                  fontFamily: font.family,
-                  fontSize: '12px',
-                  fontWeight: filter === value ? 700 : 500,
-                  color: filter === value ? C.navy800 : C.textSub,
-                  boxShadow: filter === value ? '0 1px 4px rgba(13, 30, 66, 0.08)' : 'none',
-                }}
-              >
-                {value === 'all' ? `All (${notifications.length})` : `Unread (${unreadCount})`}
+        <div style={{ padding: isMobile ? '10px 16px 12px' : '20px 20px 14px', borderBottom: `1px solid ${C.border}`, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <h2 style={{ flex: 1, margin: 0, fontSize: 19, fontWeight: 800, color: C.text }}>Notifications</h2>
+            <button
+              type="button"
+              aria-label="Close notifications"
+              onClick={closePanel}
+              style={{ width: 40, height: 40, borderRadius: radius.full, background: C.bg, border: 'none', color: C.text, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+            </button>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
+            <div role="tablist" aria-label="Filter" style={{ display: 'inline-flex', padding: 3, gap: 2, background: '#E3ECF6', borderRadius: radius.sm }}>
+              {(['all', 'unread'] as const).map(value => {
+                const active = filter === value
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setFilter(value)}
+                    style={{ height: 32, padding: '0 14px', border: 'none', borderRadius: 7, background: active ? '#fff' : 'transparent', boxShadow: active ? '0 1px 3px rgba(13,30,66,0.12)' : 'none', color: active ? C.text : C.textSub, fontSize: 13, fontWeight: 700, fontFamily: font.family, cursor: 'pointer' }}
+                  >
+                    {value === 'all' ? 'All' : 'Unread'}
+                    {value === 'unread' && unread.length > 0 && <span style={{ marginLeft: 6, color: CYAN_DEEP }}>{unread.length}</span>}
+                  </button>
+                )
+              })}
+            </div>
+            {unread.length > 0 && (
+              <button type="button" disabled={markingAll} onClick={() => void markAll()} style={{ background: 'none', border: 'none', padding: '6px 0', color: CYAN_DEEP, fontSize: 13, fontWeight: 700, fontFamily: font.family, cursor: 'pointer', opacity: markingAll ? 0.6 : 1 }}>
+                Mark all as read
               </button>
-            ))}
+            )}
           </div>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '16px' }}>
-          {groupedNotifications.length === 0 ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: '16px', padding: '40px 20px', textAlign: 'center' }}>
-              <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#fff', border: `1.5px solid ${C.border}`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
-                  <path d="M12 3a7.5 7.5 0 00-7.5 7.5c0 3.5-1 5.5-2 7h19c-1-1.5-2-3.5-2-7A7.5 7.5 0 0012 3z" stroke={C.blue500} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M9.5 19.5a2.5 2.5 0 005 0" stroke={C.blue500} strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </div>
-              <div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>All clear!</div>
-                <div style={{ fontSize: '13px', color: C.textLight, marginTop: '6px', lineHeight: 1.5 }}>
-                  {filter === 'unread' ? "You've read all your notifications." : 'There are no notifications at the moment.'}
-                </div>
+        <div className="hide-scrollbar" style={{ flex: 1, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+          {groups.length === 0 ? (
+            <div style={{ padding: '56px 24px', textAlign: 'center' }}>
+              <span aria-hidden style={{ width: 52, height: 52, margin: '0 auto 14px', borderRadius: radius.full, background: C.blue100, color: CYAN_DEEP, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+              </span>
+              <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>You’re all caught up</div>
+              <div style={{ fontSize: 13, color: C.textSub, marginTop: 4 }}>
+                {filter === 'unread' ? 'No unread notifications.' : 'New updates will show up here.'}
               </div>
             </div>
           ) : (
-            groupedNotifications.map(group => (
-              <div key={group.title} style={{ marginBottom: '20px' }}>
-                <div style={{ fontSize: '11px', fontWeight: 800, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '10px', paddingLeft: '4px' }}>
-                  {group.title}
-                </div>
-
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {group.items.map(notification => {
-                    const Icon = TYPE_ICON[notification.type] ?? TYPE_ICON.system
-                    const accent = notification.read ? C.textSub : C.blue500
-                    return (
-                      <div
-                        key={notification.id}
-                        className="notif-card"
-                        onClick={() => handleNotificationClick(notification)}
-                        style={{
-                          display: 'flex',
-                          gap: '12px',
-                          padding: '14px 16px',
-                          borderRadius: radius.lg,
-                          border: `1px solid ${notification.read ? C.border : 'rgba(56,182,255,0.4)'}`,
-                          background: notification.read ? '#fff' : 'rgba(56,182,255,0.04)',
-                          boxShadow: notification.read ? '0 1px 3px rgba(13,30,66,0.03)' : '0 2px 8px rgba(56,182,255,0.06)',
-                          cursor: 'pointer',
-                          position: 'relative',
-                        }}
-                      >
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0, background: notification.read ? C.bg : 'rgba(56,182,255,0.15)', color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: '2px' }}>
-                          <Icon />
-                        </div>
-
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '8px', marginBottom: '2px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                              <span style={{ fontSize: '13px', fontWeight: notification.read ? 600 : 750, color: C.text, lineHeight: 1.35 }}>
-                                {notification.title}
-                              </span>
-                              {!notification.read && (
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.blue500, display: 'inline-block' }} />
-                              )}
-                            </div>
-                            <span style={{ fontSize: '10px', color: C.textLight, whiteSpace: 'nowrap', flexShrink: 0, marginTop: '2px' }}>
-                              {formatRelativeTime(notification.time)}
-                            </span>
-                          </div>
-
-                          <div style={{ fontSize: '9px', fontWeight: 800, color: C.textSub, background: C.bg, border: `1px solid ${C.border}`, padding: '1px 6px', borderRadius: radius.full, display: 'inline-block', marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                            {TYPE_LABEL[notification.type]}
-                          </div>
-
-                          <div style={{ fontSize: '12px', color: C.textSub, lineHeight: 1.5 }}>
-                            {notification.body}
-                          </div>
-
-                          <div className="notif-actions" style={{ display: 'flex', gap: '12px' }}>
-                            {!notification.read && (
-                              <button
-                                onClick={event => {
-                                  event.stopPropagation()
-                                  handleMarkSingle(notification)
-                                }}
-                                style={{ background: 'none', border: 'none', padding: 0, fontSize: '11px', fontWeight: 700, color: C.blue500, cursor: 'pointer', fontFamily: font.family }}
-                              >
-                                Mark as read
-                              </button>
-                            )}
-                            <button
-                              onClick={event => {
-                                event.stopPropagation()
-                                dismiss(notification.id, role)
-                              }}
-                              style={{ background: 'none', border: 'none', padding: 0, fontSize: '11px', fontWeight: 700, color: C.textSub, cursor: 'pointer', fontFamily: font.family }}
-                            >
-                              Dismiss
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+            groups.map(group => (
+              <section key={group.title} aria-label={group.title}>
+                <h3 style={{ margin: 0, padding: isMobile ? '14px 16px 6px' : '16px 20px 6px', fontSize: 13, fontWeight: 700, color: C.textSub, background: '#fff' }}>{group.title}</h3>
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, borderTop: `1px solid ${C.border}` }}>
+                  {group.items.map(n => (
+                    <NotificationRow key={n.id} n={n} role={role} onOpen={() => open(n)} onRead={() => readOne(n)} onDismiss={() => remove(n)} />
+                  ))}
+                </ul>
+              </section>
             ))
           )}
         </div>
 
-        <div style={{ padding: '14px 18px', borderTop: `1px solid ${C.border}`, background: '#fff', flexShrink: 0 }}>
-          <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', lineHeight: 1.5 }}>
-            Notifications are cleared after 30 days.{` `}
-            {unreadCount > 0 && (
-              <span
-                onClick={() => { void handleMarkAll() }}
-                style={{ color: C.blue500, fontWeight: 700, cursor: 'pointer' }}
-              >
-                Mark all as read
-              </span>
-            )}
+        {role === 'patient' && (
+          <div style={{ padding: isMobile ? '12px 16px calc(12px + env(safe-area-inset-bottom))' : '12px 20px', borderTop: `1px solid ${C.border}`, flexShrink: 0 }}>
+            <button
+              type="button"
+              onClick={() => { closePanel(); navigate(ROUTES.NOTIFICATIONS) }}
+              style={{ width: '100%', height: 40, borderRadius: radius.sm, border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: 13.5, fontWeight: 700, fontFamily: font.family, cursor: 'pointer' }}
+            >
+              See all notifications
+            </button>
           </div>
-        </div>
+        )}
       </div>
     </>
   )

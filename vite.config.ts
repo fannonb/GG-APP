@@ -32,6 +32,8 @@ export default defineConfig(({ mode }) => {
           // Everything the shell needs to boot offline: hashed bundles,
           // index.html, manifest, icons and public images.
           globPatterns: ['**/*.{js,css,html,svg,png,webmanifest,ico,woff2}'],
+          // Install-dialog screenshots are only fetched by the browser's install UI.
+          globIgnores: ['screenshots/**'],
           maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         },
       }),

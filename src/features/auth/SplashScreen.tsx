@@ -1,75 +1,76 @@
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { C, font } from '@/design-system/tokens'
-import { ROUTES, LOGO } from '@/router/routes'
+import { ROUTES, PORTAL_HOME } from '@/router/routes'
+import { useAuthStore } from '@/store/auth.store'
+import { getInstallState } from '@/services/install-prompt'
+
+/** Long enough for the mark to land, short enough not to feel like a wait. */
+const SPLASH_MS = 1200
+const SEEN_KEY = 'gg_seen_splash'
+
+const MARK_LIGHT = '/gg-mark-light.png'
+const WORDMARK_LIGHT = '/gg-wordmark-light.png'
+
+function seenBefore() {
+  try {
+    return localStorage.getItem(SEEN_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 export function SplashScreen() {
   const navigate = useNavigate()
+  const { loggedIn, userRole } = useAuthStore()
+  // Returning visitors and the installed app (which already shows the phone's
+  // own launch screen) go straight in; only a first visit sees the intro.
+  const [skip] = useState(() => (loggedIn && !!userRole) || seenBefore() || getInstallState().mode === 'installed')
+  const target = loggedIn && userRole ? PORTAL_HOME[userRole] : ROUTES.LOGIN
 
   useEffect(() => {
-    const t = setTimeout(() => navigate(ROUTES.LOGIN, { replace: true }), 2800)
+    if (skip) return
+    const t = setTimeout(() => {
+      // Mark it seen only once it has actually played, so a remount mid-way still shows it.
+      try { localStorage.setItem(SEEN_KEY, '1') } catch { /* private mode */ }
+      navigate(target, { replace: true })
+    }, SPLASH_MS)
     return () => clearTimeout(t)
-  }, [navigate])
+  }, [skip, navigate, target])
+
+  if (skip) return <Navigate to={target} replace />
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#091c44',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'column',
-      gap: '32px',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Decorative rings */}
-      {[280, 480, 680].map((r, i) => (
-        <div key={i} style={{
-          position: 'absolute',
-          width: r, height: r,
-          borderRadius: '50%',
-          border: `1px solid rgba(74,173,223,${0.07 - i * 0.02})`,
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          pointerEvents: 'none',
-        }} />
-      ))}
-
-      {/* Logo */}
-      <img
-        src={LOGO}
-        alt="GG'APP"
-        width={160}
-        height={160}
-        style={{ objectFit: 'contain', animation: 'fadeIn 0.7s ease', position: 'relative' }}
-      />
-
-      {/* Brand name */}
-      <div style={{ textAlign: 'center', animation: 'fadeIn 0.8s ease 0.3s both', position: 'relative' }}>
-        <div style={{ fontSize: '14px', color: 'rgba(255,255,255,0.4)', letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: font.family }}>
-          Gateway Global Healthcare
-        </div>
-        <div style={{ marginTop: '8px', fontSize: '12px', color: 'rgba(255,255,255,0.3)', letterSpacing: '0.04em', fontFamily: font.family }}>
-          A product of Gateway Global
-        </div>
+    <div
+      style={{
+        minHeight: '100dvh',
+        background: 'radial-gradient(ellipse 80% 55% at 50% 42%, #FFFFFF 0%, #EAF5FD 70%, #DDEFFB 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        position: 'relative',
+        fontFamily: font.family,
+        padding: 24,
+        boxSizing: 'border-box',
+      }}
+    >
+      <img src={MARK_LIGHT} alt="" aria-hidden className="gg-splash-mark" style={{ width: 112, height: 'auto', display: 'block' }} />
+      <img src={WORDMARK_LIGHT} alt="GG'APP" className="gg-splash-fade" style={{ height: 24, width: 'auto', marginTop: 24, display: 'block', animationDelay: '0.15s' }} />
+      <div className="gg-splash-fade" style={{ marginTop: 12, fontSize: 15, color: C.textSub, animationDelay: '0.25s' }}>
+        Get care today. Pay over time.
       </div>
 
-      {/* Loading dots */}
-      <div style={{ display: 'flex', gap: '8px', animation: 'fadeIn 0.6s ease 1s both', position: 'relative' }}>
-        {[0, 1, 2].map(i => (
-          <div key={i} style={{
-            width: 6, height: 6,
-            borderRadius: '50%',
-            background: C.blue500,
-            animation: `pulse 1.2s ease ${i * 0.2}s infinite`,
-          }} />
-        ))}
+      <div style={{ position: 'absolute', bottom: 'max(24px, env(safe-area-inset-bottom))', fontSize: 12, color: C.textLight }}>
+        A Gateway Global product
       </div>
 
       <style>{`
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(14px) } to { opacity: 1; transform: translateY(0) } }
-        @keyframes pulse { 0%, 100% { opacity: 0.3; transform: scale(0.8) } 50% { opacity: 1; transform: scale(1) } }
+        .gg-splash-mark { animation: ggMarkIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both }
+        .gg-splash-fade { animation: ggFadeUp 0.45s ease both }
+        @keyframes ggMarkIn { from { opacity: 0; transform: scale(0.92) } to { opacity: 1; transform: none } }
+        @keyframes ggFadeUp { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
+        @media (prefers-reduced-motion: reduce) { .gg-splash-mark, .gg-splash-fade { animation: none } }
       `}</style>
     </div>
   )

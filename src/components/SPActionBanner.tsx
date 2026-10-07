@@ -41,7 +41,7 @@ export function SPActionBanner({ items, title, actionLabel, icon, onAction, onDi
         {icon}
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: '13px', fontWeight: 800, color: C.navy800, marginBottom: '3px', letterSpacing: '-0.01em' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: C.navy800, marginBottom: '3px', letterSpacing: 0 }}>
           {title(count)}
         </div>
         <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.5 }}>

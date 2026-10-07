@@ -32,7 +32,7 @@ export function BookingConfirmScreen() {
             <svg width="36" height="36" viewBox="0 0 36 36" fill="none"><path d="M8 18l7 7 13-13" stroke={C.success} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
           </div>
 
-          <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', marginBottom: '8px' }}>Request Sent!</div>
+          <div style={{ fontSize: '22px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', marginBottom: '8px' }}>Request Sent!</div>
           <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '28px' }}>
             Your engagement request has been sent to <strong style={{ color: C.text }}>{p.name}</strong>. You'll receive a confirmation once they accept your booking.
           </div>

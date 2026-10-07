@@ -136,7 +136,7 @@ export class AdminService {
       }),
       this.prisma.providerApplication.findMany({
         where: ADMIN_REVIEWABLE_APPLICATION_WHERE,
-        include: { documents: true },
+        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
         orderBy: { submittedAt: 'desc' },
         take: 6,
       }),
@@ -260,7 +260,7 @@ export class AdminService {
         body: dto.body.trim(),
         url: dto.url?.trim() || null,
         publishedAt: new Date(dto.date),
-        status: NewsStatus.PUBLISHED,
+        status: dto.status === 'draft' ? NewsStatus.DRAFT : NewsStatus.PUBLISHED,
       },
     })
 
@@ -290,6 +290,32 @@ export class AdminService {
     })
 
     return this.mapNewsArticle(item)
+  }
+
+  /** Publish a draft, move an article back to drafts, archive it, or restore it. */
+  async setNewsStatus(articleId: string, status: 'draft' | 'published' | 'archived') {
+    const existing = await this.prisma.newsArticle.findUnique({ where: { id: Number(articleId) || -1 } })
+    if (!existing) {
+      throw new NotFoundException('News article not found')
+    }
+    const item = await this.prisma.newsArticle.update({
+      where: { id: existing.id },
+      data: { status: status.toUpperCase() as NewsStatus },
+    })
+    return this.mapNewsArticle(item)
+  }
+
+  /** Permanently removes a draft or archived article; published ones must be archived first. */
+  async deleteNews(articleId: string) {
+    const existing = await this.prisma.newsArticle.findUnique({ where: { id: Number(articleId) || -1 } })
+    if (!existing) {
+      throw new NotFoundException('News article not found')
+    }
+    if (existing.status === NewsStatus.PUBLISHED) {
+      throw new BadRequestException('Archive this article before deleting it')
+    }
+    await this.prisma.newsArticle.delete({ where: { id: existing.id } })
+    return { success: true }
   }
 
   async archiveNews(articleId: string) {
@@ -383,7 +409,7 @@ export class AdminService {
   async getApplications() {
     const applications = await this.prisma.providerApplication.findMany({
       where: ADMIN_REVIEWABLE_APPLICATION_WHERE,
-      include: { documents: true },
+      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
       orderBy: { submittedAt: 'desc' },
     })
 
@@ -400,13 +426,14 @@ export class AdminService {
       url: item.url ?? undefined,
       date: item.publishedAt.toISOString(),
       status: item.status.toLowerCase() as 'draft' | 'published' | 'archived',
+      updatedAt: item.updatedAt.toISOString(),
     }
   }
 
   async getApplication(applicationId: string) {
     const application = await this.prisma.providerApplication.findUnique({
       where: { id: applicationId },
-      include: { documents: true },
+      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
     })
 
     if (!application) {
@@ -485,6 +512,10 @@ export class AdminService {
             create: serviceNames.map(name => ({ name })),
           },
         },
+      })
+
+      await tx.providerApplicationMessage.create({
+        data: { applicationId: application.id, author: 'ADMIN', kind: 'approved', body: note?.trim() || 'Application approved.' },
       })
 
       await tx.providerNotificationPreference.upsert({
@@ -587,12 +618,12 @@ export class AdminService {
       include: {
         patientProfile: {
           include: {
-            beneficiaries: { select: { id: true } },
+            beneficiaries: { select: { id: true, name: true, relation: true } },
           },
         },
         transactions: { select: { id: true } },
-        appointments: { select: { id: true }, take: 1 },
-        invoices: { select: { id: true }, take: 1 },
+        appointments: { select: { id: true, requestedAt: true }, orderBy: { requestedAt: 'desc' }, take: 1 },
+        invoices: { select: { id: true, submittedAt: true }, orderBy: { submittedAt: 'desc' }, take: 1 },
       },
       orderBy: { createdAt: 'desc' },
     })
@@ -606,12 +637,12 @@ export class AdminService {
       include: {
         patientProfile: {
           include: {
-            beneficiaries: { select: { id: true } },
+            beneficiaries: { select: { id: true, name: true, relation: true } },
           },
         },
         transactions: { select: { id: true } },
-        appointments: { select: { id: true }, take: 1 },
-        invoices: { select: { id: true }, take: 1 },
+        appointments: { select: { id: true, requestedAt: true }, orderBy: { requestedAt: 'desc' }, take: 1 },
+        invoices: { select: { id: true, submittedAt: true }, orderBy: { submittedAt: 'desc' }, take: 1 },
       },
     })
 
@@ -652,8 +683,8 @@ export class AdminService {
     return this.mapProvider(provider, application)
   }
 
-  async suspendUser(actorUserId: string, userId: string) {
-    return this.updateUserStatus(actorUserId, userId, UserStatus.SUSPENDED)
+  async suspendUser(actorUserId: string, userId: string, reason?: string) {
+    return this.updateUserStatus(actorUserId, userId, UserStatus.SUSPENDED, reason)
   }
 
   async reactivateUser(actorUserId: string, userId: string) {
@@ -710,8 +741,8 @@ export class AdminService {
     }
   }
 
-  async suspendProvider(actorUserId: string, providerId: string) {
-    return this.updateProviderLifecycle(actorUserId, providerId, ProviderLifecycleStatus.SUSPENDED)
+  async suspendProvider(actorUserId: string, providerId: string, reason?: string) {
+    return this.updateProviderLifecycle(actorUserId, providerId, ProviderLifecycleStatus.SUSPENDED, reason)
   }
 
   async reactivateProvider(actorUserId: string, providerId: string) {
@@ -930,6 +961,14 @@ export class AdminService {
     status: ProviderApplicationStatus,
     note?: string,
   ) {
+    await this.prisma.providerApplicationMessage.create({
+      data: {
+        applicationId,
+        author: 'ADMIN',
+        kind: status === ProviderApplicationStatus.REJECTED ? 'rejected' : 'info_requested',
+        body: note?.trim() || (status === ProviderApplicationStatus.REJECTED ? 'Application not approved.' : 'More information needed.'),
+      },
+    })
     const application = await this.prisma.providerApplication.update({
       where: { id: applicationId },
       data: {
@@ -937,7 +976,7 @@ export class AdminService {
         decisionNote: note ?? null,
         decidedAt: new Date(),
       },
-      include: { documents: true },
+      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
     })
 
     await this.prisma.auditLog.create({
@@ -978,6 +1017,7 @@ export class AdminService {
       })
       void this.mailService.sendProviderApplicationInfoRequestedEmail(application.email, {
         practiceName: application.practiceName,
+        applicationId: application.id,
         note: note ?? undefined,
       })
     }
@@ -989,6 +1029,7 @@ export class AdminService {
     actorUserId: string,
     userId: string,
     status: UserStatus,
+    reason?: string,
   ) {
     const existing = await this.prisma.user.findUnique({
       where: { id: userId },
@@ -1006,12 +1047,12 @@ export class AdminService {
         include: {
           patientProfile: {
             include: {
-              beneficiaries: { select: { id: true } },
+              beneficiaries: { select: { id: true, name: true, relation: true } },
             },
           },
           transactions: { select: { id: true } },
-          appointments: { select: { id: true }, take: 1 },
-          invoices: { select: { id: true }, take: 1 },
+          appointments: { select: { id: true, requestedAt: true }, orderBy: { requestedAt: 'desc' }, take: 1 },
+          invoices: { select: { id: true, submittedAt: true }, orderBy: { submittedAt: 'desc' }, take: 1 },
         },
       })
 
@@ -1024,6 +1065,7 @@ export class AdminService {
               : 'admin.patient.reactivated',
           entityType: 'User',
           entityId: userId,
+          metadata: reason ? ({ reason } as Prisma.JsonObject) : undefined,
         },
       })
 
@@ -1037,6 +1079,7 @@ export class AdminService {
     actorUserId: string,
     providerId: string,
     lifecycleStatus: ProviderLifecycleStatus,
+    reason?: string,
   ) {
     const provider = await this.prisma.provider.findUnique({
       where: { id: Number(providerId) },
@@ -1075,6 +1118,7 @@ export class AdminService {
               : 'admin.provider.reactivated',
           entityType: 'Provider',
           entityId: String(provider.id),
+          metadata: reason ? ({ reason } as Prisma.JsonObject) : undefined,
         },
       })
 
@@ -1106,8 +1150,11 @@ export class AdminService {
     serviceTypes: Prisma.JsonValue
     submittedAt: Date
     status: ProviderApplicationStatus
+    messages?: Array<{ id: string; author: string; kind: string; body: string; attachments: Prisma.JsonValue | null; createdAt: Date }>
   }) {
     const payoutDetails = this.asObject(application.payoutDetails)
+    const messages = application.messages ?? []
+    const last = messages[messages.length - 1]
 
     return {
       id: application.id,
@@ -1133,6 +1180,16 @@ export class AdminService {
       })),
       submitted: application.submittedAt.toISOString(),
       status: this.mapApplicationStatusToClient(application.status),
+      // The provider answered an info request and the application is back in the queue.
+      resubmitted: application.status === ProviderApplicationStatus.PENDING && last?.author === 'PROVIDER',
+      messages: messages.map(m => ({
+        id: m.id,
+        author: m.author.toLowerCase(),
+        kind: m.kind,
+        body: m.body,
+        attachments: Array.isArray(m.attachments) ? m.attachments : [],
+        at: m.createdAt.toISOString(),
+      })),
     }
   }
 
@@ -1146,19 +1203,24 @@ export class AdminService {
     if (provider.applicationId) {
       return this.prisma.providerApplication.findUnique({
         where: { id: provider.applicationId },
-        include: { documents: true },
+        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
       })
     }
 
     if (provider.authUserId) {
       return this.prisma.providerApplication.findFirst({
         where: { userId: provider.authUserId },
-        include: { documents: true },
+        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
         orderBy: { submittedAt: 'desc' },
       })
     }
 
     return null
+  }
+
+  private countryCodeOf(value: string | null) {
+    const v = (value ?? '').trim().toUpperCase()
+    return v === 'KE' || v === 'KENYA' ? 'KE' : v === 'ZW' || v === 'ZIMBABWE' ? 'ZW' : v === 'ZM' || v === 'ZAMBIA' ? 'ZM' : null
   }
 
   private mapProvider(
@@ -1191,7 +1253,8 @@ export class AdminService {
       name: provider.name,
       type: this.formatProviderCategories(provider.categories, provider.category),
       serviceTypes,
-      country: provider.country ?? 'Zimbabwe',
+      // Stored as a code or a name; the admin screens always get the name.
+      country: ({ KE: 'Kenya', ZW: 'Zimbabwe', ZM: 'Zambia' } as Record<string, string>)[this.countryCodeOf(provider.country) ?? ''] ?? provider.country ?? 'Zimbabwe',
       email: application?.email ?? provider.authUser?.email ?? '',
       emailSecondary: application?.emailSecondary ?? undefined,
       phone: provider.phone,
@@ -1208,6 +1271,16 @@ export class AdminService {
       hours: Object.keys(hours).length > 0 ? hours : undefined,
       documents,
       ...payment,
+      categories: provider.categories.length > 0 ? provider.categories : [provider.category],
+      openStatus: provider.status === ProviderOpenStatus.OPEN ? 'open' : 'closed',
+      about: provider.about ?? '',
+      hoursText: provider.hours ?? '',
+      countryCode: this.countryCodeOf(provider.country),
+      payoutAccount: provider.payoutAccounts[0]
+        ? { method: provider.payoutAccounts[0].method, accountName: provider.payoutAccounts[0].accountName, accountNumber: provider.payoutAccounts[0].accountNumber }
+        : null,
+      suspendedReason: provider.authUser?.suspendedReason ?? null,
+      hasLogin: Boolean(provider.authUserId),
     }
   }
 
@@ -1349,6 +1422,10 @@ export class AdminService {
   private mapUser(user: {
     id: string
     email: string
+    emailVerifiedAt?: Date | null
+    authProvider?: string
+    suspendedReason?: string | null
+    suspendedAt?: Date | null
     phone: string | null
     country: string | null
     status: UserStatus
@@ -1357,6 +1434,7 @@ export class AdminService {
       firstName: string
       lastName: string
       dateOfBirth: Date
+      gender?: string | null
       countryCode: string
       nationalIdLast4: string
       creditLimit: Prisma.Decimal
@@ -1364,11 +1442,14 @@ export class AdminService {
       creditStatus: CreditStatus
       financePartnerId: string | null
       memberSince: Date
-      beneficiaries: Array<{ id: string }>
+      beneficiaries: Array<{ id: string; name?: string; relation?: string }>
     } | null
     transactions: Array<{ id: string }>
+    appointments?: Array<{ requestedAt?: Date }>
+    invoices?: Array<{ submittedAt?: Date }>
   }) {
     const profile = user.patientProfile
+    const activityDates = [user.appointments?.[0]?.requestedAt, user.invoices?.[0]?.submittedAt].filter((d): d is Date => !!d)
     const fullName = profile
       ? `${profile.firstName} ${profile.lastName}`.trim()
       : user.email
@@ -1390,6 +1471,16 @@ export class AdminService {
       memberSince: profile?.memberSince.toISOString() ?? user.createdAt.toISOString(),
       status: this.mapUserStatusToClient(user.status),
       idDocuments: [],
+      firstName: profile?.firstName ?? '',
+      lastName: profile?.lastName ?? '',
+      countryCode: profile?.countryCode ?? null,
+      gender: profile?.gender ?? null,
+      emailVerified: Boolean(user.emailVerifiedAt),
+      signUpMethod: user.authProvider === 'GOOGLE' ? 'google' : 'email',
+      suspendedReason: user.suspendedReason ?? null,
+      suspendedAt: user.suspendedAt?.toISOString() ?? null,
+      lastActivityAt: activityDates.length ? new Date(Math.max(...activityDates.map(d => d.getTime()))).toISOString() : null,
+      family: (profile?.beneficiaries ?? []).map(b => ({ name: b.name ?? '', relation: b.relation ?? '' })),
     }
   }
 

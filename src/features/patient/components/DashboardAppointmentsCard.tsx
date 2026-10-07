@@ -31,7 +31,7 @@ export function DashboardAppointmentsCard({
               <circle cx="8" cy="10.5" r="1.4" fill={C.blue500}/>
             </svg>
           </div>
-          <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>Appointments</div>
+          <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>Appointments</div>
         </div>
         <button
           type="button"
@@ -45,7 +45,7 @@ export function DashboardAppointmentsCard({
       {appointments.length === 0 ? (
         emptyVariant === 'first-time' ? (
           <div style={{ padding: '16px 8px', textAlign: 'center' }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+            <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
               No appointments yet
             </div>
             <div style={{ fontSize: '12px', color: C.textSub, marginTop: '6px', lineHeight: 1.5 }}>
@@ -158,14 +158,14 @@ export function DashboardAppointmentsCard({
                       : 'rgba(245,166,35,0.12)'
                   }`,
                 }}>
-                  <div style={{ fontSize: '24px', fontWeight: 900, color: dateBadgeColor, lineHeight: 1, letterSpacing: '-0.04em' }}>{dayNum}</div>
+                  <div style={{ fontSize: '24px', fontWeight: 900, color: dateBadgeColor, lineHeight: 1, letterSpacing: '-0.02em' }}>{dayNum}</div>
                   <div style={{ fontSize: '10px', fontWeight: 800, color: dateBadgeColor, textTransform: 'uppercase', letterSpacing: '0.08em', marginTop: '3px', opacity: 0.85 }}>{monthStr}</div>
                 </div>
 
                 <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
                   {/* Provider name + urgency badge */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', marginBottom: '5px' }}>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{apt.provider}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: 0 }}>{apt.provider}</div>
                     {urgency && !isCompleted && (
                       <span style={{
                         fontSize: '9px', fontWeight: 800,

@@ -23,6 +23,8 @@ export interface AdminNewsArticlePayload {
   body: string
   date: string
   url?: string
+  /** Create only: save as a draft instead of publishing. */
+  status?: 'draft' | 'published'
 }
 
 export interface AdminNewsCategory {
@@ -79,6 +81,16 @@ export const adminService = {
 
   async archiveNews(id: number): Promise<NewsItem> {
     const { data } = await apiClient.delete<NewsItem>(`/admin/news/${id}`)
+    return data
+  },
+
+  async setNewsStatus(id: number, status: 'draft' | 'published' | 'archived'): Promise<NewsItem> {
+    const { data } = await apiClient.patch<NewsItem>(`/admin/news/${id}/status`, { status })
+    return data
+  },
+
+  async deleteNews(id: number): Promise<{ success: boolean }> {
+    const { data } = await apiClient.delete<{ success: boolean }>(`/admin/news/${id}/permanent`)
     return data
   },
 

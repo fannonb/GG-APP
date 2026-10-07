@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { useId, useState, type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import { C, font, radius } from './tokens'
 
 interface GGInputProps {
@@ -18,6 +18,12 @@ interface GGInputProps {
   rightEl?: ReactNode
   focusColor?: string
   focusShadow?: string
+  /** Lets phones offer saved values, e.g. 'email', 'current-password', 'given-name'. */
+  autoComplete?: string
+  /** Picks the on-screen keyboard, e.g. 'email', 'tel', 'numeric'. */
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode']
+  enterKeyHint?: React.HTMLAttributes<HTMLInputElement>['enterKeyHint']
+  id?: string
 }
 
 export function GGInput({
@@ -37,13 +43,19 @@ export function GGInput({
   rightEl,
   focusColor = C.blue500,
   focusShadow = 'rgba(74,173,223,0.12)',
+  autoComplete,
+  inputMode,
+  enterKeyHint,
+  id,
 }: GGInputProps) {
   const [focused, setFocused] = useState(false)
+  const autoId = useId()
+  const inputId = id ?? autoId
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {label && (
-        <label style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>
+        <label htmlFor={inputId} style={{ fontSize: '13px', fontWeight: 600, color: C.text, letterSpacing: 0, fontFamily: font.family }}>
           {label}
           {required && <span style={{ color: C.error }}> *</span>}
         </label>
@@ -51,6 +63,12 @@ export function GGInput({
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           ref={inputRef}
+          id={inputId}
+          className="gg-input"
+          autoComplete={autoComplete}
+          inputMode={inputMode}
+          enterKeyHint={enterKeyHint}
+          aria-invalid={error ? true : undefined}
           name={name}
           type={type}
           placeholder={placeholder}

@@ -467,7 +467,7 @@ export function AdminAdsScreen() {
                   ].map(s => (
                     <div key={s.label} style={{ padding: '10px 12px', background: C.bg, borderRadius: radius.xs, border: `1px solid ${C.border}`, textAlign: 'center' }}>
                       <div style={{ fontSize: 9, fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 4 }}>{s.label}</div>
-                      <div style={{ fontSize: 18, fontWeight: 800, color: C.navy800, letterSpacing: '-0.03em', lineHeight: 1 }}>{s.val}</div>
+                      <div style={{ fontSize: 18, fontWeight: 800, color: C.navy800, letterSpacing: '-0.015em', lineHeight: 1 }}>{s.val}</div>
                     </div>
                   ))}
                 </div>

@@ -77,7 +77,7 @@ export function PrescriptionDecisionBanner({ variant, items, onAction, onDismiss
         {style.icon}
       </div>
       <div style={{ flex: 1, minWidth: 180 }}>
-        <div style={{ fontSize: '13px', fontWeight: 800, color: style.titleColor, marginBottom: '3px', letterSpacing: '-0.01em' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: style.titleColor, marginBottom: '3px', letterSpacing: 0 }}>
           {style.title(count)}
         </div>
         <div style={{ fontSize: '13px', color: style.bodyColor, lineHeight: 1.5 }}>

@@ -97,7 +97,7 @@ export function SPNewDashboardScreen() {
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-              <div style={{ fontSize: isMobile ? '20px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.04em', fontFamily: font.family }}>
+              <div style={{ fontSize: isMobile ? '20px' : '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', fontFamily: font.family }}>
                 {greeting}, {sp.name}
               </div>
               {countryCode && (
@@ -120,7 +120,7 @@ export function SPNewDashboardScreen() {
           {stats.map(s => (
             <div key={s.label} style={{ padding: isMobile ? '14px 16px' : '20px 22px', background: '#fff', borderRadius: radius.lg, border: `1px dashed ${C.border}`, boxShadow: shadow.sm }}>
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '8px' }}>{s.label}</div>
-              <div style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 800, color: s.color, letterSpacing: '-0.04em', lineHeight: 1 }}>{s.val}</div>
+              <div style={{ fontSize: isMobile ? '22px' : '26px', fontWeight: 800, color: s.color, letterSpacing: '-0.02em', lineHeight: 1 }}>{s.val}</div>
               <div style={{ fontSize: '12px', color: C.textLight, marginTop: '6px' }}>{s.sub}</div>
             </div>
           ))}
@@ -161,7 +161,7 @@ export function SPNewDashboardScreen() {
                     <circle cx="8" cy="10.5" r="1.4" fill={C.blue500}/>
                   </svg>
                 </div>
-                <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>
+                <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>
                   {isPharmacyOnly ? 'Prescription quotes' : 'Upcoming Appointments'}
                 </div>
               </div>

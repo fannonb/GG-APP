@@ -195,7 +195,7 @@ export function ProviderListScreen() {
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '12px' }}>
                       <div>
-                        <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.02em' }}>{provider.name}</div>
+                        <div style={{ fontSize: '16px', fontWeight: 700, color: C.text, letterSpacing: '-0.01em' }}>{provider.name}</div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', minWidth: 0 }}>
                           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}><path d="M6 1.5C4.07 1.5 2.5 3.07 2.5 5c0 2.5 3.5 6 3.5 6s3.5-3.5 3.5-6c0-1.93-1.57-3.5-3.5-3.5z" stroke={C.textSub} strokeWidth="1.1" /><circle cx="6" cy="5" r="1.5" stroke={C.textSub} strokeWidth="1.1" /></svg>
                           <span style={{ fontSize: '12px', color: C.textSub, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={provider.address}>

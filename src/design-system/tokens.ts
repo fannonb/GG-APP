@@ -23,8 +23,8 @@ export const C = {
 } as const
 
 export const font = {
-  family: "'Figtree', 'Helvetica Neue', Arial, sans-serif",
-  mono: "'Figtree', 'Courier New', monospace",
+  family: "'Neue Montreal', 'Helvetica Neue', Arial, sans-serif",
+  mono: "'Neue Montreal', 'Courier New', monospace",
 } as const
 
 export const radius = {

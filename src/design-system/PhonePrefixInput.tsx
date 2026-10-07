@@ -158,7 +158,7 @@ export function PhonePrefixInput({
             fontSize: '13px',
             fontWeight: 600,
             color: C.text,
-            letterSpacing: '-0.01em',
+            letterSpacing: 0,
             fontFamily: font.family,
           }}
         >
@@ -215,7 +215,7 @@ export function PhonePrefixInput({
                 color: C.text,
                 fontFamily: font.family,
                 whiteSpace: 'nowrap',
-                letterSpacing: '-0.01em',
+                letterSpacing: 0,
               }}
             >
               {activeDial}

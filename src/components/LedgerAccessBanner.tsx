@@ -1,6 +1,7 @@
 import { GGButton } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import type { LedgerGrant } from '@/types/ledger.types'
+import { describeLedgerAccess } from '@/utils/ledger-access'
 
 interface LedgerAccessBannerProps {
   grants: LedgerGrant[]
@@ -8,26 +9,10 @@ interface LedgerAccessBannerProps {
   onDismiss: () => void
 }
 
-function timeRemaining(expiresAt: string) {
-  const ms = new Date(expiresAt).getTime() - Date.now()
-  if (ms <= 0) return 'expired'
-  const hours = Math.floor(ms / (1000 * 60 * 60))
-  const minutes = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60))
-  return hours > 0 ? `${hours}h ${minutes}m left` : `${minutes}m left`
-}
-
 export function LedgerAccessBanner({ grants, onManage, onDismiss }: LedgerAccessBannerProps) {
   if (grants.length === 0) return null
 
-  const names = grants.map(g => g.provider.name)
-  const headline =
-    grants.length === 1
-      ? `${names[0]} can view your health ledger`
-      : `${grants.length} providers can view your health ledger`
-  const detail =
-    grants.length === 1
-      ? `Access expires in ${timeRemaining(grants[0].expiresAt)}. You can revoke it anytime.`
-      : `${names.slice(0, 2).join(', ')}${names.length > 2 ? ` +${names.length - 2} more` : ''}. Access lasts 24 hours per unlock.`
+  const { headline, detail } = describeLedgerAccess(grants)
 
   return (
     <div

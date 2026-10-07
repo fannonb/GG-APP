@@ -1,6 +1,6 @@
 import type { ProviderPayoutAccount, ProviderSettingsResponse } from '@/api/types'
 
-export type SettingsTabId = 'profile' | 'payouts' | 'security'
+export type SettingsTabId = 'profile' | 'payouts' | 'notifications' | 'security'
 
 export type OpeningHours = Record<string, { open: boolean; from: string; to: string }>
 
@@ -63,8 +63,9 @@ export const EMPTY_PAYOUT_FORM: PayoutFormState = {
 }
 
 export const SETTINGS_TABS: { id: SettingsTabId; label: string }[] = [
-  { id: 'profile', label: 'Public Profile' },
+  { id: 'profile', label: 'Practice profile' },
   { id: 'payouts', label: 'Payouts' },
+  { id: 'notifications', label: 'Notifications' },
   { id: 'security', label: 'Security' },
 ]
 

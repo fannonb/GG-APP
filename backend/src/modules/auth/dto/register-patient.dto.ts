@@ -23,6 +23,12 @@ export class RegisterPatientDto {
   @IsDateString()
   dob!: string
 
+  /** Optional so older mobile builds that don't send it can still register. */
+  @IsOptional()
+  @IsString()
+  @IsIn(['Male', 'Female', 'Other', 'Prefer not to say'])
+  gender?: string
+
   @IsString()
   @MinLength(5)
   nationalId!: string

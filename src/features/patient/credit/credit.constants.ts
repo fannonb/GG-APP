@@ -72,3 +72,8 @@ export type FinancePartnerId = (typeof FINANCE_PARTNER_SUMMARIES)[number]['id']
 export function getFinancePartnerSummary(id: string) {
   return FINANCE_PARTNER_SUMMARIES.find(p => p.id === id)
 }
+
+/** Each market has one lender: Equity Bank in Kenya, Moneymart in Zimbabwe and Zambia. */
+export function getFinancePartnerIdForCountry(countryCode: string | null | undefined): FinancePartnerId {
+  return countryCode?.toUpperCase() === 'KE' ? 'equity' : 'moneymart'
+}

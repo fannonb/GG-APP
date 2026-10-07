@@ -6,8 +6,8 @@ import { route, ROUTES } from '@/router/routes'
 import type { Appointment } from '@/types/appointment.types'
 import type { Payment } from '@/types/invoice.types'
 import type { PrescriptionRequest } from '@/types/prescription.types'
-import { getAppointmentDisplayStatus, getDaysUntilAppointment } from '@/utils/appointments'
-import { formatCurrency, formatDate, formatRelativeTime, formatTime12h } from '@/utils/format'
+import { getAppointmentDisplayStatus } from '@/utils/appointments'
+import { formatAmount, formatDate, formatRelativeTime, formatTime12h } from '@/utils/format'
 import { SP_ONBOARDING_STEP_COUNT } from '@/store/auth.store'
 import type { SpSetupStep } from '@/utils/sp-onboarding'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -18,6 +18,7 @@ interface SPDashboardWorkspaceProps {
   showAppointments?: boolean
   showPrescriptions?: boolean
   recentPayments: Payment[]
+  currency: string
   onboardingComplete: boolean
   setupSteps: SpSetupStep[]
   doneCount: number
@@ -41,7 +42,7 @@ function SectionHeader({
       marginBottom: '16px',
       gap: '12px',
     }}>
-      <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
+      <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>
         {title}
       </div>
       {actionLabel && onAction && (
@@ -87,7 +88,7 @@ function QueueCardHeader({
       gap: '12px',
     }}>
       <div>
-        <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
+        <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>
           {title}
         </div>
         <div style={{ fontSize: '11px', color: C.textSub, marginTop: '2px' }}>{subtitle}</div>
@@ -254,7 +255,7 @@ export function PrescriptionRequestsCard({
 function visitActionKind(appointment: Appointment): 'confirm' | 'record' | null {
   const displayStatus = getAppointmentDisplayStatus(appointment)
   if (displayStatus === 'new') return 'confirm'
-  if (displayStatus === 'confirmed' && getDaysUntilAppointment(appointment.date) <= 0) return 'record'
+  if (displayStatus === 'confirmed') return 'record'
   return null
 }
 
@@ -339,7 +340,7 @@ function CalendarTile({ dateStr, featured }: { dateStr: string; featured?: boole
         fontSize: featured ? '22px' : '18px',
         fontWeight: 800,
         color: C.navy800,
-        letterSpacing: '-0.04em',
+        letterSpacing: '-0.02em',
         lineHeight: 1,
         padding: featured ? '6px 0 2px' : '5px 0 1px',
       }}>
@@ -410,7 +411,7 @@ function AppointmentCard({
               fontSize: featured ? '18px' : '14px',
               fontWeight: 800,
               color: C.navy800,
-              letterSpacing: '-0.03em',
+              letterSpacing: '-0.015em',
               lineHeight: 1.15,
             }}>
               {formatTime12h(appointment.time)}
@@ -457,7 +458,7 @@ function AppointmentCard({
   )
 }
 
-function PaymentRow({ payment, isLast }: { payment: Payment; isLast: boolean }) {
+function PaymentRow({ payment, currency, isLast }: { payment: Payment; currency: string; isLast: boolean }) {
   return (
     <div style={{
       padding: '12px 0',
@@ -475,7 +476,7 @@ function PaymentRow({ payment, isLast }: { payment: Payment; isLast: boolean }) 
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: '14px', fontWeight: 800, color: C.text }}>
-          {formatCurrency(payment.amount)}
+          {formatAmount(payment.amount, currency)}
         </div>
       </div>
     </div>
@@ -618,10 +619,10 @@ function GettingStartedPanel({
 
 function UpcomingScheduleCard({ appointments }: { appointments: Appointment[] }) {
   const navigate = useNavigate()
-  if (appointments.length === 0) return null
-
   const [nextVisit, ...rest] = appointments
-  const subtitle = `${appointments.length} scheduled visit${appointments.length === 1 ? '' : 's'}`
+  const subtitle = appointments.length === 0
+    ? 'Nothing scheduled'
+    : `${appointments.length} scheduled visit${appointments.length === 1 ? '' : 's'}`
 
   return (
     <GGCard padding="0" style={{ overflow: 'hidden' }}>
@@ -631,6 +632,14 @@ function UpcomingScheduleCard({ appointments }: { appointments: Appointment[] })
         actionLabel="View all"
         onAction={() => navigate(ROUTES.SP_APPOINTMENTS)}
       />
+      {!nextVisit ? (
+        <div style={{ padding: '32px 20px', textAlign: 'center', background: C.bg, fontFamily: font.family }}>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>No upcoming visits</div>
+          <div style={{ fontSize: '13px', color: C.textSub, marginTop: '6px', lineHeight: 1.55, maxWidth: 320, marginInline: 'auto' }}>
+            New appointment requests from patients will appear here for you to confirm.
+          </div>
+        </div>
+      ) : (
       <div style={{ padding: '14px 16px 16px', background: C.bg }}>
         <AppointmentCard key={nextVisit.id} appointment={nextVisit} featured />
         {rest.map((appointment, index) => (
@@ -641,6 +650,7 @@ function UpcomingScheduleCard({ appointments }: { appointments: Appointment[] })
           />
         ))}
       </div>
+      )}
     </GGCard>
   )
 }
@@ -651,6 +661,7 @@ export function SPDashboardWorkspace({
   showAppointments = true,
   showPrescriptions = false,
   recentPayments,
+  currency,
   onboardingComplete,
   setupSteps,
   doneCount,
@@ -705,6 +716,7 @@ export function SPDashboardWorkspace({
                     <PaymentRow
                       key={payment.id}
                       payment={payment}
+                      currency={currency}
                       isLast={index === recentPayments.length - 1}
                     />
                   ))}

@@ -10,6 +10,7 @@ import { ROUTES } from '@/router/routes'
 
 interface AppTopBarProps {
   title: string
+  titleIcon?: React.ReactNode
   status?: string
   back?: boolean
   backLabel?: string
@@ -34,7 +35,7 @@ const SEARCHABLE_PAGES = [
   { label: 'Find a Service', desc: 'Browse all healthcare providers', keywords: ['find', 'service', 'services', 'provider', 'providers', 'specialty'], path: ROUTES.FIND_SERVICE },
 ]
 
-export function AppTopBar({ title, status, back = false, backLabel = 'Back' }: AppTopBarProps) {
+export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 'Back' }: AppTopBarProps) {
   const navigate = useNavigate()
   const { patientNotifs, openPanel } = useNotificationsStore()
   const unreadCount = patientNotifs.filter(n => !n.read).length
@@ -158,13 +159,14 @@ export function AppTopBar({ title, status, back = false, backLabel = 'Back' }: A
           )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+            {titleIcon}
             <h1
               style={{
                 fontSize: '28px',
                 fontWeight: 800,
                 color: C.navy800,
                 fontFamily: font.family,
-                letterSpacing: '-0.035em',
+                letterSpacing: '-0.015em',
                 lineHeight: 1.15,
                 margin: 0,
                 overflow: 'hidden',

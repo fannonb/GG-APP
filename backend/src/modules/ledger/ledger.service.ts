@@ -849,9 +849,9 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
     return pin.expiresAt.getTime() <= Date.now()
   }
 
-  private isPinCurrentlyActive(
-    pin: { status: LedgerPinStatus; expiresAt: Date | null } | null | undefined,
-  ): boolean {
+  private isPinCurrentlyActive<T extends { status: LedgerPinStatus; expiresAt: Date | null }>(
+    pin: T | null | undefined,
+  ): pin is T {
     return !!pin && pin.status === LedgerPinStatus.ACTIVE && !this.isPinPastExpiry(pin)
   }
 

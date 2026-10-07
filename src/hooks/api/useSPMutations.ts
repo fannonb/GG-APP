@@ -12,6 +12,7 @@ import type {
   UpsertSPInvoicePayload,
 } from '@/api/types'
 import { useAuthStore } from '@/store/auth.store'
+import { useNotificationsStore } from '@/store/notifications.store'
 
 function useSPInvalidate() {
   const queryClient = useQueryClient()
@@ -219,6 +220,8 @@ export function useMarkSPNotificationReadMutation() {
 
   return useMutation({
     mutationFn: (id: string) => spService.markNotificationRead(id),
+    // Update the panel straight away; the refetch below confirms it.
+    onMutate: (id: string) => useNotificationsStore.getState().markRead(id, 'sp'),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: queryKeys.sp.notifications(spMode) })
       void queryClient.invalidateQueries({ queryKey: queryKeys.sp.dashboard(spMode) })

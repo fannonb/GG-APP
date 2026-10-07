@@ -1,18 +1,5 @@
 import { Type } from 'class-transformer'
-import {
-  ArrayMinSize,
-  IsArray,
-  IsBoolean,
-  IsDateString,
-  IsIn,
-  IsNumber,
-  IsOptional,
-  IsString,
-  Min,
-  MinLength,
-  ValidateIf,
-  ValidateNested,
-} from 'class-validator'
+import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, MinLength, ValidateIf, ValidateNested, Max } from 'class-validator'
 
 const OPERATING_COUNTRY_CODES = ['KE', 'ZW', 'ZM'] as const
 
@@ -52,6 +39,7 @@ export class ApplyCreditDto {
 
   @IsNumber()
   @Min(100)
+  @Max(50000)
   requestedAmount!: number
 
   @IsBoolean()

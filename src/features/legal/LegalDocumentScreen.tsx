@@ -71,7 +71,7 @@ export function LegalDocumentScreen({ title, effectiveDate, lastUpdated, intro, 
       </div>
 
       <div style={{ maxWidth: 760, margin: '0 auto', padding: '40px 24px 80px' }}>
-        <h1 style={{ fontSize: '30px', fontWeight: 800, color: C.text, letterSpacing: '-0.03em', margin: 0 }}>{title}</h1>
+        <h1 style={{ fontSize: '30px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em', margin: 0 }}>{title}</h1>
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap', marginTop: '10px', marginBottom: '28px' }}>
           <span style={{ fontSize: '12px', color: C.textSub }}>Effective Date: <strong style={{ color: C.text }}>{effectiveDate}</strong></span>
           <span style={{ fontSize: '12px', color: C.textSub }}>Last Updated: <strong style={{ color: C.text }}>{lastUpdated}</strong></span>
@@ -81,7 +81,7 @@ export function LegalDocumentScreen({ title, effectiveDate, lastUpdated, intro, 
 
         {sections.map((section, index) => (
           <section key={section.heading} style={{ marginBottom: '28px', paddingBottom: '28px', borderBottom: index < sections.length - 1 ? `1px solid ${C.border}` : 'none' }}>
-            <h2 style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.01em', marginBottom: '10px' }}>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, letterSpacing: 0, marginBottom: '10px' }}>
               {index + 1}. {section.heading}
             </h2>
             {section.intro && (

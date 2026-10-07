@@ -1,167 +1,118 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { GGBadge, GGButton, GGCard } from '@/design-system'
+import { GGButton, GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { LedgerTimeline } from '@/components/LedgerTimeline'
-import { useSPPatientLedger } from '@/hooks/api'
+import { useSPPatient, useSPPatientLedger } from '@/hooks/api'
+import { useResponsive } from '@/hooks/useResponsive'
 import { ApiError } from '@/api/types'
 import { ROUTES, route } from '@/router/routes'
+import { formatTimeLeft } from '@/utils/ledger-access'
+import { isOwnEntry } from '@/utils/ledger-entries'
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
+const CYAN_DEEP = '#0B7BC0'
+
+function isLockedError(error: unknown) {
+  if (!error) return false
+  const status = (error as { status?: number; statusCode?: number }).status ?? (error as { statusCode?: number }).statusCode
+  return (error instanceof ApiError && error.status === 403)
+    || status === 403
+    || (error instanceof Error && error.message.toLowerCase().includes('ledger pin'))
 }
 
 export function SPPatientLedgerScreen() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { isMobile } = useResponsive()
   const ledgerQuery = useSPPatientLedger(id)
+  const patientQuery = useSPPatient(id)
+  const [now] = useState(() => Date.now())
 
-  const needsUnlock =
-    (ledgerQuery.error instanceof ApiError && ledgerQuery.error.status === 403) ||
-    ((ledgerQuery.error as unknown as { status?: number })?.status === 403) ||
-    ((ledgerQuery.error as unknown as { statusCode?: number })?.statusCode === 403) ||
-    (ledgerQuery.error instanceof Error && ledgerQuery.error.message.toLowerCase().includes('ledger pin'))
-  const rawEntries = useMemo(() => ledgerQuery.data?.entries ?? [], [ledgerQuery.data?.entries])
-  const queryBeneficiaries = useMemo(
-    () => ledgerQuery.data?.patient.beneficiaries ?? [],
-    [ledgerQuery.data?.patient.beneficiaries],
-  )
+  const locked = isLockedError(ledgerQuery.error)
+  const ledger = ledgerQuery.data
+  const patientName = ledger?.patient.name ?? patientQuery.data?.name
+  const entries = useMemo(() => ledger?.entries ?? [], [ledger?.entries])
 
-  const beneficiaries = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; relation?: string }>()
-    queryBeneficiaries.forEach(b => map.set(b.id, { id: b.id, name: b.name, relation: b.relation }))
-    rawEntries.forEach(e => {
-      if (e.beneficiaryName) {
-        const cleanName = e.beneficiaryName.replace(/\s*\([^)]*\)/, '').trim()
-        const existing = Array.from(map.values()).find(b => b.name.toLowerCase() === cleanName.toLowerCase())
-        if (!existing) {
-          map.set(e.beneficiaryName, { id: e.beneficiaryName, name: cleanName })
-        }
-      }
+  const personOptions = useMemo(() => {
+    const family = new Map<string, { id: string; label: string }>()
+    ;(ledger?.patient.beneficiaries ?? []).forEach(b => family.set(b.name.toLowerCase(), { id: b.id, label: `${b.name} (${b.relation})` }))
+    entries.forEach(entry => {
+      if (isOwnEntry(entry) || !entry.beneficiaryName) return
+      const clean = entry.beneficiaryName.replace(/\s*\([^)]*\)/, '').trim()
+      if (!family.has(clean.toLowerCase())) family.set(clean.toLowerCase(), { id: entry.beneficiaryName, label: entry.beneficiaryName })
     })
-    return Array.from(map.values())
-  }, [queryBeneficiaries, rawEntries])
+    if (family.size === 0) return []
+    return [{ id: undefined, label: 'Everyone' }, { id: 'self', label: patientName?.split(' ')[0] ?? 'Patient only' }, ...family.values()]
+  }, [ledger?.patient.beneficiaries, entries, patientName])
 
-  const beneficiaryOptions = useMemo(
-    () => [
-      { id: undefined, label: 'Everyone' },
-      { id: 'self', label: 'Patient only' },
-      ...beneficiaries.map(b => ({
-        id: b.id,
-        label: b.relation ? `${b.name} (${b.relation})` : b.name,
-      })),
-    ],
-    [beneficiaries],
-  )
+  const openUnlock = () => navigate(ROUTES.SP_LEDGER_UNLOCK, { state: { patientId: id, patientName, returnTo: id ? route.spPatientLedger(id) : undefined } })
 
   return (
-    <SPLayout title="Patient Health Ledger" back>
+    <SPLayout title="Health history" back>
       <div style={{ maxWidth: 1120, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {ledgerQuery.isLoading && (
-          <GGCard>
-            <div style={{ padding: 24, textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading ledger...</div>
-          </GGCard>
+          <GGCard padding="24px"><div style={{ textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading history…</div></GGCard>
         )}
 
-        {needsUnlock && (
-          <GGCard padding="32px">
-            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
-              <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: radius.full,
-                  background: C.blue100,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
-                  <rect x="4" y="10" width="16" height="10" rx="2" stroke={C.navy800} strokeWidth="1.8" />
-                  <path d="M8 10V7a4 4 0 1 1 8 0v3" stroke={C.navy800} strokeWidth="1.8" strokeLinecap="round" />
+        {locked && (
+          <GGCard padding="32px 24px">
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+              <span aria-hidden style={{ width: 52, height: 52, borderRadius: radius.full, background: C.blue100, color: CYAN_DEEP, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <rect x="4" y="10" width="16" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
+                  <path d="M8 10V7a4 4 0 1 1 8 0v3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
                 </svg>
-              </div>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.navy800 }}>Ledger locked</div>
-              <p style={{ fontSize: 13.5, color: C.textSub, lineHeight: 1.7, maxWidth: 420, margin: 0 }}>
-                {ledgerQuery.error instanceof Error
-                  ? ledgerQuery.error.message
-                  : 'Ask the patient to share their Ledger PIN, then unlock the ledger to view their full treatment history.'}
+              </span>
+              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: C.text }}>
+                {patientName ? `${patientName}’s history is private` : 'This history is private'}
+              </h2>
+              <p style={{ fontSize: 14, color: C.textSub, lineHeight: 1.6, maxWidth: 400, margin: 0 }}>
+                Ask the patient for their Ledger PIN. It gives you 24 hours to see their past visits and prescriptions.
               </p>
-              <GGButton
-                variant="primary"
-                size="md"
-                onClick={() =>
-                  navigate(ROUTES.SP_LEDGER_UNLOCK, {
-                    state: {
-                      patientId: id,
-                      returnTo: id ? route.spPatientLedger(id) : undefined,
-                    },
-                  })
-                }
-              >
-                Unlock with patient PIN
-              </GGButton>
+              <div style={{ marginTop: 6 }}>
+                <GGButton variant="primary" size="md" onClick={openUnlock}>Enter Ledger PIN</GGButton>
+              </div>
             </div>
           </GGCard>
         )}
 
-        {ledgerQuery.isError && !needsUnlock && (
-          <GGCard>
-            <div style={{ padding: 24, textAlign: 'center', color: C.error, fontSize: 14 }}>
-              {ledgerQuery.error instanceof Error ? ledgerQuery.error.message : 'Unable to load the ledger'}
+        {ledgerQuery.isError && !locked && (
+          <GGCard padding="24px">
+            <div style={{ textAlign: 'center', color: C.error, fontSize: 14 }}>
+              {ledgerQuery.error instanceof Error ? ledgerQuery.error.message : 'We couldn’t load this history.'}
             </div>
           </GGCard>
         )}
 
-        {ledgerQuery.data && (
+        {ledger && (
           <>
-            <div
-              style={{
-                position: 'sticky',
-                top: 0,
-                zIndex: 8,
-                background: C.bg,
-                paddingBottom: 4,
-              }}
-            >
-              <GGCard padding="16px 20px">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <div style={{ fontSize: 17, fontWeight: 800, color: C.navy800 }}>{ledgerQuery.data.patient.name}</div>
-                      <GGBadge type="success">Ledger unlocked</GGBadge>
-                    </div>
-                    <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 4 }}>
-                      {beneficiaries.length > 0
-                        ? `Patient + ${beneficiaries.length} ${beneficiaries.length === 1 ? 'beneficiary' : 'beneficiaries'}`
-                        : 'Patient only'}
-                      {ledgerQuery.data.grant ? ` · Access until ${formatDateTime(ledgerQuery.data.grant.expiresAt)}` : ''}
-                    </div>
+            <GGCard padding={isMobile ? '16px' : '18px 20px'}>
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'center', gap: 12 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: C.text }}>{ledger.patient.name}</h2>
+                  <div style={{ fontSize: 13, color: C.textSub, marginTop: 3 }}>
+                    {entries.length} {entries.length === 1 ? 'record' : 'records'}
+                    {ledger.grant && (
+                      <> · <span style={{ color: CYAN_DEEP, fontWeight: 700 }}>Access {formatTimeLeft(ledger.grant.expiresAt, now)}</span></>
+                    )}
                   </div>
-                  <GGButton variant="outline" size="sm" onClick={() => navigate(route.spPatient(id!))}>
-                    Patient profile
-                  </GGButton>
                 </div>
-              </GGCard>
-            </div>
+                <GGButton variant="secondary" size="sm" fullWidth={isMobile} onClick={() => navigate(route.spPatient(id!))}>
+                  Patient profile
+                </GGButton>
+              </div>
+            </GGCard>
 
             <LedgerTimeline
-              entries={rawEntries}
-              beneficiaryOptions={beneficiaries.length > 0 ? beneficiaryOptions : []}
-              emptyMessage="No treatment history recorded for this patient yet."
+              entries={entries}
+              beneficiaryOptions={personOptions}
+              viewer="provider"
+              emptyMessage="This patient has no visits or prescriptions on GG’APP yet."
             />
 
-            <p style={{ fontSize: 12, color: C.textLight, lineHeight: 1.7, margin: 0 }}>
-              This history was shared by the patient via their Ledger PIN. Internal provider notes
-              are never included. Handle this information in line with patient confidentiality
-              obligations.
+            <p style={{ fontSize: 12.5, color: C.textSub, lineHeight: 1.6, margin: '0 4px' }}>
+              Shared by the patient with their Ledger PIN. Other providers’ private notes are not included. Treat this information as confidential.
             </p>
           </>
         )}

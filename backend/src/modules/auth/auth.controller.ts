@@ -24,6 +24,8 @@ import {
 } from '../../common/utils/session-cookie.util'
 import { parseDurationToSeconds } from '../../common/utils/duration.util'
 import { AuthService, type SessionContext } from './auth.service'
+import { AccountRequestsService } from './account-requests.service'
+import { EmailChangeRequestDto, ProviderApplicationReplyDto } from './dto/account-requests.dto'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { GoogleAuthDto } from './dto/google-auth.dto'
 import { LoginDto } from './dto/login.dto'
@@ -43,6 +45,7 @@ export class AuthController {
   constructor(
     @Inject(AuthService) authService: AuthService,
     @Inject(ConfigService) configService: ConfigService,
+    @Inject(AccountRequestsService) private readonly accountRequests: AccountRequestsService,
   ) {
     this.authService = authService
     this.configService = configService
@@ -120,10 +123,51 @@ export class AuthController {
     return this.authService.getProviderApplicationStatus(applicationId)
   }
 
+  /** A provider answers "more information needed" while their application is under review. */
+  @Public()
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('register/sp/:applicationId/reply')
+  replyToApplication(@Param('applicationId') applicationId: string, @Body() dto: ProviderApplicationReplyDto) {
+    return this.accountRequests.replyToApplication(applicationId, dto)
+  }
+
+  @Public()
+  @Get('register/sp/:applicationId/messages')
+  getApplicationMessages(@Param('applicationId') applicationId: string) {
+    return this.accountRequests.applicationThread(applicationId)
+  }
+
+  // Changing the sign-in email is requested here and approved by an admin.
+  @UseGuards(JwtAuthGuard)
+  @Get('email-change')
+  getEmailChange(@CurrentUser() user: AuthenticatedUser) {
+    return this.accountRequests.latestEmailChange(user.sub)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
+  @Post('email-change')
+  requestEmailChange(@CurrentUser() user: AuthenticatedUser, @Body() dto: EmailChangeRequestDto) {
+    return this.accountRequests.requestEmailChange(user.sub, dto)
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @Post('email-change/cancel')
+  cancelEmailChange(@CurrentUser() user: AuthenticatedUser) {
+    return this.accountRequests.cancelEmailChange(user.sub)
+  }
+
   @Public()
   @Post('verify-email')
   verifyEmail(@Body() dto: VerifyEmailDto) {
     return this.authService.verifyEmail(dto.token)
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 3 } })
+  @Post('resend-verification')
+  resendVerification(@Body() dto: ForgotPasswordDto) {
+    return this.authService.resendVerification(dto.email)
   }
 
   @Public()

@@ -83,7 +83,7 @@ export function AccountSwitchModal({ currentTab, onCancel, onConfirm }: AccountS
             fontSize: 18,
             fontWeight: 800,
             color: C.text,
-            letterSpacing: '-0.03em',
+            letterSpacing: '-0.015em',
             marginBottom: 8,
           }}
         >
