@@ -63,7 +63,7 @@ export function DashboardNextAppointmentCard({ appointments }: DashboardNextAppo
         <div style={{ fontSize: 17, fontWeight: 800, color: C.text, marginTop: 20, letterSpacing: '-0.02em' }}>
           Nothing booked yet
         </div>
-        <div style={{ fontSize: 13, color: C.textSub, marginTop: 4, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 13, color: C.textSub, marginTop: 4, marginBottom: 16, lineHeight: 1.5 }}>
           Find a verified provider and request a time that suits you.
         </div>
         <button
