@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common'
@@ -30,6 +31,7 @@ import { ReferenceService } from '../../common/services/reference.service'
 import { MailService } from '../../common/services/mail.service'
 import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
+import { formatMoney } from '../../common/utils/money.util'
 import { RedisService } from '../../redis/redis.service'
 import { ProvidersService } from '../providers/providers.service'
 import type { AuthorizeInvoiceDto } from './dto/authorize-invoice.dto'
@@ -57,6 +59,7 @@ const REVIEW_RATING_LABELS: Record<number, string> = {
 
 @Injectable()
 export class PatientService {
+  private readonly logger = new Logger(PatientService.name)
   private readonly prisma: PrismaService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly redis: RedisService
@@ -564,6 +567,16 @@ export class PatientService {
       }),
     ])
 
+    void this.mailService.sendSecurityAlertEmail(user.email, {
+      subject: isReset ? "Your GG'APP payment PIN was changed" : "Your GG'APP payment PIN is set up",
+      paragraphs: [
+        isReset
+          ? 'The payment PIN on your GG\'APP account was just changed.'
+          : 'A payment PIN was just set up on your GG\'APP account. You will use it to approve every invoice.',
+      ],
+      cta: { label: 'Open my profile', path: '/app/profile' },
+    })
+
     return {
       configured: true,
       message: isReset
@@ -619,6 +632,12 @@ export class PatientService {
         },
       }),
     ])
+
+    void this.mailService.sendSecurityAlertEmail(user.email, {
+      subject: "Your GG'APP password was changed",
+      paragraphs: ['The password on your GG\'APP account was just changed from your profile.'],
+      cta: { label: 'Sign in', path: '/login' },
+    })
 
     return {
       message: 'Password updated successfully.',
@@ -1557,6 +1576,7 @@ export class PatientService {
             } as Prisma.JsonObject,
           },
         })
+        void this.alertPaymentPinLocked(userId, user.email, invoiceReference)
         return {
           success: false,
           complete: false,
@@ -1582,6 +1602,7 @@ export class PatientService {
       const invoiceAmount = this.toNumber(invoice.amount)
       let walletDebit = 0
       let offAppDue = 0
+      let receiptReference = ''
 
       await this.prisma.$transaction(async tx => {
         const profile = await tx.patientProfile.findUnique({
@@ -1605,6 +1626,7 @@ export class PatientService {
 
         const paymentReference = await this.referenceService.next('AUTH', tx)
         const transactionReference = await this.referenceService.next('TXN', tx)
+        receiptReference = transactionReference
 
         await tx.patientProfile.update({
           where: { userId },
@@ -1757,6 +1779,18 @@ export class PatientService {
       })
 
       await this.redis.del(progressKey)
+      void this.sendPaymentEmails({
+        patientUserId: userId,
+        patientEmail: user.email,
+        patientName: invoice.billedToName,
+        providerId: invoice.provider.id,
+        providerName: invoice.provider.name,
+        providerUserId: invoice.provider.authUserId,
+        invoiceReference,
+        transactionReference: receiptReference,
+        walletDebit,
+        offAppDue,
+      })
 
       return {
         success: true,
@@ -2129,6 +2163,90 @@ export class PatientService {
       return 'completed'
     }
     return 'authorized'
+  }
+
+  /** In-app alerts (patient and admins) plus an email when payment PIN entry locks. Never throws. */
+  private async alertPaymentPinLocked(userId: string, email: string, invoiceReference: string) {
+    try {
+      const admins = await this.prisma.user.findMany({
+        where: { role: UserRole.ADMIN, status: UserStatus.ACTIVE },
+        select: { id: true },
+      })
+      await this.prisma.notification.createMany({
+        data: [
+          {
+            userId,
+            type: NotificationType.PAYMENT,
+            title: 'Payment PIN locked',
+            body: `Three incorrect PIN entries for invoice ${invoiceReference}. Payments are paused for 30 minutes.`,
+            screen: `/app/invoices/${invoiceReference}`,
+          },
+          ...admins.map(admin => ({
+            userId: admin.id,
+            type: NotificationType.PAYMENT,
+            title: 'Payment PIN locked',
+            body: `${email} entered an incorrect payment PIN 3 times for invoice ${invoiceReference}. Payments are paused for 30 minutes.`,
+            screen: '/admin/payments',
+          })),
+        ],
+      })
+      await this.mailService.sendSecurityAlertEmail(email, {
+        subject: 'Payment PIN locked for 30 minutes',
+        paragraphs: [
+          `Your payment PIN was entered incorrectly 3 times while approving invoice ${invoiceReference}.`,
+          'To protect your credit, payments from your account are paused for 30 minutes. You can try again after that.',
+        ],
+        cta: { label: 'Review the invoice', path: `/app/invoices/${invoiceReference}` },
+      })
+    } catch (error) {
+      this.logger.warn(`Could not send payment PIN lock alerts: ${(error as Error).message}`)
+    }
+  }
+
+  /** Receipt to the patient and "payment approved" to the provider. Never throws. */
+  private async sendPaymentEmails(args: {
+    patientUserId: string
+    patientEmail: string
+    patientName: string
+    providerId: number
+    providerName: string
+    providerUserId: string | null
+    invoiceReference: string
+    transactionReference: string
+    walletDebit: number
+    offAppDue: number
+  }) {
+    try {
+      const profile = await this.prisma.patientProfile.findUnique({
+        where: { userId: args.patientUserId },
+        select: { countryCode: true },
+      })
+      const country = profile?.countryCode
+      const data = {
+        patientName: args.patientName,
+        providerName: args.providerName,
+        invoiceReference: args.invoiceReference,
+        transactionReference: args.transactionReference,
+        amountPaid: formatMoney(args.walletDebit, country),
+        remainingDue: args.offAppDue > 0 ? formatMoney(args.offAppDue, country) : undefined,
+      }
+      await this.mailService.sendPaymentReceiptEmail(args.patientEmail, data)
+
+      if (args.providerUserId) {
+        const [providerUser, prefs] = await Promise.all([
+          this.prisma.user.findUnique({ where: { id: args.providerUserId }, select: { email: true } }),
+          this.prisma.providerNotificationPreference.findUnique({
+            where: { providerId: args.providerId },
+            select: { paymentEmail: true },
+          }),
+        ])
+        if (providerUser && (prefs?.paymentEmail ?? true)) {
+          await this.mailService.sendPaymentReceivedEmail(providerUser.email, data)
+        }
+      }
+    } catch (error) {
+      this.logger.warn(`Could not send payment emails: ${(error as Error).message}`)
+    }
   }
 
   private mapNotificationType(type: NotificationType) {

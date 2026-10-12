@@ -1,3 +1,4 @@
+import { unsubscribeFromPushNotifications } from '@/services/push-notifications'
 import { isMockApi } from '@/api/config'
 import { apiClient } from '@/api/client'
 import { mockDelay } from '@/api/mock/delay'
@@ -166,6 +167,13 @@ export const authService = {
   },
 
   async logout(): Promise<void> {
+    // Stop this browser receiving the account's notifications. Runs first, while
+    // the session can still authenticate the request; never blocks sign-out.
+    await Promise.race([
+      unsubscribeFromPushNotifications().catch(() => undefined),
+      new Promise(resolve => setTimeout(resolve, 3000)),
+    ])
+
     const cookieMode = isSessionCookieMode()
     const accessToken = tokenStorage.getAccessToken()
     const refreshToken = tokenStorage.getRefreshToken()

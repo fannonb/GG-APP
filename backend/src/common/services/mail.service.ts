@@ -47,6 +47,47 @@ export interface ProviderApplicationEmailData {
   note?: string
 }
 
+export interface WelcomeEmailData {
+  /** First name when known; the greeting falls back to "Hi there". */
+  name?: string
+  role: 'patient' | 'sp'
+  practiceName?: string
+}
+
+export interface NewSignInEmailData {
+  name?: string
+  device: string
+  ipAddress?: string | null
+  /** Already formatted for the reader, e.g. "13 Oct 2026, 09:41 UTC". */
+  when: string
+}
+
+export interface PaymentEmailData {
+  patientName: string
+  providerName: string
+  invoiceReference: string
+  transactionReference: string
+  /** Paid from GG'APP credit, formatted with currency. */
+  amountPaid: string
+  /** Still owed directly to the provider, formatted; omitted when fully paid. */
+  remainingDue?: string
+}
+
+export interface PayoutEmailData {
+  providerName: string
+  amount: string
+  reference: string
+  invoiceCount: number
+}
+
+export interface SecurityAlertEmailData {
+  name?: string
+  subject: string
+  /** Plain-text paragraphs; escaped when rendered. */
+  paragraphs: string[]
+  cta?: { label: string; path: string }
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -154,6 +195,163 @@ export class MailService {
       </div>`
   }
 
+  private greeting(name?: string) {
+    return `<p>Hi ${name?.trim() ? escapeHtml(name.trim()) : 'there'},</p>`
+  }
+
+  private detailsTable(rows: Array<[string, string]>) {
+    const cells = rows
+      .map(([label, value], i) => {
+        const shade = i % 2 === 0 ? 'background:#F4F7FB;' : ''
+        return (
+          `<tr><td style="padding:8px 10px;${shade}color:#5B6B82;">${escapeHtml(label)}</td>` +
+          `<td style="padding:8px 10px;${shade}font-weight:700;text-align:right;">${escapeHtml(value)}</td></tr>`
+        )
+      })
+      .join('')
+    return `<table style="width:100%;border-collapse:collapse;margin:14px 0;font-size:13px;">${cells}</table>`
+  }
+
+  /** Sent once an account is ready: after email verification, or straight away for Google sign-ups. */
+  async sendWelcomeEmail(to: string, data: WelcomeEmailData): Promise<boolean> {
+    if (data.role === 'sp') {
+      const practice = data.practiceName ? ` with <strong>${escapeHtml(data.practiceName)}</strong>` : ''
+      return this.send({
+        to,
+        subject: "We've received your GG'APP provider application",
+        html: this.layout(
+          `
+          ${this.greeting(data.name)}
+          <p>Thanks for applying to join GG'APP${practice}. Your email is verified and your application is
+          now with our review team.</p>
+          <p>We check every provider's medical licence and documents before approving. We'll email you as soon
+          as there's a decision, or if we need anything else from you.</p>`,
+          { label: 'Check application status', url: `${this.appBaseUrl}/sp/pending` },
+        ),
+      })
+    }
+    return this.send({
+      to,
+      subject: "Welcome to GG'APP",
+      html: this.layout(
+        `
+        ${this.greeting(data.name)}
+        <p>Welcome to GG'APP. Your account is ready.</p>
+        <p>Here's how to get started:</p>
+        <ol style="padding-left:20px;margin:10px 0;">
+          <li style="margin-bottom:6px;"><strong>Apply for healthcare credit</strong> so you can pay verified providers without paying at the counter.</li>
+          <li style="margin-bottom:6px;"><strong>Set your payment PIN.</strong> You'll use it to approve every invoice.</li>
+          <li><strong>Find care</strong> from verified hospitals, clinics, pharmacies and labs.</li>
+        </ol>`,
+        { label: "Open GG'APP", url: `${this.appBaseUrl}/app/dashboard` },
+      ),
+    })
+  }
+
+  /** Security notice for a sign-in from a device this account hasn't used before. */
+  async sendNewSignInEmail(to: string, data: NewSignInEmailData): Promise<boolean> {
+    const rows: Array<[string, string]> = [['Device', data.device], ['When', data.when]]
+    if (data.ipAddress) rows.push(['IP address', data.ipAddress])
+    return this.send({
+      to,
+      subject: "New sign-in to your GG'APP account",
+      html: this.layout(
+        `
+        ${this.greeting(data.name)}
+        <p>Your GG'APP account was just signed in to from a new device:</p>
+        ${this.detailsTable(rows)}
+        <p>If this was you, there's nothing to do.</p>
+        <p><strong>If it wasn't you,</strong> reset your password now. Resetting it signs out every other device.</p>`,
+        { label: 'Reset my password', url: `${this.appBaseUrl}/forgot-password` },
+      ),
+    })
+  }
+
+  /** Receipt for the patient once all three PIN confirmations release payment. */
+  async sendPaymentReceiptEmail(to: string, data: PaymentEmailData): Promise<boolean> {
+    const rows: Array<[string, string]> = [
+      ['Paid to', data.providerName],
+      ['Invoice', data.invoiceReference],
+      ['Paid from your credit', data.amountPaid],
+    ]
+    if (data.remainingDue) rows.push(['Still to pay the provider directly', data.remainingDue])
+    rows.push(['Transaction reference', data.transactionReference])
+    const remainder = data.remainingDue
+      ? "<p>Your credit didn't cover the full invoice, so please settle the remaining amount directly with the provider.</p>"
+      : ''
+    return this.send({
+      to,
+      subject: `Payment receipt: ${data.amountPaid} to ${data.providerName}`,
+      html: this.layout(
+        `
+        ${this.greeting(data.patientName)}
+        <p>You approved a payment with your payment PIN. Here's your receipt:</p>
+        ${this.detailsTable(rows)}
+        ${remainder}
+        <p>If you didn't approve this payment, contact GG'APP support immediately.</p>`,
+        { label: 'View transaction history', url: `${this.appBaseUrl}/app/transactions` },
+      ),
+    })
+  }
+
+  /** Tells the provider a patient has approved payment for their invoice. */
+  async sendPaymentReceivedEmail(to: string, data: PaymentEmailData): Promise<boolean> {
+    const rows: Array<[string, string]> = [
+      ['Patient', data.patientName],
+      ['Invoice', data.invoiceReference],
+      ["Approved via GG'APP", data.amountPaid],
+    ]
+    if (data.remainingDue) rows.push(['Collect directly from the patient', data.remainingDue])
+    rows.push(['Transaction reference', data.transactionReference])
+    return this.send({
+      to,
+      subject: `Payment approved for invoice ${data.invoiceReference}`,
+      html: this.layout(
+        `
+        ${this.greeting(data.providerName)}
+        <p><strong>${escapeHtml(data.patientName)}</strong> has approved payment for your invoice:</p>
+        ${this.detailsTable(rows)}
+        <p>The approved amount will be paid to your registered payout account. We'll email you when the payout is sent.</p>`,
+        { label: 'View invoices', url: `${this.appBaseUrl}/sp/invoices` },
+      ),
+    })
+  }
+
+  /** Tells the provider money has been sent to their payout account. */
+  async sendPayoutSentEmail(to: string, data: PayoutEmailData): Promise<boolean> {
+    const covers = `${data.invoiceCount} invoice${data.invoiceCount === 1 ? '' : 's'}`
+    return this.send({
+      to,
+      subject: `Payout sent: ${data.amount}`,
+      html: this.layout(
+        `
+        ${this.greeting(data.providerName)}
+        <p>We've sent a payout to your registered payout account:</p>
+        ${this.detailsTable([['Amount', data.amount], ['Covers', covers], ['Payment reference', data.reference]])}
+        <p>Depending on your bank or mobile money provider, it may take a short while to show in your account.</p>`,
+        { label: 'View payments', url: `${this.appBaseUrl}/sp/payments` },
+      ),
+    })
+  }
+
+  /**
+   * Account security notice (password or PIN changed, PIN locked, failed ledger
+   * access). Always ends with what to do if the reader didn't do this.
+   */
+  async sendSecurityAlertEmail(to: string, data: SecurityAlertEmailData): Promise<boolean> {
+    return this.send({
+      to,
+      subject: data.subject,
+      html: this.layout(
+        `
+        ${this.greeting(data.name)}
+        ${data.paragraphs.map(p => `<p>${escapeHtml(p)}</p>`).join('')}
+        <p><strong>If this wasn't you,</strong> reset your password straight away and contact GG'APP support.</p>`,
+        data.cta ? { label: data.cta.label, url: `${this.appBaseUrl}${data.cta.path}` } : undefined,
+      ),
+    })
+  }
+
   async sendVerificationEmail(to: string, token: string): Promise<boolean> {
     const url = `${this.appBaseUrl}/verify?token=${encodeURIComponent(token)}`
     return this.send({
@@ -223,7 +421,7 @@ export class MailService {
           Date: <strong>${escapeHtml(data.date)}</strong> at <strong>${escapeHtml(data.time)}</strong>
         </p>
         <p>Sign in to confirm or reschedule the appointment.</p>`,
-        { label: 'View appointment', url: `${this.appBaseUrl}/app/sp/appointments` },
+        { label: 'View appointment', url: `${this.appBaseUrl}/sp/appointments` },
       ),
     })
   }
@@ -303,7 +501,7 @@ export class MailService {
         <p>Your service provider application for <strong>${escapeHtml(data.practiceName)}</strong> has been
         approved. You can now sign in to complete your profile and start accepting appointments.</p>
         ${data.note ? `<p>Note from the review team: ${escapeHtml(data.note)}</p>` : ''}`,
-        { label: 'Go to provider dashboard', url: `${this.appBaseUrl}/app/sp/dashboard` },
+        { label: 'Go to provider dashboard', url: `${this.appBaseUrl}/sp/dashboard` },
       ),
     })
   }

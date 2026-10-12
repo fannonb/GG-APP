@@ -45,6 +45,7 @@ import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '
 import { ReferenceService } from '../../common/services/reference.service'
 import { MailService } from '../../common/services/mail.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
+import { formatMoney } from '../../common/utils/money.util'
 import { AuthService } from '../auth/auth.service'
 
 @Injectable()
@@ -1178,7 +1179,7 @@ export class SpService {
       patientName: invoicePatientName,
       providerName: provider.name,
       reference: invoice.reference,
-      amount: `KSh ${Number(invoice.amount).toFixed(2)}`,
+      amount: formatMoney(Number(invoice.amount), patientProfile?.countryCode),
     })
 
     return this.mapSpInvoice(invoice)
@@ -1346,7 +1347,7 @@ export class SpService {
       patientName: rxPatientName,
       providerName: provider.name,
       reference: invoice.reference,
-      amount: `KSh ${Number(invoice.amount).toFixed(2)}`,
+      amount: formatMoney(Number(invoice.amount), request.patient.patientProfile?.countryCode),
     })
 
     return this.mapSpInvoice(invoice)

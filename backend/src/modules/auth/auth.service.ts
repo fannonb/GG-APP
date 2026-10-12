@@ -202,6 +202,7 @@ export class AuthService {
     }
 
     const session = await this.issueSession({ userId, email, role: 'patient' }, { ctx })
+    void this.mailService.sendWelcomeEmail(email, { name: dto.firstName, role: 'patient' })
     return {
       message: 'Registration successful.',
       session,
@@ -431,6 +432,8 @@ export class AuthService {
       }),
     ])
 
+    void this.sendWelcomeAfterVerification(record.user.id, record.user.email, record.user.role)
+
     return {
       message: 'Email verified successfully. You can now sign in.',
     }
@@ -658,6 +661,12 @@ export class AuthService {
         },
       }),
     ])
+
+    void this.mailService.sendSecurityAlertEmail(user.email, {
+      subject: "Your GG'APP password was changed",
+      paragraphs: ['Your GG\'APP password was just reset using a password reset link sent to this email address.'],
+      cta: { label: 'Sign in', path: '/login' },
+    })
 
     await this.redis.del(this.getPasswordResetTokenKey(token))
     await this.redis.del(this.getPasswordResetUserKey(user.id))
@@ -901,11 +910,13 @@ export class AuthService {
     )
 
     if (options.track !== false) {
+      const deviceLabel = this.describeDevice(options.ctx, params.role)
+      void this.alertIfNewDevice(params.userId, params.email, deviceLabel, options.ctx)
       await this.prisma.providerSessionAudit.create({
         data: {
           userId: params.userId,
           sessionId: jti,
-          deviceLabel: this.describeDevice(options.ctx, params.role),
+          deviceLabel,
           locationLabel: options.ctx?.ip ? `IP ${options.ctx.ip}` : null,
           ipAddress: options.ctx?.ip ?? null,
           userAgent: options.ctx?.userAgent?.slice(0, 512) ?? null,
@@ -1093,6 +1104,67 @@ export class AuthService {
 
   /** Builds a short human-readable device label from the User-Agent so the
    * "active sessions" list can tell one device from another. */
+  /**
+   * Emails the account owner when they sign in from a device (browser + system,
+   * or the mobile app) the account has never used. A brand-new account's first
+   * sign-in is not alerted. Never throws.
+   */
+  private async alertIfNewDevice(
+    userId: string,
+    email: string,
+    deviceLabel: string,
+    ctx: SessionContext | undefined,
+  ) {
+    try {
+      const [previousSessions, sameDevice] = await Promise.all([
+        this.prisma.providerSessionAudit.count({ where: { userId } }),
+        this.prisma.providerSessionAudit.count({ where: { userId, deviceLabel } }),
+      ])
+      if (previousSessions === 0 || sameDevice > 0) return
+
+      const when =
+        new Date().toLocaleString('en-GB', {
+          timeZone: 'UTC',
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }) + ' UTC'
+      await this.mailService.sendNewSignInEmail(email, {
+        device: deviceLabel,
+        ipAddress: ctx?.ip ?? null,
+        when,
+      })
+    } catch {
+      // A missed alert must never block sign-in.
+    }
+  }
+
+  /** Welcome email once an address is verified. Never throws. */
+  private async sendWelcomeAfterVerification(userId: string, email: string, role: UserRole) {
+    try {
+      if (role === UserRole.SP) {
+        const application = await this.prisma.providerApplication.findFirst({
+          where: { userId },
+          orderBy: { submittedAt: 'desc' },
+          select: { practiceName: true },
+        })
+        await this.mailService.sendWelcomeEmail(email, { role: 'sp', practiceName: application?.practiceName })
+        return
+      }
+      if (role === UserRole.PATIENT) {
+        const profile = await this.prisma.patientProfile.findUnique({
+          where: { userId },
+          select: { firstName: true },
+        })
+        await this.mailService.sendWelcomeEmail(email, { role: 'patient', name: profile?.firstName })
+      }
+    } catch {
+      // Welcome emails are best-effort.
+    }
+  }
+
   private describeDevice(
     ctx: SessionContext | undefined,
     role: 'patient' | 'sp' | 'admin',

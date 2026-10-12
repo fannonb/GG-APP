@@ -507,6 +507,14 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
               screen: '/app/ledger',
             },
           })
+          void this.mailService.sendSecurityAlertEmail(patient.email, {
+            subject: 'Failed attempts to open your Health Ledger',
+            paragraphs: [
+              `${provider.name} made several unsuccessful attempts to unlock your Health Ledger with a PIN. Further attempts are blocked for 30 minutes.`,
+              'If you did not share your Ledger PIN with this provider, change it now.',
+            ],
+            cta: { label: 'Change my Ledger PIN', path: '/app/ledger/pin' },
+          })
         }
         throw new ForbiddenException(
           'Too many failed attempts. Please wait 30 minutes before trying again.',

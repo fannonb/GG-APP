@@ -204,6 +204,7 @@ model User {
   ledgerGrants      LedgerAccessGrant[] @relation("LedgerGrantPatient")
   ledgerAudits      LedgerAccessAudit[] @relation("LedgerAuditPatient")
   emailChangeRequests EmailChangeRequest[]
+  pushDevices       PushDevice[]
 }
 
 model PatientProfile {
@@ -784,4 +785,27 @@ model Payout {
 
   @@unique([financePartnerId, reference])
   @@index([providerId, paidAt])
+}
+
+enum PushChannel {
+  WEB
+  EXPO
+}
+
+/// A browser (Web Push subscription) or phone (Expo push token) that receives
+/// push notifications. A user can have several; dead ones are removed on delivery.
+model PushDevice {
+  id         String      @id @default(cuid())
+  userId     String
+  channel    PushChannel
+  /// Web Push endpoint URL, or the Expo push token. Unique per device.
+  address    String      @unique
+  /// Web Push encryption keys (p256dh, auth). Null for Expo tokens.
+  keys       Json?
+  userAgent  String?
+  lastSeenAt DateTime    @default(now())
+  createdAt  DateTime    @default(now())
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }

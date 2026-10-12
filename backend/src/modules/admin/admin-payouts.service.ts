@@ -10,6 +10,7 @@ import {
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import { InvoiceStatus, NotificationType, PayoutSource, Prisma, UserRole } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { MailService } from '../../common/services/mail.service'
 import { normalizeCountry, type MetricsCountry } from './admin-metrics.service'
 
 /**
@@ -57,7 +58,10 @@ export interface PartnerPayoutPayload {
 
 @Injectable()
 export class AdminPayoutsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MailService) private readonly mailService: MailService,
+  ) {}
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -140,6 +144,25 @@ export class AdminPayoutsService {
         screen: '/sp/payments',
       },
     })
+
+    // Email too, unless the provider turned off payment emails.
+    try {
+      const provider = await this.prisma.provider.findFirst({
+        where: { authUserId: providerUserId },
+        select: { id: true, name: true, authUser: { select: { email: true } }, notificationPreference: { select: { paymentEmail: true } } },
+      })
+      if (provider?.authUser && (provider.notificationPreference?.paymentEmail ?? true)) {
+        const formatted = amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        await this.mailService.sendPayoutSentEmail(provider.authUser.email, {
+          providerName: provider.name,
+          amount: `${currency} ${formatted}`,
+          reference,
+          invoiceCount: count,
+        })
+      }
+    } catch {
+      // The payout is recorded either way; the email is best-effort.
+    }
   }
 
   // ── desk queries ──────────────────────────────────────────────────────────

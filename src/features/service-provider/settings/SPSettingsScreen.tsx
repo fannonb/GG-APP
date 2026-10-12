@@ -17,6 +17,7 @@ import { PayoutsTab } from './components/PayoutsTab'
 import { SecurityTab } from './components/SecurityTab'
 import { SettingsTabBar } from './components/SettingsTabBar'
 import { NotificationsTab } from './components/NotificationsTab'
+import { PushNotificationsCard } from '@/components/PushNotificationsCard'
 import { SettingsAboutCard } from '@/components/SettingsAboutCard'
 import {
   formFromSettings,
@@ -212,16 +213,19 @@ export function SPSettingsScreen() {
         )}
 
         {tab === 'notifications' && (
-          <NotificationsTab
-            initial={settings.notificationPreferences ?? {
-              newAppointmentEmail: true,
-              paymentEmail: true,
-              invoiceEmail: true,
-              disputeEmail: true,
-              systemEmail: false,
-            }}
-            onSaved={flashSaved}
-          />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <PushNotificationsCard />
+            <NotificationsTab
+              initial={settings.notificationPreferences ?? {
+                newAppointmentEmail: true,
+                paymentEmail: true,
+                invoiceEmail: true,
+                disputeEmail: true,
+                systemEmail: false,
+              }}
+              onSaved={flashSaved}
+            />
+          </div>
         )}
 
         {tab === 'security' && (

@@ -33,6 +33,7 @@ import { ROUTES } from '@/router/routes'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { ChangeEmailCard } from '@/components/ChangeEmailCard'
 import { SettingsAboutCard } from '@/components/SettingsAboutCard'
+import { PushNotificationsCard } from '@/components/PushNotificationsCard'
 import { useLogoutMutation } from '@/hooks/api'
 
 const RELATIONS = ['Spouse', 'Child', 'Parent', 'Sibling', 'Other']
@@ -768,6 +769,8 @@ export function ProfileScreen() {
 
           </div>
         )}
+
+        <PushNotificationsCard />
 
         <SettingsAboutCard onSignOut={() => logoutMutation.mutate()} signingOut={logoutMutation.isPending} />
       </div>
