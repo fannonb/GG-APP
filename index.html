@@ -40,6 +40,11 @@
       @media (max-width: 639px) {
         input, select, textarea { font-size: 16px !important; }
         .gg-input { min-height: 48px; }
+        /* Neue Montreal's built-in line height is 1.2, which crowds text that wraps on narrow
+           screens. Components that set their own lineHeight keep it. Buttons don't inherit
+           line-height from body, so they get a slightly tighter value of their own. */
+        body { line-height: 1.45; }
+        button { line-height: 1.3; }
       }
       body {
         font-family: 'Neue Montreal', 'Helvetica Neue', Arial, sans-serif;

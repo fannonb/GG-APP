@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { GGButton, GGCard, GGInput, GGTextarea } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { useCreateSPVisitMutation } from '@/hooks/api'
+import { useResponsive } from '@/hooks/useResponsive'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route, ROUTES } from '@/router/routes'
 
@@ -34,6 +35,7 @@ export function SPRecordVisitScreen() {
   const navigate = useNavigate()
   const location = useLocation()
   const createVisitMutation = useCreateSPVisitMutation()
+  const { isMobile } = useResponsive()
 
   const ctx: RecordVisitContext = (location.state as { ctx?: RecordVisitContext } | null)?.ctx ?? {
     patientName: 'Unknown Patient',
@@ -171,7 +173,7 @@ export function SPRecordVisitScreen() {
         Back
       </button>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: '20px', alignItems: 'flex-start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? 'minmax(0, 1fr)' : 'minmax(0, 1fr) 320px', gap: isMobile ? '16px' : '20px', alignItems: 'flex-start' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <GGCard padding="24px">
             <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, marginBottom: '6px', fontFamily: font.family }}>
@@ -340,7 +342,7 @@ export function SPRecordVisitScreen() {
           </GGCard>
         </div>
 
-        <div style={{ position: 'sticky', top: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ position: isMobile ? 'static' : 'sticky', top: '20px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <GGCard padding="20px">
             <div style={{ fontSize: '11px', fontWeight: 700, color: C.textLight, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: '12px', fontFamily: font.family }}>
               Patient Context
