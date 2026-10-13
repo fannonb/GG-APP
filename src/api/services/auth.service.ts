@@ -101,6 +101,16 @@ export const authService = {
     return data
   },
 
+  /** Sends a fresh verification link. The reply is the same whether or not the account exists. */
+  async resendVerification(email: string): Promise<{ message: string }> {
+    if (isMockApi) {
+      await mockDelay(400)
+      return { message: 'If that account still needs verifying, we have sent a new verification email.' }
+    }
+    const { data } = await apiClient.post<{ message: string }>('/auth/resend-verification', { email })
+    return data
+  },
+
   async verifyEmail(token: string): Promise<VerifyEmailResponse> {
     if (isMockApi) {
       await mockDelay(500)

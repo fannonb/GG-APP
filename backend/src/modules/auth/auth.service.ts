@@ -197,7 +197,9 @@ export class AuthService {
       return {
         message:
           'Registration successful. Check your email to verify your account before signing in.',
-        verificationToken,
+        // Never in production: holding the token would let someone verify an
+        // address they don't own. Local development uses it to skip the inbox.
+        ...(this.shouldExposeResetUrl() ? { verificationToken } : {}),
       }
     }
 

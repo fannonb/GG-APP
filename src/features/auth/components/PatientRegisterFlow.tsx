@@ -164,7 +164,7 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
           if (result.verificationToken) {
             sessionStorage.setItem(VERIFY_TOKEN_STORAGE_KEY, result.verificationToken)
           }
-          navigate(ROUTES.VERIFY)
+          navigate(ROUTES.VERIFY, { state: { email: values.email } })
         },
       },
     )
