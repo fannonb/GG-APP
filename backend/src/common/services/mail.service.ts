@@ -80,6 +80,15 @@ export interface PayoutEmailData {
   invoiceCount: number
 }
 
+export interface AdminAlertEmailData {
+  subject: string
+  /** One plain-text sentence saying what happened and what the admin should do. */
+  summary: string
+  details: Array<[string, string]>
+  /** Admin portal page, relative to the admin portal root (e.g. '/applications'). */
+  cta: { label: string; adminPath: string }
+}
+
 export interface SecurityAlertEmailData {
   name?: string
   subject: string
@@ -103,6 +112,8 @@ export class MailService {
   private readonly client: Resend | null
   private readonly from: string
   private readonly appBaseUrl: string
+  private readonly adminEmails: string[]
+  private readonly adminPortalPath: string
 
   // Explicit @Inject token: tsx/esbuild doesn't emit constructor
   // design-type metadata, so bare ConfigService DI would resolve undefined.
@@ -114,6 +125,8 @@ export class MailService {
     this.appBaseUrl = (
       configService.get<string>('app.appBaseUrl') || 'http://localhost:5173'
     ).replace(/\/$/, '')
+    this.adminEmails = configService.get<string[]>('notifications.adminEmails') ?? []
+    this.adminPortalPath = (configService.get<string>('portal.adminPath') || '/admin').replace(/\/$/, '')
     this.client = apiKey ? new Resend(apiKey) : null
     if (!this.client) {
       this.logger.warn(
@@ -350,6 +363,22 @@ export class MailService {
         data.cta ? { label: data.cta.label, url: `${this.appBaseUrl}${data.cta.path}` } : undefined,
       ),
     })
+  }
+
+  /**
+   * Tells the admin inbox about something waiting for review on the dashboard
+   * (new registrations, provider replies). Sent to every ADMIN_NOTIFICATION_EMAIL.
+   */
+  async sendAdminAlert(data: AdminAlertEmailData): Promise<void> {
+    if (this.adminEmails.length === 0) return
+    const html = this.layout(
+      `
+      <p>Hi GG'APP team,</p>
+      <p>${escapeHtml(data.summary)}</p>
+      ${this.detailsTable(data.details)}`,
+      { label: data.cta.label, url: `${this.appBaseUrl}${this.adminPortalPath}${data.cta.adminPath}` },
+    )
+    await Promise.all(this.adminEmails.map(to => this.send({ to, subject: data.subject, html })))
   }
 
   async sendVerificationEmail(to: string, token: string): Promise<boolean> {

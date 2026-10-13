@@ -9,6 +9,7 @@ import {
   UserRole,
 } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
+import { MailService } from '../../common/services/mail.service'
 import type { EmailChangeRequestDto, ProviderApplicationReplyDto } from './dto/account-requests.dto'
 
 const DOCUMENT_KINDS: Record<string, ProviderApplicationDocumentKind> = {
@@ -24,7 +25,10 @@ const DOCUMENT_KINDS: Record<string, ProviderApplicationDocumentKind> = {
  */
 @Injectable()
 export class AccountRequestsService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(MailService) private readonly mailService: MailService,
+  ) {}
 
   private async notifyAdmins(title: string, body: string, screen: string) {
     const admins = await this.prisma.user.findMany({ where: { role: UserRole.ADMIN }, select: { id: true } })
@@ -134,6 +138,16 @@ export class AccountRequestsService {
     })
 
     await this.notifyAdmins('Provider replied', `${application.practiceName} replied to your information request.`, 'admin-applications')
+    void this.mailService.sendAdminAlert({
+      subject: `Provider replied: ${application.practiceName} (needs review)`,
+      summary: 'A provider answered your request for more information. Their application is back in the review queue.',
+      details: [
+        ['Practice', application.practiceName],
+        ['Email', application.user.email],
+        ['Documents attached', String(documents.length)],
+      ],
+      cta: { label: 'Review application', adminPath: '/applications' },
+    })
     return { applicationId, status: 'pending', message: 'Thanks — your reply was sent for review.' }
   }
 

@@ -183,6 +183,21 @@ export class AuthService {
       // Non-critical — registration already succeeded
     }
 
+    void this.mailService.sendAdminAlert({
+      subject: `New patient registration: ${dto.firstName} ${dto.lastName}`.trim(),
+      summary: isGoogleSignup
+        ? 'A new patient signed up with Google. Their email address is already verified.'
+        : 'A new patient signed up. They still need to verify their email address before they can sign in.',
+      details: [
+        ['Name', `${dto.firstName} ${dto.lastName}`.trim()],
+        ['Email', email],
+        ['Phone', dto.phone ?? '-'],
+        ['Country', dto.country ?? '-'],
+        ['Signed up with', isGoogleSignup ? 'Google' : 'Email and password'],
+      ],
+      cta: { label: 'Open patient accounts', adminPath: '/users' },
+    })
+
     if (!isGoogleSignup && this.mailService.isEnabled) {
       const verificationToken = randomUUID()
       await this.prisma.emailVerificationToken.create({
@@ -363,6 +378,19 @@ export class AuthService {
     } catch {
       // Non-critical — application already submitted
     }
+
+    void this.mailService.sendAdminAlert({
+      subject: `New provider application: ${dto.practiceName} (needs review)`,
+      summary: 'A healthcare provider applied to join GG\'APP. Check their licence and documents, then approve, request more information or decline.',
+      details: [
+        ['Practice', dto.practiceName],
+        ['Email', email],
+        ['Phone', dto.phone ?? '-'],
+        ['Country', dto.country ?? '-'],
+        ['Licence number', dto.licenseNumber ?? '-'],
+      ],
+      cta: { label: 'Review application', adminPath: '/applications' },
+    })
 
     if (this.mailService.isEnabled) {
       const verificationToken = randomUUID()

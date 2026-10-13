@@ -75,6 +75,11 @@ export function configuration() {
       brevoApiKey: process.env.BREVO_API_KEY ?? '',
       resendApiKey: process.env.RESEND_API_KEY ?? '',
       expoAccessToken: process.env.EXPO_ACCESS_TOKEN ?? '',
+      /** Admin inbox(es) for registrations awaiting review. Comma-separated; empty turns alerts off. */
+      adminEmails: (process.env.ADMIN_NOTIFICATION_EMAIL ?? 'admin@gatewayglobal.africa')
+        .split(',')
+        .map(address => address.trim())
+        .filter(Boolean),
     },
   }
 }
