@@ -133,6 +133,21 @@ export const adminService = {
     return data
   },
 
+  async verifyCredential(applicationId: string, credentialId: string, note?: string): Promise<SPApplication> {
+    const { data } = await apiClient.post<SPApplication>(`/admin/applications/${applicationId}/credentials/${credentialId}/verify`, { note })
+    return data
+  },
+
+  async rejectCredential(applicationId: string, credentialId: string, note: string): Promise<SPApplication> {
+    const { data } = await apiClient.post<SPApplication>(`/admin/applications/${applicationId}/credentials/${credentialId}/reject`, { note })
+    return data
+  },
+
+  async getCredentialDocument(applicationId: string, credentialId: string): Promise<{ url: string; fileName: string; mimeType: string }> {
+    const { data } = await apiClient.get<{ url: string; fileName: string; mimeType: string }>(`/admin/applications/${applicationId}/credentials/${credentialId}/document`)
+    return data
+  },
+
   async rejectApplication(id: string, payload: AdminApplicationActionPayload): Promise<SPApplication> {
     const { data } = await apiClient.post<SPApplication>(`/admin/applications/${id}/reject`, payload)
     return data

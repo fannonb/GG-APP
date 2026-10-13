@@ -32,6 +32,27 @@ export interface AdminStats {
   monthlyVolume: number
 }
 
+/** One licence on a provider application, as the API's review summary returns it. */
+export interface ApplicationCredential {
+  id: string
+  kind: string
+  label: string
+  regulator: string
+  holder: 'facility' | 'person'
+  numberLabel: string
+  number: string
+  holderName?: string
+  expiresAt?: string
+  expired: boolean
+  status: 'submitted' | 'verified' | 'rejected' | 'expired'
+  note?: string
+  verifiedAt?: string
+  hasDocument: boolean
+  required: boolean
+  verifyUrl?: string
+  verifyHint?: string
+}
+
 export interface SPApplication {
   id: string
   name: string
@@ -53,6 +74,12 @@ export interface SPApplication {
   /** True when the provider replied to an info request and it's back in the queue. */
   resubmitted?: boolean
   messages?: ApplicationMessage[]
+  businessRegNumber?: string
+  taxPin?: string
+  /** Licences sent with the application (empty for older applications that gave one number). */
+  credentials?: ApplicationCredential[]
+  /** Required licences not yet verified; null for older applications. */
+  credentialsOutstanding?: string[] | null
 }
 
 export interface ApplicationMessage {

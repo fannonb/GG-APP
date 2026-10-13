@@ -52,6 +52,8 @@ export function configuration() {
       bucket: process.env.STORAGE_BUCKET ?? '',
       publicBaseUrl: process.env.STORAGE_PUBLIC_BASE_URL ?? '',
       presignExpiresSeconds: process.env.STORAGE_PRESIGN_EXPIRES ?? '900',
+      // Railway Buckets use virtual-hosted URLs (bucket.host); MinIO and some others need path style.
+      forcePathStyle: process.env.STORAGE_FORCE_PATH_STYLE ?? 'true',
     },
     oauth: {
       googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',

@@ -29,7 +29,13 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { ReferenceService } from '../../common/services/reference.service'
 import { MailService } from '../../common/services/mail.service'
-import { getInvoiceAttachmentDataUrl, sanitizeInvoiceAttachmentMetadata } from '../../common/utils/invoice-attachment.util'
+import {
+  getInvoiceAttachmentDataUrl,
+  parseInvoiceAttachmentMetadata,
+  sanitizeInvoiceAttachmentMetadata,
+} from '../../common/utils/invoice-attachment.util'
+import { StorageService } from '../../common/services/storage.service'
+import type { AttachmentMetadata } from '../../common/services/storage.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { formatMoney } from '../../common/utils/money.util'
 import { RedisService } from '../../redis/redis.service'
@@ -74,6 +80,7 @@ export class PatientService {
     @Inject(ProvidersService) providersService: ProvidersService,
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(MailService) mailService: MailService,
+    @Inject(StorageService) private readonly storage: StorageService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
@@ -816,6 +823,9 @@ export class PatientService {
     const attachments = dto.attachments ?? []
     const patientName = `${profile.firstName} ${profile.lastName}`.trim()
 
+    const storedAttachments = await Promise.all(
+      attachments.map(file => this.storage.externalize({ ...file, originalName: file.name, displaySize: file.size }, 'appointments')),
+    )
     const appointment = await this.prisma.$transaction(async tx => {
       const reference = await this.referenceService.next('APT', tx)
 
@@ -832,12 +842,12 @@ export class PatientService {
           status: AppointmentStatus.REQUESTED,
           forSelf: dto.forSelf,
           address: dto.address ?? provider.address,
-          attachments: attachments as unknown as Prisma.InputJsonValue,
+          attachments: storedAttachments as unknown as Prisma.InputJsonValue,
           medicalHistory: [],
           allergies: [],
         },
       })
-    })
+    }).catch(error => this.storage.discardOnFailure(storedAttachments.map(item => item?.storageKey), error))
 
     await this.prisma.notification.create({
       data: {
@@ -1261,7 +1271,8 @@ export class PatientService {
       throw new NotFoundException('Invoice not found')
     }
 
-    const attachment = getInvoiceAttachmentDataUrl(invoice.attachment, invoice.attachmentMetadata)
+    const metadata = await this.storage.hydrate(parseInvoiceAttachmentMetadata(invoice.attachmentMetadata))
+    const attachment = getInvoiceAttachmentDataUrl(invoice.attachment, metadata as unknown as Prisma.JsonValue)
     if (!attachment) {
       throw new NotFoundException('Invoice document is not available')
     }
@@ -2503,6 +2514,10 @@ export class PatientService {
         ? PrescriptionFulfillmentMode.DELIVERY
         : PrescriptionFulfillmentMode.PICKUP
 
+    const storedPrescriptionFile = await this.storage.externalize(
+      { ...dto.attachment, originalName: dto.attachment.name, displaySize: dto.attachment.size },
+      'prescriptions',
+    )
     const request = await this.prisma.$transaction(async tx => {
       const reference = await this.referenceService.next('RX', tx)
 
@@ -2517,7 +2532,7 @@ export class PatientService {
           fulfillmentMode,
           deliveryAddress: dto.deliveryAddress?.trim() || null,
           patientNotes: dto.patientNotes?.trim() || null,
-          prescriptionAttachment: dto.attachment as unknown as Prisma.InputJsonValue,
+          prescriptionAttachment: storedPrescriptionFile as unknown as Prisma.InputJsonValue,
           forSelf: dto.forSelf,
         },
         include: {
@@ -2525,7 +2540,7 @@ export class PatientService {
           beneficiary: true,
         },
       })
-    })
+    }).catch(error => this.storage.discardOnFailure([storedPrescriptionFile?.storageKey], error))
 
     await this.prisma.notification.create({
       data: {
@@ -2576,7 +2591,7 @@ export class PatientService {
       orderBy: { createdAt: 'desc' },
     })
 
-    return requests.map(request => this.mapPrescriptionRequest(request))
+    return await Promise.all(requests.map(request => this.mapPrescriptionRequest(request)))
   }
 
   async markPrescriptionQuoteReviewed(userId: string, requestReference: string) {
@@ -2720,7 +2735,7 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
-  private mapPrescriptionRequest(
+  private async mapPrescriptionRequest(
     request: {
       id: string
       reference: string
@@ -2757,7 +2772,7 @@ export class PatientService {
       deliveryAddress: request.deliveryAddress ?? undefined,
       patientNotes: request.patientNotes ?? undefined,
       pharmacyNotes: request.pharmacyNotes ?? undefined,
-      attachment: request.prescriptionAttachment,
+      attachment: await this.storage.hydrate(request.prescriptionAttachment as unknown as AttachmentMetadata | null),
       quotedItems: request.quotedItems ?? undefined,
       quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
       deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,

@@ -178,6 +178,8 @@ const FILTER_TABS: { id: SPApplicationStatus | 'all'; label: string }[] = [
   { id: 'rejected',       label: 'Rejected' },
 ]
 
+import { ApplicationLicences } from './ApplicationLicences'
+
 export function AdminSPAppsScreen() {
   const navigate = useNavigate()
   const { isMobile, isTablet } = useResponsive()
@@ -230,8 +232,12 @@ export function AdminSPAppsScreen() {
   const checklist = useMemo(() => {
     if (!selected) return []
     return [
-      { id: 'license', label: 'Licence number matches the uploaded licence document', auto: !!licenseDoc },
-      { id: 'docs',    label: `All required documents provided (${selected.documents.length})`, auto: selected.documents.length >= 2 },
+      ...(selected.credentials?.length
+        ? [{ id: 'licences', label: 'Every required licence is verified (see Licences below)', auto: (selected.credentialsOutstanding ?? []).length === 0 }]
+        : [
+            { id: 'license', label: 'Licence number matches the uploaded licence document', auto: !!licenseDoc },
+            { id: 'docs',    label: `All required documents provided (${selected.documents.length})`, auto: selected.documents.length >= 2 },
+          ]),
       { id: 'payment', label: 'Disbursement / payout details are complete', auto: selected.paymentMethod === 'mpesa' ? !!selected.mpesaPaybill : !!(selected.bankName && selected.bankAccount) },
       { id: 'contact', label: 'Contact email and phone are valid', auto: !!selected.email && !!selected.phone },
     ]
@@ -299,6 +305,14 @@ export function AdminSPAppsScreen() {
       setApprovedAppName(null)
       setNoteError(true)
     }
+  }
+
+  // The API refuses approval until every required licence is verified; mirror that here.
+  const licencesOutstanding = selected?.credentialsOutstanding ?? []
+  const approveBlocked = licencesOutstanding.length > 0
+  const applyUpdate = (updated: SPApplication) => {
+    setApps(prev => prev.map(app => (app.id === updated.id ? updated : app)))
+    setSelected(updated)
   }
 
   const days = selected ? daysWaiting(selected.submitted) : 0
@@ -455,7 +469,7 @@ export function AdminSPAppsScreen() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    <GGButton variant="success" size="sm" onClick={() => handleAction('approved')}>
+                    <GGButton variant="success" size="sm" onClick={() => handleAction('approved')} disabled={approveBlocked}>
                       Approve
                     </GGButton>
                     <GGButton variant="secondary" size="sm" onClick={() => handleAction('info_requested')} disabled={selected.status === 'info_requested'}>
@@ -485,6 +499,10 @@ export function AdminSPAppsScreen() {
                     </div>
                   )}
                 </div>
+              )}
+
+              {selected.credentials && selected.credentials.length > 0 && (
+                <ApplicationLicences application={selected} onUpdated={applyUpdate} />
               )}
 
               {/* Verification checklist */}
@@ -526,8 +544,9 @@ export function AdminSPAppsScreen() {
                   {selected.emailSecondary && <InfoRow label="Secondary Email" value={selected.emailSecondary} />}
                 </div>
 
-                <SectionLabel>Registration &amp; Licensing</SectionLabel>
-                {/* License number — blue highlight, linked to its backing document */}
+                <SectionLabel>{selected.credentials?.length ? 'Services' : <>Registration &amp; Licensing</>}</SectionLabel>
+                {/* Older applications: one licence number, linked to its backing document */}
+                {!selected.credentials?.length && (
                 <div style={{ padding: '14px 16px', background: C.blue100, borderRadius: radius.sm, border: `1.5px solid ${C.blue500}44`, marginBottom: '12px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px', flexWrap: 'wrap' }}>
                     <div>
@@ -545,6 +564,7 @@ export function AdminSPAppsScreen() {
                     )}
                   </div>
                 </div>
+                )}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {selected.serviceTypes.map(t => (
                     <span key={t} style={{ padding: '5px 14px', borderRadius: radius.full, background: C.blue100, border: `1px solid ${C.blue500}33`, fontSize: '12px', fontWeight: 700, color: C.navy800 }}>
@@ -654,7 +674,7 @@ export function AdminSPAppsScreen() {
                   </div>
                 )}
                 <div style={{ display: 'flex', gap: '10px', marginTop: '14px', flexWrap: 'wrap' }}>
-                  <GGButton variant="success" size="sm" onClick={() => handleAction('approved')}>
+                  <GGButton variant="success" size="sm" onClick={() => handleAction('approved')} disabled={approveBlocked}>
                     Approve Application
                   </GGButton>
                   <GGButton variant="secondary" size="sm" onClick={() => handleAction('info_requested')} disabled={selected.status === 'info_requested'}>

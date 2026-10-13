@@ -24,14 +24,35 @@ import {
   ProviderPayoutAccountStatus,
   UserRole,
   UserStatus,
+  ProviderCredentialStatus,
 } from '@prisma/client'
 import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { MailService } from '../../common/services/mail.service'
+import { ProviderCredentialsService } from '../../common/services/provider-credentials.service'
 import { LedgerService } from '../ledger/ledger.service'
 import { getInvoiceAttachmentDataUrl } from '../../common/utils/invoice-attachment.util'
 import type { CreateNewsArticleDto, UpdateNewsArticleDto } from './dto/news-article.dto'
 import type { CreateNewsCategoryDto } from './dto/news-category.dto'
+
+/** Documents without their inline file data, which can be several MB each. */
+const APPLICATION_DOCUMENT_SELECT = {
+  id: true,
+  applicationId: true,
+  kind: true,
+  originalName: true,
+  mimeType: true,
+  sizeBytes: true,
+  displaySize: true,
+  storageKey: true,
+  uploadedAt: true,
+} as const
+
+const APPLICATION_REVIEW_INCLUDE = {
+  documents: { select: APPLICATION_DOCUMENT_SELECT },
+  messages: { orderBy: { createdAt: 'asc' as const } },
+  credentials: { orderBy: { createdAt: 'asc' as const } },
+}
 
 const ADMIN_PROVIDER_DETAIL_INCLUDE = {
   authUser: true,
@@ -39,7 +60,7 @@ const ADMIN_PROVIDER_DETAIL_INCLUDE = {
   invoices: true,
   application: {
     include: {
-      documents: true,
+      documents: { select: APPLICATION_DOCUMENT_SELECT },
     },
   },
   payoutAccounts: {
@@ -93,17 +114,20 @@ export class AdminService {
   private readonly fieldEncryption: FieldEncryptionService
   private readonly ledgerService: LedgerService
   private readonly mailService: MailService
+  private readonly providerCredentials: ProviderCredentialsService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(LedgerService) ledgerService: LedgerService,
     @Inject(MailService) mailService: MailService,
+    @Inject(ProviderCredentialsService) providerCredentials: ProviderCredentialsService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
     this.ledgerService = ledgerService
     this.mailService = mailService
+    this.providerCredentials = providerCredentials
   }
 
   async getDashboard() {
@@ -138,7 +162,7 @@ export class AdminService {
       }),
       this.prisma.providerApplication.findMany({
         where: ADMIN_REVIEWABLE_APPLICATION_WHERE,
-        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+        include: APPLICATION_REVIEW_INCLUDE,
         orderBy: { submittedAt: 'desc' },
         take: 6,
       }),
@@ -411,7 +435,7 @@ export class AdminService {
   async getApplications() {
     const applications = await this.prisma.providerApplication.findMany({
       where: ADMIN_REVIEWABLE_APPLICATION_WHERE,
-      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+      include: APPLICATION_REVIEW_INCLUDE,
       orderBy: { submittedAt: 'desc' },
     })
 
@@ -435,7 +459,7 @@ export class AdminService {
   async getApplication(applicationId: string) {
     const application = await this.prisma.providerApplication.findUnique({
       where: { id: applicationId },
-      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+      include: APPLICATION_REVIEW_INCLUDE,
     })
 
     if (!application) {
@@ -448,10 +472,16 @@ export class AdminService {
   async approveApplication(actorUserId: string, applicationId: string, note?: string) {
     const application = await this.prisma.providerApplication.findUnique({
       where: { id: applicationId },
+      include: { credentials: true },
     })
 
     if (!application) {
       throw new NotFoundException('Provider application not found')
+    }
+
+    const { outstanding } = this.providerCredentials.summarize(application)
+    if (outstanding && outstanding.length > 0) {
+      throw new BadRequestException(`Verify these licences before approving: ${outstanding.join('; ')}.`)
     }
 
     const payoutDetails = this.asObject(application.payoutDetails)
@@ -522,6 +552,11 @@ export class AdminService {
         data: { applicationId: application.id, author: 'ADMIN', kind: 'approved', body: note?.trim() || 'Application approved.' },
       })
 
+      await tx.providerCredential.updateMany({
+        where: { applicationId: application.id },
+        data: { providerId: createdProvider.id },
+      })
+
       await tx.providerNotificationPreference.upsert({
         where: { providerId: createdProvider.id },
         update: {},
@@ -582,6 +617,72 @@ export class AdminService {
     })
 
     return this.getProvider(String(provider.id))
+  }
+
+  async reviewCredential(
+    actorUserId: string,
+    applicationId: string,
+    credentialId: string,
+    decision: 'verified' | 'rejected',
+    note?: string,
+  ) {
+    const credential = await this.prisma.providerCredential.findFirst({
+      where: { id: credentialId, applicationId },
+      select: { id: true, kind: true },
+    })
+    if (!credential) throw new NotFoundException('Licence not found on this application')
+    if (decision === 'rejected' && !note?.trim()) {
+      throw new BadRequestException('Say why the licence was rejected, so the provider can fix it.')
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.providerCredential.update({
+        where: { id: credential.id },
+        data: {
+          status: decision === 'verified' ? ProviderCredentialStatus.VERIFIED : ProviderCredentialStatus.REJECTED,
+          note: note?.trim() || null,
+          verifiedById: actorUserId,
+          verifiedAt: new Date(),
+        },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId,
+          action: `admin.provider_credential.${decision}`,
+          entityType: 'ProviderCredential',
+          entityId: credential.id,
+          metadata: { applicationId, kind: credential.kind, note: note?.trim() || null } as Prisma.JsonObject,
+        },
+      }),
+    ])
+
+    return this.getApplication(applicationId)
+  }
+
+  async getCredentialDocument(actorUserId: string, applicationId: string, credentialId: string) {
+    const credential = await this.prisma.providerCredential.findFirst({
+      where: { id: credentialId, applicationId },
+      select: {
+        id: true,
+        document: { select: { originalName: true, mimeType: true, sizeBytes: true, displaySize: true, storageKey: true, dataUrl: true } },
+      },
+    })
+    if (!credential?.document) throw new NotFoundException('No certificate was uploaded for this licence')
+
+    const resolved = await this.providerCredentials.resolveDocument(credential.document)
+    if (!resolved) throw new NotFoundException('The certificate file could not be found')
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId,
+        action: 'admin.provider_credential.document_viewed',
+        entityType: 'ProviderCredential',
+        entityId: credential.id,
+        metadata: { applicationId } as Prisma.JsonObject,
+      },
+    })
+
+    return { url: resolved.url, fileName: resolved.fileName, mimeType: resolved.mimeType }
   }
 
   async requestInfo(actorUserId: string, applicationId: string, note?: string) {
@@ -980,7 +1081,7 @@ export class AdminService {
         decisionNote: note ?? null,
         decidedAt: new Date(),
       },
-      include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+      include: APPLICATION_REVIEW_INCLUDE,
     })
 
     await this.prisma.auditLog.create({
@@ -1155,7 +1256,11 @@ export class AdminService {
     submittedAt: Date
     status: ProviderApplicationStatus
     messages?: Array<{ id: string; author: string; kind: string; body: string; attachments: Prisma.JsonValue | null; createdAt: Date }>
+    businessRegNumber?: string | null
+    taxPin?: string | null
+    credentials?: Array<{ id: string; kind: string; number: string; holderName: string | null; expiresAt: Date | null; documentId: string | null; status: ProviderCredentialStatus; note: string | null; verifiedAt: Date | null }>
   }) {
+    const credentialInfo = this.providerCredentials.summarize(application)
     const payoutDetails = this.asObject(application.payoutDetails)
     const messages = application.messages ?? []
     const last = messages[messages.length - 1]
@@ -1169,6 +1274,11 @@ export class AdminService {
       emailSecondary: application.emailSecondary ?? undefined,
       phone: application.phone,
       licenseNumber: application.licenseNumber,
+      businessRegNumber: application.businessRegNumber ?? undefined,
+      taxPin: application.taxPin ?? undefined,
+      credentials: credentialInfo.credentials,
+      // Required licences not yet verified; null for older applications that sent one number.
+      credentialsOutstanding: credentialInfo.outstanding,
       hours: this.mapApplicationHours(application.openingHours),
       paymentMethod: this.mapPayoutMethodToClient(application.payoutMethod),
       mpesaPaybill: this.asOptionalString(payoutDetails.accountNumber),
@@ -1207,14 +1317,14 @@ export class AdminService {
     if (provider.applicationId) {
       return this.prisma.providerApplication.findUnique({
         where: { id: provider.applicationId },
-        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+        include: APPLICATION_REVIEW_INCLUDE,
       })
     }
 
     if (provider.authUserId) {
       return this.prisma.providerApplication.findFirst({
         where: { userId: provider.authUserId },
-        include: { documents: true, messages: { orderBy: { createdAt: 'asc' } } },
+        include: APPLICATION_REVIEW_INCLUDE,
         orderBy: { submittedAt: 'desc' },
       })
     }

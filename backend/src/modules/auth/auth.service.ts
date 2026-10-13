@@ -28,6 +28,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { RedisService } from '../../redis/redis.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { MailService } from '../../common/services/mail.service'
+import { ProviderCredentialsService } from '../../common/services/provider-credentials.service'
 import { parseDurationToMs, parseDurationToSeconds } from '../../common/utils/duration.util'
 import { GoogleAuthService } from './google-auth.service'
 import type { GoogleAuthDto } from './dto/google-auth.dto'
@@ -53,6 +54,7 @@ export class AuthService {
   private readonly fieldEncryption: FieldEncryptionService
   private readonly googleAuth: GoogleAuthService
   private readonly mailService: MailService
+  private readonly providerCredentials: ProviderCredentialsService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -62,6 +64,7 @@ export class AuthService {
     @Inject(FieldEncryptionService) fieldEncryption: FieldEncryptionService,
     @Inject(GoogleAuthService) googleAuth: GoogleAuthService,
     @Inject(MailService) mailService: MailService,
+    @Inject(ProviderCredentialsService) providerCredentials: ProviderCredentialsService,
   ) {
     this.prisma = prisma
     this.redis = redis
@@ -70,6 +73,7 @@ export class AuthService {
     this.fieldEncryption = fieldEncryption
     this.googleAuth = googleAuth
     this.mailService = mailService
+    this.providerCredentials = providerCredentials
   }
 
   async registerPatient(dto: RegisterPatientDto, ctx: SessionContext = {}) {
@@ -292,6 +296,8 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(dto.password, 12)
+    // Checks the licences against the country and services, and uploads certificates (removed again if the save fails).
+    const prepared = await this.providerCredentials.prepareForRegistration(dto)
 
     const application = await this.prisma.$transaction(async tx => {
       const user = await tx.user.create({
@@ -320,7 +326,9 @@ export class AuthService {
           city: dto.location.city ?? null,
           region: dto.location.region ?? null,
           serviceTypes: dto.serviceTypes,
-          licenseNumber: dto.licenseNumber,
+          licenseNumber: prepared.licenseNumber,
+          businessRegNumber: prepared.businessRegNumber,
+          taxPin: prepared.taxPin,
           openingHours: dto.hours as unknown as Prisma.InputJsonValue,
           payoutMethod: this.mapPayoutMethod(dto.payoutMethod.method),
           payoutSummary: this.buildPayoutSummary(dto),
@@ -328,7 +336,7 @@ export class AuthService {
           lat: dto.location.lat ?? null,
           lng: dto.location.lng ?? null,
           documents: {
-            create: dto.documents.map(document => ({
+            create: (dto.documents ?? []).map(document => ({
               kind: this.mapDocumentKind(document.kind),
               originalName: document.originalName,
               mimeType: document.mimeType,
@@ -354,7 +362,12 @@ export class AuthService {
         },
       })
 
+      await this.providerCredentials.createRecords(tx, createdApplication.id, prepared.items)
+
       return createdApplication
+    }, { timeout: 20_000 }).catch(async (error: unknown) => {
+      await this.providerCredentials.discardUploads(prepared.uploadedKeys)
+      throw error
     })
 
     // Notify admins about the new provider application (outside the tx so it
@@ -1284,7 +1297,7 @@ export class AuthService {
     }
   }
 
-  private mapDocumentKind(kind: RegisterSpDto['documents'][number]['kind']) {
+  private mapDocumentKind(kind: NonNullable<RegisterSpDto['documents']>[number]['kind']) {
     switch (kind) {
       case 'logo':
         return ProviderApplicationDocumentKind.LOGO

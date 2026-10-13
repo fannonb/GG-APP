@@ -15,6 +15,8 @@ export interface AttachmentMetadata {
   sizeBytes?: number
   displaySize?: string
   storageKey?: string
+  /** 'bucket' once the file lives in object storage; older rows have no marker and keep their data URL. */
+  storage?: 'bucket'
   /** Legacy field: base64 data URL embedded in PostgreSQL (storage disabled). */
   dataUrl?: string
 }
@@ -25,7 +27,7 @@ export interface StoreAttachmentInput {
   mimeType?: string
   sizeBytes?: number
   displaySize?: string
-  prefix: 'invoices' | 'prescriptions' | 'provider-documents'
+  prefix: 'invoices' | 'prescriptions' | 'appointments' | 'provider-documents'
 }
 
 export interface ResolvedAttachment {
@@ -67,7 +69,7 @@ export class StorageService {
       this.client = new S3Client({
         endpoint,
         region,
-        forcePathStyle: true,
+        forcePathStyle: (configService.get<string>('storage.forcePathStyle') ?? 'true') !== 'false',
         credentials: { accessKeyId, secretAccessKey },
       })
       this.logger.log(`Object storage enabled (bucket "${this.bucket}").`)
@@ -188,6 +190,65 @@ export class StorageService {
       )
     } catch (error) {
       this.logger.warn(`Failed to delete object "${storageKey}": ${(error as Error).message}`)
+    }
+  }
+
+  /**
+   * Move an inline file out of the database. Returns the metadata to store: the object key and
+   * `storage: 'bucket'`, with no `dataUrl`. Metadata without a file, or with storage disabled,
+   * is returned unchanged. The caller must `deleteObject` the returned key if its save fails.
+   */
+  async externalize<T extends AttachmentMetadata>(
+    meta: T | null | undefined,
+    prefix: StoreAttachmentInput['prefix'],
+  ): Promise<T | null> {
+    if (!meta || typeof meta !== 'object') return meta ?? null
+    if (!this.client || !meta.dataUrl) return meta
+
+    const stored = await this.storeAttachment({
+      dataUrl: meta.dataUrl,
+      originalName: meta.originalName,
+      mimeType: meta.mimeType,
+      sizeBytes: meta.sizeBytes,
+      displaySize: meta.displaySize,
+      prefix,
+    })
+    const { dataUrl: _inline, ...rest } = meta
+    return { ...rest, storageKey: stored.storageKey, storage: 'bucket' } as T
+  }
+
+  /** Delete files that were uploaded for a save that then failed, and rethrow the original error. */
+  async discardOnFailure(keys: Array<string | null | undefined>, error: unknown): Promise<never> {
+    await Promise.all(keys.filter((k): k is string => !!k).map(k => this.deleteObject(k)))
+    throw error
+  }
+
+  /** Hydrate every item of a stored list (e.g. appointment attachments). */
+  async hydrateList(items: unknown): Promise<unknown[]> {
+    if (!Array.isArray(items)) return []
+    return Promise.all(items.map(item => this.hydrate(item as AttachmentMetadata)))
+  }
+
+  /**
+   * Put a stored file back as a data URL, for responses that clients read inline.
+   * Rows that still carry their own data URL, and rows without a bucket marker, pass through unchanged.
+   */
+  async hydrate<T extends AttachmentMetadata>(meta: T | null | undefined): Promise<T | null> {
+    if (!meta || typeof meta !== 'object') return meta ?? null
+    if (meta.dataUrl || meta.storage !== 'bucket' || !meta.storageKey) return meta
+    if (!this.client) {
+      // The row points at the bucket but this API has no bucket credentials (e.g. local dev without STORAGE_*).
+      this.logger.warn(`File "${meta.storageKey}" is in object storage, but storage is not configured here, so it cannot be served.`)
+      return meta
+    }
+
+    try {
+      const res = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: meta.storageKey }))
+      const bytes = Buffer.from(await res.Body!.transformToByteArray())
+      return { ...meta, dataUrl: `data:${meta.mimeType ?? 'application/octet-stream'};base64,${bytes.toString('base64')}` }
+    } catch (error) {
+      this.logger.error(`Could not load stored file "${meta.storageKey}": ${(error as Error).message}`)
+      return meta
     }
   }
 

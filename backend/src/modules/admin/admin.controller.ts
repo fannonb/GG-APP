@@ -142,6 +142,35 @@ export class AdminController {
     return this.adminService.approveApplication(user.sub, applicationId, dto.note)
   }
 
+  @Post('applications/:id/credentials/:credentialId/verify')
+  verifyCredential(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') applicationId: string,
+    @Param('credentialId') credentialId: string,
+    @Body() dto: ProviderApplicationActionDto,
+  ) {
+    return this.adminService.reviewCredential(user.sub, applicationId, credentialId, 'verified', dto.note)
+  }
+
+  @Post('applications/:id/credentials/:credentialId/reject')
+  rejectCredential(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') applicationId: string,
+    @Param('credentialId') credentialId: string,
+    @Body() dto: ProviderApplicationActionDto,
+  ) {
+    return this.adminService.reviewCredential(user.sub, applicationId, credentialId, 'rejected', dto.note)
+  }
+
+  @Get('applications/:id/credentials/:credentialId/document')
+  getCredentialDocument(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') applicationId: string,
+    @Param('credentialId') credentialId: string,
+  ) {
+    return this.adminService.getCredentialDocument(user.sub, applicationId, credentialId)
+  }
+
   @Post('applications/:id/request-info')
   requestInfo(
     @CurrentUser() user: AuthenticatedUser,

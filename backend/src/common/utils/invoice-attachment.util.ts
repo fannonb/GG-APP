@@ -6,6 +6,7 @@ export interface InvoiceAttachmentMetadata {
   sizeBytes?: number
   displaySize?: string
   storageKey?: string
+  storage?: 'bucket'
   dataUrl?: string
 }
 
@@ -21,6 +22,12 @@ export function parseInvoiceAttachmentMetadata(
   }
 
   return attachmentMetadata as InvoiceAttachmentMetadata
+}
+
+/** True when the invoice has its document, either inline (legacy) or in object storage. */
+export function hasInvoiceAttachment(attachmentMetadata: Prisma.JsonValue | null | undefined) {
+  const metadata = parseInvoiceAttachmentMetadata(attachmentMetadata)
+  return !!metadata && (!!metadata.dataUrl?.trim() || metadata.storage === 'bucket')
 }
 
 export function getInvoiceAttachmentDataUrl(

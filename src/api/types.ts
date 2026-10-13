@@ -109,6 +109,15 @@ export interface ProviderPayoutMethodPayload {
   bankBranch?: string
 }
 
+export interface ProviderCredentialPayload {
+  /** Code from config/credentials.ts, e.g. KE_KMPDC_FACILITY. */
+  kind: string
+  number: string
+  holderName?: string
+  expiresAt?: string
+  document?: { originalName: string; mimeType: string; sizeBytes: number; dataUrl: string }
+}
+
 export interface RegisterSPPayload {
   practiceName: string
   email: string
@@ -117,7 +126,11 @@ export interface RegisterSPPayload {
   password: string
   country: string
   serviceTypes: string[]
-  licenseNumber: string
+  /** Older clients only; the API fills it from the main licence. */
+  licenseNumber?: string
+  credentials?: ProviderCredentialPayload[]
+  businessRegNumber?: string
+  taxPin?: string
   hours: ProviderOpeningHoursEntry[]
   location: ProviderLocationPayload
   payoutMethod: ProviderPayoutMethodPayload

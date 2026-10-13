@@ -13,19 +13,23 @@ import type { LocationSuggestion } from './LocationPickerInput'
 import { PasswordStrength } from './PasswordStrength'
 import { RegisterStepProgress, StickyActions } from './RegisterChrome'
 import { guessCountry } from '@/utils/guess-country'
+import { toCredentialCountry } from '@/config/credentials'
+import { EMPTY_LICENCES, ProviderLicencesSection, validateLicences } from './ProviderLicencesSection'
+import type { LicencesState } from './ProviderLicencesSection'
 
 const STEPS = ['Practice & account', 'Services & hours', 'Verification & payout']
 const STEP_BLURBS = [
   'Practice details, contact information, location, and password.',
-  'Provider categories, license number, and operating hours.',
-  'Supporting documents, payout method, then submit for review.',
+  'The services you offer and your opening hours.',
+  'Licences for each service, business details and payout method, then submit for review.',
 ]
 const SERVICE_TYPES = [
   'Hospital',
-  'Pharmacy',
-  'Laboratory',
   'Clinic',
   'Doctor',
+  'Pharmacy',
+  'Laboratory',
+  'Radiology',
 ]
 const FOCUS = C.blue500
 const FOCUS_SHADOW = 'rgba(56,182,255,0.14)'
@@ -47,7 +51,7 @@ interface FormState {
   password: string
   country: CountryCode | ''
   serviceTypes: string[]
-  licenseNumber: string
+  licences: LicencesState
   hours: Record<Day, DayHours>
   paymentMethod: 'mpesa' | 'bank'
   mpesaPaybill: string
@@ -82,6 +86,8 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
   const [passwordError, setPasswordError] = useState<string | null>(null)
   const [regionError, setRegionError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
+  const [servicesError, setServicesError] = useState<string | null>(null)
+  const [licenceErrors, setLicenceErrors] = useState<Record<string, string>>({})
   const [form, setForm] = useState<FormState>({
     practiceName: '',
     email: '',
@@ -90,7 +96,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
     password: '',
     country: guessCountry(),
     serviceTypes: [],
-    licenseNumber: '',
+    licences: EMPTY_LICENCES,
     hours: DEFAULT_HOURS,
     paymentMethod: 'mpesa',
     mpesaPaybill: '',
@@ -107,6 +113,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
   }
 
   const toggleService = (service: string) => {
+    setServicesError(null)
     setField(
       'serviceTypes',
       form.serviceTypes.includes(service)
@@ -129,7 +136,18 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
     })
   }
 
+  // The regulators that apply depend on where the practice is.
+  const credentialCountry = toCredentialCountry(form.location?.country) ?? toCredentialCountry(form.country)
+
   const handleSubmit = async () => {
+    const { errors, credentials } = validateLicences(credentialCountry, form.serviceTypes, form.licences)
+    setLicenceErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      setSubmitError('Some licence details are missing. Check the highlighted fields.')
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+      return
+    }
+
     try {
       setSubmitError(null)
 
@@ -141,7 +159,9 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
         password: form.password,
         country: form.location?.country || form.country || 'Zimbabwe',
         serviceTypes: form.serviceTypes,
-        licenseNumber: form.licenseNumber.trim(),
+        credentials,
+        businessRegNumber: form.licences.businessRegNumber.trim() || undefined,
+        taxPin: form.licences.taxPin.trim() || undefined,
         hours: DAYS.map(day => ({
           day,
           status: form.hours[day].open ? 'open' : 'closed',
@@ -387,18 +407,10 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
                 )
               })}
             </div>
+            {servicesError && (
+              <div style={{ fontSize: 12, color: C.error, fontWeight: 500, marginTop: 6, fontFamily: font.family }}>{servicesError}</div>
+            )}
           </div>
-
-          <GGInput
-            label="Medical License Number"
-            placeholder="e.g. MCZ-2019-04821"
-            value={form.licenseNumber}
-            onChange={event => setField('licenseNumber', event.target.value)}
-            required
-            hint="Will be verified against the national regulatory body"
-            focusColor={focusColor}
-            focusShadow={focusShadow}
-          />
 
           <div>
             <div
@@ -505,7 +517,13 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
             <GGButton
               variant="primary"
               size="md"
-              onClick={() => setStep(2)}
+              onClick={() => {
+                if (form.serviceTypes.length === 0) {
+                  setServicesError('Choose at least one service you offer.')
+                  return
+                }
+                setStep(2)
+              }}
               style={{ flex: 2 }}
             >
               Continue
@@ -529,64 +547,18 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
               fontFamily: font.family,
             }}
           >
-            License documents and payout details are required for admin verification. Review typically completes within 2–3 business days.
+            Our team checks every licence with its regulator and confirms your payout details. Review usually takes 2–3 business days.
           </div>
 
-          <div>
-            <div
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: C.text,
-                marginBottom: '8px',
-                fontFamily: font.family,
-              }}
-            >
-              Practice Logo
-            </div>
-            <div
-              style={{
-                padding: '20px',
-                border: `2px dashed ${C.border}`,
-                borderRadius: radius.sm,
-                textAlign: 'center',
-                background: C.bg,
-                fontSize: '12px',
-                color: C.textSub,
-                fontFamily: font.family,
-              }}
-            >
-              Metadata-only document handling is enabled in this phase. File upload wiring can now feed this backend payload.
-            </div>
-          </div>
-
-          <div>
-            <div
-              style={{
-                fontSize: '13px',
-                fontWeight: 600,
-                color: C.text,
-                marginBottom: '8px',
-                fontFamily: font.family,
-              }}
-            >
-              Medical License Documents
-            </div>
-            <div
-              style={{
-                padding: '20px',
-                border: `2px dashed ${C.border}`,
-                borderRadius: radius.sm,
-                textAlign: 'center',
-                background: C.bg,
-                fontSize: '12px',
-                color: C.textSub,
-                fontFamily: font.family,
-              }}
-            >
-              Registration now reaches the backend even before binary file storage is added.
-            </div>
-          </div>
+          <ProviderLicencesSection
+            country={credentialCountry}
+            services={form.serviceTypes}
+            value={form.licences}
+            onChange={next => setField('licences', next)}
+            errors={licenceErrors}
+            focusColor={focusColor}
+            focusShadow={focusShadow}
+          />
 
           <div>
             <div
@@ -682,8 +654,8 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
               fontFamily: font.family,
             }}
           >
-            By submitting, you confirm the information is accurate and that your practice holds a
-            valid medical licence. Outcome: application submitted for review — not instant access.
+            By submitting, you confirm the information is accurate and that you hold valid licences for
+            the services you offer. Your application is reviewed before you can accept patients.
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>
