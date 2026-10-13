@@ -36,10 +36,8 @@ export function configuration() {
       cookieMode: process.env.SESSION_COOKIE_MODE === 'true',
     },
     portal: {
-      // Secret admin portal path/token. The path is used only by the frontend;
-      // the token must be sent with admin login requests (X-Admin-Portal header).
+      // Admin portal path, used for links into the admin portal (e.g. admin emails).
       adminPath: process.env.ADMIN_PORTAL_PATH ?? '/admin',
-      adminToken: process.env.ADMIN_PORTAL_TOKEN || (process.env.NODE_ENV === 'development' ? 'gg-admin-2026' : ''),
     },
     security: {
       fieldEncryptionKey: process.env.FIELD_ENCRYPTION_KEY ?? '',

@@ -36,7 +36,6 @@ export function AdminLoginScreen() {
 
   const emailField = register('email')
   const passwordField = register('password')
-  const portalTokenField = register('portalToken')
   const emailValue = watch('email') ?? ''
 
   return (
@@ -112,17 +111,6 @@ export function AdminLoginScreen() {
               onBlur={emailField.onBlur}
               inputRef={emailField.ref}
               error={errors.email?.message}
-              required
-            />
-            <GGInput
-              label="Portal Key"
-              placeholder="Enter the admin portal key"
-              type={showPw ? 'text' : 'password'}
-              name={portalTokenField.name}
-              onChange={portalTokenField.onChange}
-              onBlur={portalTokenField.onBlur}
-              inputRef={portalTokenField.ref}
-              error={errors.portalToken?.message}
               required
             />
             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

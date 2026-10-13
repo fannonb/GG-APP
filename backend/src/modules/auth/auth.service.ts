@@ -520,16 +520,9 @@ export class AuthService {
     const email = dto.email.toLowerCase()
     const requestedRole = this.mapRequestedRole(dto.role)
 
-    // Admin portal gate runs before any user lookup: a wrong or missing token
-    // returns 404 regardless of whether the email exists, so admin login does
-    // not reveal user existence and repeated failures are throttled via Redis.
-    // The token is compared in constant time (SHA-256 + timingSafeEqual) to
-    // avoid a timing side channel.
+    // Admin sign-in is email + password. Repeated failures for an admin email
+    // are throttled via Redis before any user lookup.
     if (requestedRole === UserRole.ADMIN) {
-      const expectedToken = this.configService.get<string>('portal.adminToken') ?? ''
-      if (!expectedToken || !this.tokensEqual(dto.portalToken, expectedToken)) {
-        throw new NotFoundException()
-      }
       const attempts = Number((await this.redis.get(this.getAdminLoginKey(email))) ?? '0')
       if (attempts >= 5) {
         throw new ThrottlerException(
@@ -1124,13 +1117,6 @@ export class AuthService {
 
   /** Constant-time comparison (SHA-256 + timingSafeEqual) for the admin portal
    * token — prevents a timing side channel on the admin gate. */
-  private tokensEqual(a: string | undefined, b: string): boolean {
-    if (!a) return false
-    return this.hashesEqual(
-      createHash('sha256').update(a).digest('hex'),
-      createHash('sha256').update(b).digest('hex'),
-    )
-  }
 
   /** Builds a short human-readable device label from the User-Agent so the
    * "active sessions" list can tell one device from another. */

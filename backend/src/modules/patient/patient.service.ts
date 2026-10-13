@@ -1960,6 +1960,20 @@ export class PatientService {
       return created
     })
 
+    void this.alertAdminsOfCreditRequest({
+      userId,
+      patientName: `${profile.firstName} ${profile.lastName}`.trim(),
+      countryCode: residence.countryCode ?? profile.countryCode,
+      subject: `New credit application: ${profile.firstName} ${profile.lastName} (${reference})`,
+      summary: 'A patient applied for healthcare credit. Review the application on the dashboard.',
+      details: (money) => [
+        ['Reference', reference],
+        ['Amount requested', money(dto.requestedAmount)],
+        ['Monthly income', money(dto.monthlyIncome)],
+        ['Finance partner', this.formatFinancePartnerName(financePartnerId)],
+      ],
+    })
+
     return this.mapCreditApplication(application)
   }
 
@@ -2048,6 +2062,21 @@ export class PatientService {
       })
 
       return created
+    })
+
+    void this.alertAdminsOfCreditRequest({
+      userId,
+      patientName: `${profile.firstName} ${profile.lastName}`.trim(),
+      countryCode: profile.countryCode,
+      subject: `Credit limit increase request: ${profile.firstName} ${profile.lastName} (${reference})`,
+      summary: 'A patient with approved credit asked for a higher limit. Review the request on the dashboard.',
+      details: (money) => [
+        ['Reference', reference],
+        ['Increase requested', money(dto.increaseAmount)],
+        ['Current limit', money(this.toNumber(profile.creditLimit))],
+        ['Monthly income', money(dto.monthlyIncome)],
+        ['Reason', dto.reason],
+      ],
     })
 
     return this.mapCreditApplication(application)
@@ -2200,6 +2229,29 @@ export class PatientService {
       })
     } catch (error) {
       this.logger.warn(`Could not send payment PIN lock alerts: ${(error as Error).message}`)
+    }
+  }
+
+  /** Emails the admin inbox about a credit request awaiting review. Never throws. */
+  private async alertAdminsOfCreditRequest(args: {
+    userId: string
+    patientName: string
+    countryCode: string | null | undefined
+    subject: string
+    summary: string
+    details: (money: (amount: number) => string) => Array<[string, string]>
+  }) {
+    try {
+      const user = await this.prisma.user.findUnique({ where: { id: args.userId }, select: { email: true } })
+      const money = (amount: number) => formatMoney(Number(amount), args.countryCode)
+      await this.mailService.sendAdminAlert({
+        subject: args.subject,
+        summary: args.summary,
+        details: [['Patient', args.patientName], ['Email', user?.email ?? '-'], ...args.details(money)],
+        cta: { label: 'Review credit requests', adminPath: '/credit-applications' },
+      })
+    } catch (error) {
+      this.logger.warn(`Could not email admins about a credit request: ${(error as Error).message}`)
     }
   }
 

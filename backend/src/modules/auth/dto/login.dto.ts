@@ -11,7 +11,7 @@ export class LoginDto {
   @IsIn(['patient', 'sp', 'admin'])
   role!: 'patient' | 'sp' | 'admin'
 
-  /** Portal token required for admin logins (X-Admin-Portal header value). */
+  /** No longer used: admin sign-in is email + password. Accepted and ignored so older clients still work. */
   @IsOptional()
   @IsString()
   portalToken?: string

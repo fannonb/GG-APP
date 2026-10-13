@@ -87,6 +87,17 @@ export class AccountRequestsService {
 
     const who = user.providerRecord?.name ?? (user.patientProfile ? `${user.patientProfile.firstName} ${user.patientProfile.lastName}` : user.email)
     await this.notifyAdmins('Email change request', `${who} wants to change their email to ${newEmail}.`, 'admin-email-changes')
+    void this.mailService.sendAdminAlert({
+      subject: `Email change request: ${who}`,
+      summary: 'Someone asked to move their GG\'APP sign-in to a new email address. Approve only if you are satisfied the request came from the account owner.',
+      details: [
+        ['Account', who],
+        ['Current email', user.email],
+        ['New email', newEmail],
+        ['Reason given', dto.reason?.trim() || '-'],
+      ],
+      cta: { label: 'Review email changes', adminPath: '/email-changes' },
+    })
     return this.mapRequest(request)
   }
 

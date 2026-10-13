@@ -58,12 +58,7 @@ export const authService = {
       return session
     }
 
-    const { data } = await apiClient.post<AuthSession>('/auth/login', payload, {
-      headers:
-        payload.role === 'admin' && payload.portalToken
-          ? { 'X-Admin-Portal': payload.portalToken }
-          : undefined,
-    })
+    const { data } = await apiClient.post<AuthSession>('/auth/login', payload)
     this.persistSession(data)
     return data
   },
