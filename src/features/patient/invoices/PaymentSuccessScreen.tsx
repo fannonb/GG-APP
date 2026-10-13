@@ -1,3 +1,4 @@
+import { AppRatingCard } from '@/components/AppRatingCard'
 import { useState } from 'react'
 import { useNavigate, useParams, useLocation } from 'react-router-dom'
 import { GGCard, GGButton } from '@/design-system'
@@ -157,6 +158,9 @@ export function PaymentSuccessScreen() {
             </div>
           </GGCard>
         ) : null}
+
+        {/* Rate the app itself once the provider review is out of the way. */}
+        {!(canReview && !reviewDismissed) && <AppRatingCard />}
 
       </div>
     </AppLayout>

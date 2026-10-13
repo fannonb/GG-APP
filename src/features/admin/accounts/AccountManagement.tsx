@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { C, font, radius } from '@/design-system/tokens'
 import { useAccountHistory, useAdminAccountActions } from '@/hooks/api/useAdminAccounts'
@@ -325,11 +326,13 @@ function describe(entry: AccountHistoryEntry) {
 
 export function AccountHistory({ kind, id }: { kind: AccountKind; id: string }) {
   const { data = [], isLoading } = useAccountHistory(kind, id)
+  const { pageItems, pager } = usePaged(data)
   if (isLoading) return <div style={{ fontSize: 13, color: C.textSub }}>Loading history…</div>
   if (data.length === 0) return <div style={{ fontSize: 13, color: C.textSub }}>No admin actions on this account yet.</div>
   return (
+    <div>
     <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-      {data.map((entry, i) => {
+      {pageItems.map((entry, i) => {
         const detail = describe(entry)
         return (
           <li key={entry.id} style={{ display: 'flex', gap: 10, padding: '9px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
@@ -343,6 +346,8 @@ export function AccountHistory({ kind, id }: { kind: AccountKind; id: string }) 
         )
       })}
     </ol>
+    <Pager {...pager} />
+    </div>
   )
 }
 

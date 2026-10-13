@@ -3,7 +3,8 @@ import { C, font } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useAdminMetrics } from '@/hooks/api/useAdminMetrics'
-import { BarList, ChartCard, Donut, Funnel, Heatmap, InsightsHeader, KpiGrid, MetricsState } from '@/features/admin/metrics/MetricsKit'
+import { BarList, ChartCard, Donut, Funnel, Heatmap, InsightsHeader, KpiGrid, MetricsState, ReportButton } from '@/features/admin/metrics/MetricsKit'
+import { exportReport } from '@/features/admin/metrics/reports'
 import { PALETTE, STATUS_COLORS, chartAxis, prettyCategory, tooltipStyle } from '@/features/admin/metrics/metricsFormat'
 
 function Grid({ children, cols }: { children: React.ReactNode; cols: string }) {
@@ -25,7 +26,7 @@ export function AdminCareInsightsScreen() {
   return (
     <AdminLayout title="Care activity">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, fontFamily: font.family }}>
-        <InsightsHeader subtitle="Appointments and prescriptions" />
+        <InsightsHeader subtitle="Appointments and prescriptions" extra={<ReportButton onClick={() => exportReport('activity', data)} />} />
         <KpiGrid kpis={data.kpis} />
 
         <ChartCard
@@ -55,6 +56,36 @@ export function AdminCareInsightsScreen() {
 
         <ChartCard title="When appointments happen" subtitle="Booked time slots by day and hour; darker is busier">
           <Heatmap grid={data.heatmap} />
+        </ChartCard>
+
+        <ChartCard
+          title="Day or night"
+          subtitle={`Day is ${String(data.dayNight.dayHours.start).padStart(2, '0')}:00–${String(data.dayNight.dayHours.end).padStart(2, '0')}:00, in the provider’s local time`}
+          empty={data.dayNight.slot.day + data.dayNight.slot.night + data.dayNight.booked.day + data.dayNight.booked.night === 0}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 20 }}>
+            {[
+              { title: 'Appointment time', hint: 'When the booked visit is', v: data.dayNight.slot },
+              { title: 'When people book', hint: 'When the patient made the booking', v: data.dayNight.booked },
+            ].map(row => {
+              const total = row.v.day + row.v.night
+              const dayPct = total ? Math.round((row.v.day / total) * 100) : 0
+              return (
+                <div key={row.title}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: C.text }}>{row.title}</div>
+                  <div style={{ fontSize: 12.5, color: C.textSub, marginBottom: 8 }}>{row.hint}</div>
+                  <div style={{ display: 'flex', height: 22, borderRadius: 6, overflow: 'hidden', background: C.bg }}>
+                    {total > 0 && <div style={{ width: `${dayPct}%`, background: '#F59E0B' }} />}
+                    {total > 0 && <div style={{ width: `${100 - dayPct}%`, background: '#312E81' }} />}
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginTop: 6 }}>
+                    <span><strong style={{ color: C.text }}>{row.v.day}</strong> <span style={{ color: C.textSub }}>day · {dayPct}%</span></span>
+                    <span><strong style={{ color: C.text }}>{row.v.night}</strong> <span style={{ color: C.textSub }}>night · {total ? 100 - dayPct : 0}%</span></span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </ChartCard>
 
         <Grid cols="repeat(3, minmax(0, 1fr))">

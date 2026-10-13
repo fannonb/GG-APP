@@ -1,3 +1,4 @@
+import { REPAYMENT_METHODS } from '@/config/dataCapture'
 import { useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGButton, GGInput, GGSelect, GGDatePicker } from '@/design-system'
@@ -120,6 +121,7 @@ export function CreditApplyScreen() {
   const residenceCountryCode = resolveResidenceSelectCode(user)
   const [form, setForm] = useState({
     employment: '',
+    repaymentMethod: '',
     income: '',
     amount: '',
     consent: false,
@@ -158,6 +160,7 @@ export function CreditApplyScreen() {
   const validate = () => {
     const e: Record<string, string> = {}
     if (!form.employment) e.employment = 'Select your employment status'
+    if (!form.repaymentMethod) e.repaymentMethod = 'Select how you would prefer to repay'
     if (!form.income || isNaN(Number(form.income)) || Number(form.income) <= 0) e.income = 'Enter your monthly income'
     if (!hasAmount || amount < MIN_AMOUNT) e.amount = `The minimum is ${formatAmount(MIN_AMOUNT, currency)}`
     else if (amount > MAX_AMOUNT) e.amount = `The maximum is ${formatAmount(MAX_AMOUNT, currency)}`
@@ -202,6 +205,7 @@ export function CreditApplyScreen() {
       await applyMutation.mutateAsync({
         financePartnerId: partnerId,
         employment: form.employment,
+        repaymentMethod: form.repaymentMethod,
         monthlyIncome: Number(form.income),
         requestedAmount: amount,
         consent: form.consent,
@@ -302,6 +306,19 @@ export function CreditApplyScreen() {
                   hint="After tax"
                   error={errors.income}
                 />
+                <div style={{ gridColumn: '1 / -1' }}>
+                  <GGSelect
+                    label="How would you prefer to repay?"
+                    value={form.repaymentMethod}
+                    onChange={e => set('repaymentMethod', e.target.value)}
+                    options={REPAYMENT_METHODS.map(m => ({ value: m.code, label: m.label }))}
+                    required
+                    placeholder="Select a repayment method"
+                  />
+                  {errors.repaymentMethod
+                    ? <span style={{ fontSize: 12, color: C.error, fontWeight: 500, marginTop: 4, display: 'block' }}>{errors.repaymentMethod}</span>
+                    : <span style={{ fontSize: 12, color: C.textSub, marginTop: 4, display: 'block' }}>Your finance partner confirms the final repayment arrangement.</span>}
+                </div>
               </div>
             </Section>
 

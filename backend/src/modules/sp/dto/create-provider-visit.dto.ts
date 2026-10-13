@@ -1,3 +1,5 @@
+import { IsIn } from 'class-validator'
+import { CONDITION_CODES } from '../../../common/constants/health-data'
 import {
   IsArray,
   IsObject,
@@ -64,4 +66,9 @@ export class CreateProviderVisitDto {
   @ValidateNested()
   @Type(() => VisitVitalsDto)
   vitals!: VisitVitalsDto
+
+  /** Standard condition code (see common/constants/health-data.ts). Required by the visit form. */
+  @IsOptional()
+  @IsIn(CONDITION_CODES)
+  conditionCategory?: string
 }

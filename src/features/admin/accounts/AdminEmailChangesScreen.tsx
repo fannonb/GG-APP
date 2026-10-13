@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useState } from 'react'
 import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
@@ -96,6 +97,7 @@ function RequestCard({ request }: { request: EmailChangeRequest }) {
 export function AdminEmailChangesScreen() {
   const [tab, setTab] = useState<(typeof TABS)[number]['id']>('pending')
   const { data = [], isLoading } = useEmailChangeRequests(tab)
+  const { pageItems, pager } = usePaged(data, tab)
 
   return (
     <AdminLayout title="Email changes">
@@ -121,7 +123,10 @@ export function AdminEmailChangesScreen() {
             {tab === 'pending' ? 'No email changes waiting for you.' : 'Nothing here yet.'}
           </div>
         ) : (
-          data.map(r => <RequestCard key={r.id} request={r} />)
+          <>
+            {pageItems.map(r => <RequestCard key={r.id} request={r} />)}
+            <Pager {...pager} />
+          </>
         )}
       </div>
     </AdminLayout>

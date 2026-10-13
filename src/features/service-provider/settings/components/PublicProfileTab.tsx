@@ -1,3 +1,5 @@
+import { GGSelect } from '@/design-system'
+import { regionLabel, regionsFor } from '@/config/dataCapture'
 import { useRef, useState } from 'react'
 import { GGBadge, GGButton, GGCard, GGInput, GGTextarea, PhonePrefixInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -235,6 +237,17 @@ export function PublicProfileTab({
                   onChange={({ address, lat, lng }) => patch({ address, lat, lng })}
                 />
               </div>
+              {regionsFor(profileForm.country).length > 0 && (
+                <div style={{ gridColumn: isMobile ? undefined : '1 / -1', maxWidth: 360 }}>
+                  <GGSelect
+                    label={regionLabel(profileForm.country)}
+                    value={profileForm.region}
+                    onChange={event => patch({ region: event.target.value })}
+                    placeholder={`Choose your ${regionLabel(profileForm.country).toLowerCase()}`}
+                    options={regionsFor(profileForm.country).map(r => ({ value: r, label: r }))}
+                  />
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -252,6 +265,12 @@ export function PublicProfileTab({
                 <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>Address</div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font.family }}>
                   {profileForm.address || '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>{regionLabel(profileForm.country)}</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: profileForm.region ? C.text : C.textSub, fontFamily: font.family }}>
+                  {profileForm.region || 'Not set: edit your profile to add it'}
                 </div>
               </div>
             </>

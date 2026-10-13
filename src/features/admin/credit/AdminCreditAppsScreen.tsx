@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useMemo, useState } from 'react'
 import { GGButton, GGCard, GGInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -96,6 +97,8 @@ export function AdminCreditAppsScreen() {
     [applications],
   )
 
+  const { pageItems, pager } = usePaged(filtered, filter)
+
   return (
     <AdminLayout title="Credit Applications" status={pendingCount > 0 ? `${pendingCount} pending` : undefined}>
       {isError && (
@@ -147,7 +150,7 @@ export function AdminCreditAppsScreen() {
                   ? 'No credit applications have been submitted yet.'
                   : `No ${filter === 'submitted' ? 'pending' : filter} applications in this view.`}
               </div>
-            ) : filtered.map(app => (
+            ) : pageItems.map(app => (
               <button
                 key={app.id}
                 onClick={() => handleSelect(app)}
@@ -177,6 +180,7 @@ export function AdminCreditAppsScreen() {
                 </div>
               </button>
             ))}
+            <div style={{ padding: '0 16px 12px' }}><Pager {...pager} /></div>
           </div>
         </GGCard>
 

@@ -1,3 +1,4 @@
+import { ADMIN_PAGE_SIZE } from '@/features/admin/paging'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
@@ -16,7 +17,7 @@ import type { OwedByProvider, PayoutInvoice, PayoutTab } from '@/api/services/ad
 import type { MetricsCountry } from '@/types/admin-metrics.types'
 
 const CYAN_DEEP = '#0B7BC0'
-const PAGE_SIZE = 25
+const PAGE_SIZE = ADMIN_PAGE_SIZE
 const METHOD: Record<string, string> = { MPESA: 'M-Pesa', BANK: 'Bank', MOBILE_MONEY: 'Mobile money' }
 
 const amountOf = (inv: Pick<PayoutInvoice, 'provider' | 'amount'>) => (inv.provider.country ? money(inv.provider.country, inv.amount) : inv.amount.toLocaleString('en-US'))

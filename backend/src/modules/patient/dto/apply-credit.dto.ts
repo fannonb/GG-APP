@@ -1,3 +1,4 @@
+import { REPAYMENT_METHODS } from '../../../common/constants/health-data'
 import { Type } from 'class-transformer'
 import { ArrayMinSize, IsArray, IsBoolean, IsDateString, IsIn, IsNumber, IsOptional, IsString, Min, MinLength, ValidateIf, ValidateNested, Max } from 'class-validator'
 
@@ -66,4 +67,9 @@ export class ApplyCreditDto {
   @ValidateNested({ each: true })
   @Type(() => ApplyCreditBeneficiaryDto)
   beneficiaries?: ApplyCreditBeneficiaryDto[]
+
+  /** How the patient prefers to repay. Asked by the app; optional for older clients. */
+  @IsOptional()
+  @IsIn(REPAYMENT_METHODS.map(m => m.code))
+  repaymentMethod?: string
 }

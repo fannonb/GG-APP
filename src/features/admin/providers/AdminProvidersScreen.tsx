@@ -1,3 +1,4 @@
+import { ADMIN_PAGE_SIZE } from '@/features/admin/paging'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
@@ -14,7 +15,7 @@ import { exportCsv } from '@/features/admin/metrics/metricsFormat'
 import { formatDate } from '@/utils/format'
 import type { AdminProvider } from '@/types/admin.types'
 
-const PAGE_SIZE = 25
+const PAGE_SIZE = ADMIN_PAGE_SIZE
 const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 const TYPES = ['All types', 'Hospital', 'Clinic', 'Doctor', 'Pharmacy', 'Laboratory', 'Radiology']
 

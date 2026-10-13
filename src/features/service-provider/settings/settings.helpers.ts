@@ -11,6 +11,7 @@ export type ProfileFormState = {
   lng: number | null
   phone: string
   country: string
+  region: string
   categories: string[]
   status: 'open' | 'closed'
   establishedYear: string
@@ -100,6 +101,7 @@ export function formFromSettings(settings: ProviderSettingsResponse): ProfileFor
     lng: profile.lng,
     phone: profile.phone,
     country: profile.country,
+    region: profile.region ?? '',
     categories: profile.category
       ? Array.from(
           new Set(

@@ -15,7 +15,7 @@ import { getUnreadCreditBannerItems, getUnreadPatientRegistrationItems } from '@
 
 const COUNTRY_OPTIONS: { id: AdminCountryFilter; label: string; code?: 'ZW' | 'KE' | 'ZM' }[] = [
   { id: 'all',      label: 'All' },
-  { id: 'Zimbabwe', label: 'ZWL', code: 'ZW' },
+  { id: 'Zimbabwe', label: 'ZWG', code: 'ZW' },
   { id: 'Kenya',    label: 'KES', code: 'KE' },
   { id: 'Zambia',   label: 'ZMW', code: 'ZM' },
 ]

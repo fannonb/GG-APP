@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
@@ -349,6 +350,8 @@ export function AdminNewsScreen() {
 
   const td: React.CSSProperties = { padding: '12px', borderTop: `1px solid ${C.border}`, verticalAlign: 'middle' }
 
+  const { pageItems, pager } = usePaged(rows, `${tab}|${query}|${tagFilter}`)
+
   return (
     <AdminLayout title="News">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16, fontFamily: font.family }}>
@@ -410,7 +413,7 @@ export function AdminNewsScreen() {
               </div>
             ) : isMobile ? (
               <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                {rows.map((a, i) => {
+                {pageItems.map((a, i) => {
                   const actions = actionsFor(a)
                   return (
                     <li key={a.id} style={{ padding: '14px', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
@@ -435,7 +438,7 @@ export function AdminNewsScreen() {
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map(a => {
+                  {pageItems.map(a => {
                     const actions = actionsFor(a)
                     const firstLine = a.body.split('\n')[0] ?? ''
                     return (
@@ -456,6 +459,7 @@ export function AdminNewsScreen() {
                 </tbody>
               </table>
             )}
+            <Pager {...pager} />
           </div>
         </section>
       </div>

@@ -254,6 +254,7 @@ export class PatientService {
           relation: dto.relation.trim(),
           dateOfBirth: new Date(dto.dob),
           countryCode: dto.countryCode,
+          gender: dto.gender ?? null,
           nationalIdEncrypted: dto.nationalId?.trim()
             ? this.fieldEncryption.encrypt(dto.nationalId.trim())
             : null,
@@ -301,6 +302,7 @@ export class PatientService {
           relation: dto.relation.trim(),
           dateOfBirth: new Date(dto.dob),
           countryCode: dto.countryCode,
+          gender: dto.gender ?? null,
           nationalIdEncrypted: dto.nationalId?.trim()
             ? this.fieldEncryption.encrypt(dto.nationalId.trim())
             : null,
@@ -426,6 +428,7 @@ export class PatientService {
     dateOfBirth: Date
     countryCode: string
     nationalIdLast4: string | null
+    gender?: string | null
   }) {
     return {
       id: beneficiary.id,
@@ -434,6 +437,7 @@ export class PatientService {
       dob: beneficiary.dateOfBirth.toISOString(),
       countryCode: beneficiary.countryCode,
       nationalId: beneficiary.nationalIdLast4 ? `****${beneficiary.nationalIdLast4}` : '',
+      gender: beneficiary.gender ?? null,
       age: this.getAge(beneficiary.dateOfBirth),
     }
   }
@@ -1886,6 +1890,7 @@ export class PatientService {
           type: CreditApplicationType.INITIAL,
           financePartnerId,
           employment: dto.employment,
+          repaymentMethod: dto.repaymentMethod ?? null,
           monthlyIncome: dto.monthlyIncome,
           requestedAmount: dto.requestedAmount,
         },

@@ -1,3 +1,5 @@
+import { normalizeCountry } from './admin-metrics.service'
+import { normalizeRegion } from '../../common/constants/health-data'
 import {
   BadRequestException,
   ConflictException,
@@ -476,6 +478,7 @@ export class AdminService {
           address: application.address,
           license: application.licenseNumber,
           country: application.country,
+          region: normalizeRegion(normalizeCountry(application.country), application.region),
           lifecycleStatus: ProviderLifecycleStatus.ACTIVE,
           status: ProviderOpenStatus.OPEN,
           tags: serviceNames,
@@ -501,6 +504,7 @@ export class AdminService {
           address: application.address,
           license: application.licenseNumber,
           country: application.country,
+          region: normalizeRegion(normalizeCountry(application.country), application.region),
           tags: serviceNames,
           lifecycleStatus: ProviderLifecycleStatus.ACTIVE,
           status: ProviderOpenStatus.OPEN,

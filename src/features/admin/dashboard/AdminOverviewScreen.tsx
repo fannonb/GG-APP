@@ -9,7 +9,8 @@ import { useAdminActivity } from '@/hooks/api/useAdminQueries'
 import { useAdminCountry } from '@/features/admin/AdminCountryContext'
 import { ROUTES } from '@/router/routes'
 import { formatRelativeTime } from '@/utils/format'
-import { ChartCard, CountryLabel, Funnel, InsightsHeader, KpiGrid, MetricsState } from '@/features/admin/metrics/MetricsKit'
+import { ChartCard, CountryLabel, Funnel, InsightsHeader, KpiGrid, MetricsState, ReportButton } from '@/features/admin/metrics/MetricsKit'
+import { exportReport } from '@/features/admin/metrics/reports'
 import { CYAN_DEEP, PALETTE, chartAxis, countryName, money, tooltipStyle } from '@/features/admin/metrics/metricsFormat'
 import type { MetricsCountry, OverviewMetrics } from '@/types/admin-metrics.types'
 
@@ -79,7 +80,7 @@ export function AdminOverviewScreen() {
   return (
     <AdminLayout title="Overview">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, fontFamily: font.family }}>
-        <InsightsHeader subtitle="How GG’APP is doing" />
+        <InsightsHeader subtitle="How GG’APP is doing" extra={<ReportButton onClick={() => exportReport('overview', data)} />} />
 
         <section aria-label="Needs attention" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <QueueItem label="Provider applications" value={q.providerApplications} tone="action" onClick={() => navigate(ROUTES.ADMIN_APPLICATIONS)} />

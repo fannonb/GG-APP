@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { GGButton, GGCard, GGInput, GGTextarea } from '@/design-system'
+import { GGButton, GGCard, GGInput, GGSelect, GGTextarea } from '@/design-system'
+import { CONDITION_CATEGORIES, CONDITION_GROUP_LABEL, type ConditionGroup } from '@/config/dataCapture'
 import { C, font, radius } from '@/design-system/tokens'
 import { useCreateSPVisitMutation } from '@/hooks/api'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -41,6 +42,7 @@ export function SPRecordVisitScreen() {
     patientName: 'Unknown Patient',
   }
 
+  const [condition, setCondition] = useState('')
   const [diagnosis, setDiagnosis] = useState('')
   const [treatment, setTreatment] = useState('')
   const [followUp, setFollowUp] = useState('')
@@ -81,7 +83,7 @@ export function SPRecordVisitScreen() {
     sats.trim().length > 0
 
   const isComplete =
-    diagnosis.trim() && treatment.trim() && services.length > 0 && vitalsComplete
+    condition && diagnosis.trim() && treatment.trim() && services.length > 0 && vitalsComplete
 
   const handleSave = async (proceedToInvoice: boolean) => {
     setError(null)
@@ -93,6 +95,11 @@ export function SPRecordVisitScreen() {
 
     if (!vitalsComplete) {
       setError('Blood pressure, temperature, glucometer, and O₂ sats are required before saving.')
+      return
+    }
+
+    if (!condition) {
+      setError('Choose the main condition for this visit.')
       return
     }
 
@@ -112,6 +119,7 @@ export function SPRecordVisitScreen() {
         followUp: followUp.trim() || undefined,
         services,
         vitals,
+        conditionCategory: condition,
       })
 
       if (proceedToInvoice) {
@@ -222,6 +230,21 @@ export function SPRecordVisitScreen() {
               Save this visit to the backend so it can be reused in billing and provider history.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div>
+                <GGSelect
+                  label="Main condition"
+                  value={condition}
+                  onChange={event => setCondition(event.target.value)}
+                  placeholder="Choose the closest match"
+                  options={(Object.keys(CONDITION_GROUP_LABEL) as ConditionGroup[]).flatMap(group =>
+                    CONDITION_CATEGORIES.filter(c => c.group === group).map(c => ({ value: c.code, label: `${CONDITION_GROUP_LABEL[group]}: ${c.label}` })),
+                  )}
+                  required
+                />
+                <div style={{ fontSize: '12.5px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>
+                  Used only for anonymous health statistics. Write the full diagnosis below.
+                </div>
+              </div>
               <GGTextarea
                 label="Diagnosis / Clinical Findings"
                 value={diagnosis}
@@ -445,7 +468,7 @@ export function SPRecordVisitScreen() {
               </GGButton>
               {!isComplete && (
                 <div style={{ fontSize: '11px', color: C.textSub, textAlign: 'center', lineHeight: 1.5, fontFamily: font.family }}>
-                  Vitals, diagnosis, treatment, and at least one service are required.
+                  Vitals, the main condition, diagnosis, treatment, and at least one service are required.
                 </div>
               )}
               {error && (

@@ -205,6 +205,7 @@ model User {
   ledgerAudits      LedgerAccessAudit[] @relation("LedgerAuditPatient")
   emailChangeRequests EmailChangeRequest[]
   pushDevices       PushDevice[]
+  appFeedback       AppFeedback[]
 }
 
 model PatientProfile {
@@ -243,6 +244,8 @@ model CreditApplication {
   status           CreditApplicationStatus @default(SUBMITTED)
   financePartnerId String
   employment       String
+  /// How the patient prefers to repay (stated at application).
+  repaymentMethod  String?
   monthlyIncome    Decimal                 @db.Decimal(12, 2)
   requestedAmount  Decimal                 @db.Decimal(12, 2)
   approvedAmount   Decimal?                @db.Decimal(12, 2)
@@ -266,6 +269,8 @@ model Beneficiary {
   name                String
   relation            String
   dateOfBirth         DateTime
+  /// Optional: female, male or prefer_not_to_say.
+  gender              String?
   /// Operating country where this beneficiary resides (KE | ZW | ZM)
   countryCode         String
   nationalIdEncrypted String?
@@ -300,6 +305,8 @@ model Provider {
   license                  String?
   logoUrl                  String?
   country                  String?
+  /// County / province from the standard list for the provider's country.
+  region                   String?
   tags                     Json?
   languages                Json?
   establishedYear          Int?
@@ -414,6 +421,8 @@ model ProviderVisit {
   internalNote  String?
   services      Json?
   vitals        Json?
+  /// Standard condition code from the visit form (see common/constants/health-data.ts).
+  conditionCategory String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   provider      Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
@@ -808,4 +817,23 @@ model PushDevice {
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+}
+
+/// A quick rating of GG'APP itself (not a provider), asked after key moments such as paying.
+model AppFeedback {
+  id        String   @id @default(cuid())
+  userId    String
+  /// patient or sp
+  role      String
+  /// 1–5 stars
+  rating    Int
+  comment   String?
+  /// Where it was asked, e.g. "payment"
+  context   String
+  /// web or mobile
+  platform  String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }

@@ -8,6 +8,8 @@ export interface LocationSuggestion {
   shortName: string   // street / place name
   address:   string   // full display address
   city:      string
+  /** County / province as returned by the geocoder, e.g. "Nairobi County". */
+  region?:   string
   country:   string
   lat:       number
   lng:       number
@@ -29,6 +31,7 @@ function toSuggestion(r: any): LocationSuggestion {
     shortName: a.road ?? a.neighbourhood ?? a.suburb ?? r.display_name.split(',')[0],
     address:   r.display_name,
     city:      a.city ?? a.town ?? a.village ?? a.county ?? '',
+    region:    a.state ?? a.county ?? '',
     country:   a.country ?? '',
     lat:       parseFloat(r.lat),
     lng:       parseFloat(r.lon),

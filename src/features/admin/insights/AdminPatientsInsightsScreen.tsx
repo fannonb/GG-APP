@@ -3,8 +3,9 @@ import { C, font } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useAdminMetrics } from '@/hooks/api/useAdminMetrics'
-import { BarList, ChartCard, CountryLabel, Donut, InsightsHeader, KpiGrid, MetricsState } from '@/features/admin/metrics/MetricsKit'
-import { CYAN_DEEP, PALETTE, STATUS_COLORS, chartAxis, countryName, money, tooltipStyle } from '@/features/admin/metrics/metricsFormat'
+import { BarList, ChartCard, CountryLabel, Donut, InsightsHeader, KpiGrid, MetricsState, ReportButton } from '@/features/admin/metrics/MetricsKit'
+import { exportReport } from '@/features/admin/metrics/reports'
+import { CYAN_DEEP, PALETTE, STATUS_COLORS, chartAxis, countryName, currencySymbol, money, tooltipStyle } from '@/features/admin/metrics/metricsFormat'
 
 const th: React.CSSProperties = { fontWeight: 600, color: C.textSub, padding: '0 8px 10px', textAlign: 'right', whiteSpace: 'nowrap' }
 const td: React.CSSProperties = { padding: '11px 8px', textAlign: 'right', borderTop: `1px solid ${C.border}` }
@@ -15,6 +16,7 @@ function Grid({ children, cols }: { children: React.ReactNode; cols: string }) {
 }
 
 export function AdminPatientsInsightsScreen() {
+  const { isDesktop } = useResponsive()
   const { data, isLoading, error, refetch } = useAdminMetrics('patients')
 
   if (!data) {
@@ -26,11 +28,12 @@ export function AdminPatientsInsightsScreen() {
   }
 
   const totalPatients = data.ageBands.reduce((s, a) => s + a.value, 0)
+  const familyTotal = data.familyAgeBands.reduce((s, a) => s + a.value, 0)
 
   return (
     <AdminLayout title="Patients & credit">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 18, fontFamily: font.family }}>
-        <InsightsHeader subtitle="Who signs up, and how credit is going" />
+        <InsightsHeader subtitle="Who signs up, and how credit is going" extra={<ReportButton onClick={() => exportReport('patients', data)} />} />
         <KpiGrid kpis={data.kpis} />
 
         <Grid cols="minmax(0, 1.6fr) minmax(300px, 1fr)">
@@ -116,6 +119,76 @@ export function AdminPatientsInsightsScreen() {
           </ChartCard>
         </Grid>
 
+        <Grid cols="minmax(0, 1.4fr) minmax(0, 1fr)">
+          <ChartCard title="Family members’ age" subtitle={`${familyTotal} family members, by today’s age`} empty={familyTotal === 0}>
+            <div style={{ height: 220 }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.familyAgeBands} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
+                  <CartesianGrid stroke={C.border} vertical={false} />
+                  <XAxis dataKey="name" tick={chartAxis} tickLine={false} axisLine={{ stroke: C.border }} interval={0} />
+                  <YAxis tick={chartAxis} tickLine={false} axisLine={false} allowDecimals={false} width={44} />
+                  <Tooltip {...tooltipStyle} />
+                  <Bar dataKey="value" name="Family members" fill={PALETTE[4]} radius={[4, 4, 0, 0]} maxBarSize={36} isAnimationActive={false} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+          <ChartCard title="Family members’ gender" subtitle="Optional when a family member is added">
+            <Donut data={data.familyGender} colorMap={{ Female: PALETTE[4], Male: PALETTE[0], 'Not recorded': PALETTE[6], 'Prefer not to say': PALETTE[1] }} />
+          </ChartCard>
+        </Grid>
+
+        <Grid cols="minmax(0, 1.4fr) minmax(0, 1fr)">
+          <ChartCard title="Credit amounts applied for" subtitle="First applications in this period, in each country’s currency" empty={data.creditBands.every(cb => cb.bands.every(b => b.value === 0))}>
+            <div style={{ display: 'grid', gridTemplateColumns: isDesktop && data.creditBands.length > 1 ? `repeat(${data.creditBands.length}, minmax(0, 1fr))` : '1fr', gap: 20 }}>
+              {data.creditBands.map(cb => (
+                <div key={cb.country}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 }}><CountryLabel code={cb.country} /></div>
+                  <BarList data={cb.bands} label={n => `${currencySymbol(cb.country)} ${n}`} />
+                </div>
+              ))}
+            </div>
+          </ChartCard>
+          <ChartCard title="Preferred repayment method" subtitle="As stated on the credit application" empty={data.repaymentMethod.length === 0}>
+            <BarList data={data.repaymentMethod} color={PALETTE[2]} />
+          </ChartCard>
+        </Grid>
+
+        <ChartCard
+          title="App satisfaction"
+          subtitle="How patients rate GG’APP itself, asked after they pay an invoice"
+          empty={data.satisfaction.responses === 0}
+        >
+          <div style={{ display: 'grid', gridTemplateColumns: isDesktop ? 'minmax(180px, 0.6fr) minmax(0, 1fr) minmax(0, 1.4fr)' : '1fr', gap: 24, alignItems: 'start' }}>
+            <div>
+              <div style={{ fontSize: 34, fontWeight: 800, color: C.text, lineHeight: 1 }}>
+                {data.satisfaction.average?.toFixed(1) ?? '—'}<span style={{ fontSize: 16, color: C.textSub, fontWeight: 600 }}> / 5</span>
+              </div>
+              <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 6 }}>
+                {data.satisfaction.responses} rating{data.satisfaction.responses === 1 ? '' : 's'} this period
+                {data.satisfaction.previous != null && <> · {data.satisfaction.previous.toFixed(1)} before</>}
+              </div>
+            </div>
+            <BarList data={data.satisfaction.distribution} color="#F59E0B" />
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 8 }}>Recent comments</div>
+              {data.satisfaction.comments.length === 0 ? (
+                <div style={{ fontSize: 13, color: C.textSub }}>No written comments in this period.</div>
+              ) : (
+                <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {data.satisfaction.comments.map((cm, i) => (
+                    <li key={i} style={{ fontSize: 13, lineHeight: 1.5, paddingBottom: 10, borderBottom: i < data.satisfaction.comments.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+                      <div style={{ color: '#B45309', fontWeight: 700 }}>{'★'.repeat(cm.rating)}<span style={{ color: C.border }}>{'★'.repeat(5 - cm.rating)}</span></div>
+                      <div style={{ color: C.text }}>{cm.comment}</div>
+                      <div style={{ color: C.textLight, fontSize: 12 }}>{new Date(cm.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}{cm.platform ? ` · ${cm.platform === 'mobile' ? 'Mobile app' : 'Web'}` : ''}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </ChartCard>
+
         <ChartCard title="Credit by country" subtitle="Each country in its own currency">
           <div className="hide-scrollbar" style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5, minWidth: 620 }}>
@@ -140,7 +213,7 @@ export function AdminPatientsInsightsScreen() {
                         <div style={{ width: 90, height: 8, borderRadius: 4, background: C.bg, overflow: 'hidden' }}>
                           <div style={{ width: `${Math.min(r.utilisation ?? 0, 100)}%`, height: '100%', background: (r.utilisation ?? 0) > 80 ? STATUS_COLORS.bad : CYAN_DEEP }} />
                         </div>
-                        <span style={{ fontWeight: 700 }}>{r.utilisation == null ? '—' : `${r.utilisation}%`}</span>
+                        <span style={{ fontWeight: 700 }}>{r.utilisation == null ? '—' : `${r.utilisation.toFixed(1)}%`}</span>
                       </div>
                     </td>
                     <td style={td}>{money(r.country, r.avgRequested)}</td>

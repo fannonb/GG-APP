@@ -33,6 +33,11 @@ export class UpdateProviderProfileDto {
   @IsString()
   address?: string
 
+  /** County / province from the standard list for the provider's country. */
+  @IsOptional()
+  @IsString()
+  region?: string
+
   @IsOptional()
   @IsNumber()
   lat?: number

@@ -1,3 +1,5 @@
+import { normalizeRegion } from '../../common/constants/health-data'
+import { normalizeCountry } from '../admin/admin-metrics.service'
 import {
   BadRequestException,
   ForbiddenException,
@@ -799,6 +801,7 @@ export class SpService {
           treatment: clinical.treatment,
           followUp: clinical.followUp,
           internalNote: clinical.internalNote,
+          conditionCategory: dto.conditionCategory ?? null,
           services: dto.services ?? [],
           vitals: {
             bp: dto.vitals.bp,
@@ -1595,6 +1598,10 @@ export class SpService {
         address: dto.address ?? undefined,
         phone: phone ?? undefined,
         country: dto.country ?? undefined,
+        region:
+          dto.region === undefined
+            ? undefined
+            : normalizeRegion(normalizeCountry(dto.country ?? provider.country), dto.region),
         tags: serviceNames ?? undefined,
         languages: dto.languages ?? undefined,
         establishedYear: dto.establishedYear ?? undefined,
@@ -2161,6 +2168,7 @@ export class SpService {
     address: string
     phone: string
     country: string | null
+    region?: string | null
     status: ProviderOpenStatus
     lifecycleStatus?: ProviderLifecycleStatus
     languages: Prisma.JsonValue | null
@@ -2188,6 +2196,7 @@ export class SpService {
       about: provider.about ?? provider.description ?? '',
       address: provider.address,
       country: provider.country ?? '',
+      region: provider.region ?? null,
       status: provider.status === ProviderOpenStatus.OPEN ? 'open' : 'closed',
       verified: lifecycleStatus === ProviderLifecycleStatus.ACTIVE,
       languages: Array.isArray(provider.languages) ? provider.languages : [],

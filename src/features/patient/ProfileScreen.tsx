@@ -1,3 +1,5 @@
+import { BENEFICIARY_GENDERS } from '@/config/dataCapture'
+import type { UpsertBeneficiaryPayload } from '@/api/types'
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { GGCard, GGButton, GGInput, GGBadge, GGAvatar, GGDatePicker, PhonePrefixInput } from '@/design-system'
@@ -165,7 +167,7 @@ export function ProfileScreen() {
   const [bens, setBens] = useState<Beneficiary[]>(beneficiaries)
   const [showAddBen, setShowAddBen] = useState(false)
   const [editingBen, setEditingBen] = useState<Beneficiary | null>(null)
-  const [benForm, setBenForm] = useState({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode as CountryCode })
+  const [benForm, setBenForm] = useState({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode as CountryCode, gender: '' })
   const setBen = <K extends keyof typeof benForm>(k: K, v: typeof benForm[K]) => setBenForm(f => ({ ...f, [k]: v }))
   const [addBenError, setAddBenError] = useState('')
   const [deletingBen, setDeletingBen] = useState<Beneficiary | null>(null)
@@ -243,6 +245,7 @@ export function ProfileScreen() {
       dob: benForm.dob,
       countryCode: benForm.countryCode,
       nationalId: benForm.nationalId || undefined,
+      gender: (benForm.gender || undefined) as UpsertBeneficiaryPayload['gender'],
     }
     try {
       if (editingBen) {
@@ -250,7 +253,7 @@ export function ProfileScreen() {
       } else {
         await addBeneficiary.mutateAsync(payload)
       }
-      setBenForm({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode })
+      setBenForm({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode, gender: '' })
       setShowAddBen(false)
       setEditingBen(null)
     } catch (error) {
@@ -546,7 +549,7 @@ export function ProfileScreen() {
                     <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Registered Beneficiaries</div>
                     <div style={{ fontSize: '13px', color: C.textSub, marginTop: '2px' }}>People covered from your healthcare balance.</div>
                   </div>
-                  <GGButton variant="primary" size="sm" onClick={() => { setBenForm({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode }); setEditingBen(null); setAddBenError(''); setShowAddBen(true) }}>+ Add Beneficiary</GGButton>
+                  <GGButton variant="primary" size="sm" onClick={() => { setBenForm({ name: '', relation: '', dob: '', nationalId: '', countryCode: u.countryCode, gender: '' }); setEditingBen(null); setAddBenError(''); setShowAddBen(true) }}>+ Add Beneficiary</GGButton>
                 </div>
 
                 <div style={{ padding: '12px 16px', background: C.blue100, borderRadius: radius.sm, border: `1px solid rgba(74,173,223,0.2)`, fontSize: '12px', color: '#1A5D8A', lineHeight: 1.6 }}>
@@ -564,6 +567,14 @@ export function ProfileScreen() {
                           style={{ padding: '10px 14px', fontSize: '14px', fontFamily: font.family, color: benForm.relation ? C.text : C.textSub, background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: radius.sm, outline: 'none', appearance: 'none' }}>
                           <option value="">Select relation</option>
                           {RELATIONS.map(r => <option key={r} value={r}>{r}</option>)}
+                        </select>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ fontSize: '13px', fontWeight: 600, color: C.text }}>Gender <span style={{ color: C.textSub, fontWeight: 500 }}>(optional)</span></label>
+                        <select value={benForm.gender} onChange={e => setBen('gender', e.target.value)}
+                          style={{ padding: '10px 14px', fontSize: '14px', fontFamily: font.family, color: benForm.gender ? C.text : C.textSub, background: '#fff', border: `1.5px solid ${C.border}`, borderRadius: radius.sm, outline: 'none', appearance: 'none' }}>
+                          <option value="">Select gender</option>
+                          {BENEFICIARY_GENDERS.map(g => <option key={g.code} value={g.code}>{g.label}</option>)}
                         </select>
                       </div>
                       <GGDatePicker label="Date of Birth" value={benForm.dob} onChange={value => setBen('dob', value)} max={new Date().toISOString().slice(0, 10)} required />
@@ -633,7 +644,7 @@ export function ProfileScreen() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', flexShrink: 0 }}>
-                        <GGButton variant="secondary" size="sm" onClick={() => { setEditingBen(ben); setBenForm({ name: ben.name, relation: ben.relation, dob: ben.dob ?? '', nationalId: ben.nationalId ?? '', countryCode: ben.countryCode ?? u.countryCode }); setAddBenError(''); setShowAddBen(true) }}>Edit</GGButton>
+                        <GGButton variant="secondary" size="sm" onClick={() => { setEditingBen(ben); setBenForm({ name: ben.name, relation: ben.relation, dob: ben.dob ?? '', nationalId: ben.nationalId ?? '', countryCode: ben.countryCode ?? u.countryCode, gender: ben.gender ?? '' }); setAddBenError(''); setShowAddBen(true) }}>Edit</GGButton>
                         <GGButton variant="danger" size="sm" onClick={() => setDeletingBen(ben)}>Remove</GGButton>
                       </div>
                     </div>

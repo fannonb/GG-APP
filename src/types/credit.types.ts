@@ -46,6 +46,8 @@ export interface ApplyCreditPayload {
   residenceCountryName?: string
   coverageType: 'self' | 'self_and_beneficiaries'
   beneficiaries?: ApplyCreditBeneficiaryPayload[]
+  /** Code from config/dataCapture.ts REPAYMENT_METHODS. */
+  repaymentMethod?: string
 }
 
 export interface IncreaseCreditPayload {

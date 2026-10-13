@@ -216,6 +216,7 @@ export interface UpsertBeneficiaryPayload {
   dob: string
   countryCode: CountryCode
   nationalId?: string
+  gender?: 'female' | 'male' | 'prefer_not_to_say'
 }
 
 export interface CreateAppointmentPayload {
@@ -281,6 +282,8 @@ export interface ProviderProfileResponse {
   about: string
   address: string
   country: string
+  /** County / province from the standard list (config/dataCapture.ts). */
+  region?: string | null
   status: 'open' | 'closed'
   /** True when the provider account is active (approved and not suspended). */
   verified?: boolean
@@ -344,6 +347,7 @@ export interface UpdateProviderProfilePayload {
   languages?: string[]
   tags?: string[]
   address?: string
+  region?: string
   lat?: number
   lng?: number
   establishedYear?: number
@@ -369,6 +373,8 @@ export interface CreateProviderVisitPayload {
   followUp?: string
   internalNote?: string
   services?: string[]
+  /** Standard condition code (config/dataCapture.ts). */
+  conditionCategory?: string
   vitals: {
     bp: string
     temp: string

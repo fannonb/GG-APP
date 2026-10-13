@@ -13,6 +13,11 @@ const COUNTRY_NAME: Record<MetricsCountry, string> = { KE: 'Kenya', ZW: 'Zimbabw
 
 export const countryName = (code: string | null | undefined) => (code && COUNTRY_NAME[code as MetricsCountry]) || code || '—'
 
+/** The country's currency symbol as shown in the admin (e.g. KSh, Z$, ZK). */
+export function currencySymbol(country: MetricsCountry | string) {
+  return (getCountryByCode(country)?.currencySymbol ?? '').replace(/\.$/, '').replace(/^Ksh$/i, 'KSh')
+}
+
 /** Money is always shown in the country's own currency. */
 export function money(country: MetricsCountry | string, value: number | null | undefined, compact = false) {
   if (value == null) return '—'

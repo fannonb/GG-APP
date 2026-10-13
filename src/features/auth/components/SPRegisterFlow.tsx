@@ -1,6 +1,7 @@
+import { regionLabel, regionsFor } from '@/config/dataCapture'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGButton, GGInput } from '@/design-system'
+import { GGButton, GGInput, GGSelect } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { ApiError } from '@/api/types'
 import { useRegisterSPMutation } from '@/hooks/api/useAuthMutations'
@@ -54,6 +55,7 @@ interface FormState {
   bankAccount: string
   bankBranch: string
   location: LocationSuggestion | null
+  region: string
 }
 
 const DEFAULT_HOURS: Record<Day, DayHours> = {
@@ -78,6 +80,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
   const [step, setStep] = useState(0)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [regionError, setRegionError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [form, setForm] = useState<FormState>({
     practiceName: '',
@@ -95,6 +98,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
     bankAccount: '',
     bankBranch: '',
     location: null,
+    region: '',
   })
 
   const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
@@ -148,6 +152,7 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
           label: form.location?.shortName,
           address: form.location?.address ?? '',
           city: form.location?.city,
+          region: form.region || undefined,
           lat: form.location?.lat,
           lng: form.location?.lng,
         },
@@ -213,6 +218,11 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
 
     setPasswordError(nextPasswordError)
     if (nextPasswordError) return
+
+    if (regionsFor(form.country || form.location?.country).length > 0 && !form.region) {
+      setRegionError(`Choose the ${regionLabel(form.country || form.location?.country).toLowerCase()} your practice is in.`)
+      return
+    }
 
     onStarted?.()
     setStep(1)
@@ -286,8 +296,27 @@ export function SPRegisterFlow({ onStarted }: SPRegisterFlowProps) {
           <LocationPickerInput
             required
             value={form.location}
-            onChange={location => setField('location', location)}
+            onChange={location => {
+              // Prefill the county / province from the picked address when it matches the list.
+              const options = regionsFor(form.country || location?.country)
+              const wanted = (location?.region ?? '').toLowerCase().replace(/\s+(county|province)$/, '').trim()
+              const match = options.find(r => r.toLowerCase() === wanted)
+              setForm(current => ({ ...current, location, region: match ?? current.region }))
+            }}
           />
+          {regionsFor(form.country || form.location?.country).length > 0 && (
+            <div>
+              <GGSelect
+                label={regionLabel(form.country || form.location?.country)}
+                value={form.region}
+                onChange={event => { setRegionError(null); setField('region', event.target.value) }}
+                placeholder={`Choose your ${regionLabel(form.country || form.location?.country).toLowerCase()}`}
+                options={regionsFor(form.country || form.location?.country).map(r => ({ value: r, label: r }))}
+                required
+              />
+              {regionError && <div style={{ fontSize: 12.5, color: C.error, marginTop: 6 }}>{regionError}</div>}
+            </div>
+          )}
           <GGInput
             label="Password"
             type={showPassword ? 'text' : 'password'}

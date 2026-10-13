@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import type { ReactNode } from 'react'
 import { Area, AreaChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { C, font, radius } from '@/design-system/tokens'
@@ -45,12 +46,11 @@ export function KpiCard({ kpi, country }: { kpi: Kpi; country?: MetricsCountry }
   return (
     <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0, fontFamily: font.family }}>
       <div style={{ fontSize: 13, color: C.textSub, fontWeight: 600 }}>{kpi.label}</div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-        <span style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{formatKpi(kpi, country)}</span>
+      <span style={{ fontSize: 26, fontWeight: 800, color: C.text, letterSpacing: '-0.02em', lineHeight: 1.15, overflowWrap: 'anywhere' }}>{formatKpi(kpi, country)}</span>
+      {/* The change badge always sits on its own line, so every card lines up the same way. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', fontSize: 12, color: C.textLight, minHeight: 20 }}>
         <Delta kpi={kpi} />
-      </div>
-      <div style={{ fontSize: 12, color: C.textLight }}>
-        {kpi.previous != null ? `vs ${formatKpi({ ...kpi, value: kpi.previous }, country)} before` : 'All time'}
+        <span>{kpi.previous != null ? `vs ${formatKpi({ ...kpi, value: kpi.previous }, country)} before` : kpi.note ?? ''}</span>
       </div>
       {data && data.some(d => d.value > 0) && (
         <div style={{ height: 34, marginTop: 2 }}>
@@ -105,7 +105,7 @@ export function EmptyChart({ text = 'No data in this period yet.' }: { text?: st
 }
 
 /** Pie for 2–4 part splits; anything beyond four slices is folded into "Other". */
-export function Donut({ data, colors = PALETTE, colorMap, centerLabel }: { data: NameValue[]; colors?: string[]; /** Fixed colour per name, e.g. status colours. */ colorMap?: Record<string, string>; centerLabel?: string }) {
+export function Donut({ data, colors = PALETTE, colorMap, centerLabel, format = (v: number) => String(v) }: { data: NameValue[]; colors?: string[]; /** Fixed colour per name, e.g. status colours. */ colorMap?: Record<string, string>; centerLabel?: string; /** Formats legend values, e.g. money. */ format?: (v: number) => string }) {
   const sorted = [...data].filter(d => d.value > 0).sort((a, b) => b.value - a.value)
   const slices = sorted.length > 4 ? [...sorted.slice(0, 3), { name: 'Other', value: sorted.slice(3).reduce((s, d) => s + d.value, 0) }] : sorted
   const total = slices.reduce((s, d) => s + d.value, 0)
@@ -133,7 +133,7 @@ export function Donut({ data, colors = PALETTE, colorMap, centerLabel }: { data:
             <span style={{ width: 10, height: 10, borderRadius: 3, background: colorOf(s.name, i), flexShrink: 0 }} />
             <span style={{ flex: 1, color: C.text }}>{s.name}</span>
             <span style={{ color: C.textSub, fontWeight: 600 }}>{Math.round((s.value / total) * 100)}%</span>
-            <span style={{ color: C.text, fontWeight: 700, minWidth: 34, textAlign: 'right' }}>{s.value}</span>
+            <span style={{ color: C.text, fontWeight: 700, minWidth: 34, textAlign: 'right' }}>{format(s.value)}</span>
           </li>
         ))}
       </ul>
@@ -144,10 +144,12 @@ export function Donut({ data, colors = PALETTE, colorMap, centerLabel }: { data:
 /** Ranked horizontal bars; readable labels beat a crowded axis for category counts. */
 export function BarList({ data, color = CYAN_DEEP, format = (v: number) => new Intl.NumberFormat('en-US').format(v), label = (n: string) => n }: { data: NameValue[]; color?: string; format?: (v: number) => string; label?: (n: string) => string }) {
   const max = Math.max(...data.map(d => d.value), 0)
+  const { pageItems, pager } = usePaged(data)
   if (max === 0) return <EmptyChart />
   return (
+    <>
     <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {data.map(d => (
+      {pageItems.map(d => (
         <li key={d.name}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, marginBottom: 4 }}>
             <span style={{ color: C.text }}>{label(d.name)}</span>
@@ -159,6 +161,8 @@ export function BarList({ data, color = CYAN_DEEP, format = (v: number) => new I
         </li>
       ))}
     </ul>
+    <Pager {...pager} />
+    </>
   )
 }
 
@@ -232,6 +236,15 @@ export function ExportButton({ onClick }: { onClick: () => void }) {
   return (
     <button type="button" onClick={onClick} style={{ height: 32, padding: '0 12px', borderRadius: radius.sm, border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: 13, fontWeight: 600, fontFamily: font.family, cursor: 'pointer', whiteSpace: 'nowrap' }}>
       Export CSV
+    </button>
+  )
+}
+
+/** Downloads the whole page (every section, for the selected country and range) as one CSV. */
+export function ReportButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} style={{ height: 32, padding: '0 12px', borderRadius: radius.sm, border: '1px solid #0B7BC0', background: C.blue100, color: '#0B7BC0', fontSize: 13, fontWeight: 700, fontFamily: font.family, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+      Download report (CSV)
     </button>
   )
 }

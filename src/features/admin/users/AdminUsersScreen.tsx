@@ -1,3 +1,4 @@
+import { ADMIN_PAGE_SIZE } from '@/features/admin/paging'
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
@@ -17,7 +18,7 @@ import { formatDate, formatRelativeTime } from '@/utils/format'
 import type { AdminUser } from '@/types/admin.types'
 
 const CYAN_DEEP = '#0B7BC0'
-const PAGE_SIZE = 25
+const PAGE_SIZE = ADMIN_PAGE_SIZE
 
 type StatusTab = 'all' | 'active' | 'pending_verification' | 'suspended'
 type SortKey = 'name' | 'credit' | 'activity' | 'joined'

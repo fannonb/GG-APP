@@ -1,3 +1,4 @@
+import { BENEFICIARY_GENDERS } from '../../../common/constants/health-data'
 import { IsDateString, IsIn, IsOptional, IsString, MinLength } from 'class-validator'
 
 export class UpsertBeneficiaryDto {
@@ -20,4 +21,8 @@ export class UpsertBeneficiaryDto {
   @IsString()
   @MinLength(5)
   nationalId?: string
+
+  @IsOptional()
+  @IsIn(BENEFICIARY_GENDERS)
+  gender?: (typeof BENEFICIARY_GENDERS)[number]
 }

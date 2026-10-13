@@ -111,6 +111,7 @@ export function SPSettingsScreen() {
         lng: profileForm.lng ?? undefined,
         phone: profileForm.phone,
         country: profileForm.country,
+        region: profileForm.region || undefined,
         category: profileForm.categories.length > 0 ? profileForm.categories.join(', ') : undefined,
         status: profileForm.status,
         establishedYear: profileForm.establishedYear ? Number(profileForm.establishedYear) : undefined,

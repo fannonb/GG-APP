@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGCard, GGButton } from '@/design-system'
@@ -304,6 +305,8 @@ export function AdminSPAppsScreen() {
   const decided = selected?.status === 'rejected'
   const pendingCount = apps.filter(a => a.status === 'pending' || a.status === 'info_requested').length
 
+  const { pageItems, pager } = usePaged(filtered, filterStatus)
+
   return (
     <AdminLayout title="SP Applications" status={pendingCount > 0 ? `${pendingCount} to review` : undefined}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', fontFamily: font.family }}>
@@ -375,7 +378,7 @@ export function AdminSPAppsScreen() {
             {filtered.length === 0 && (
               <div style={{ padding: '40px', textAlign: 'center', color: C.textSub, fontSize: '13px' }}>No applications match</div>
             )}
-            {filtered.map((app, i) => {
+            {pageItems.map((app, i) => {
               const d = daysWaiting(app.submitted)
               const pendingLike = app.status === 'pending' || app.status === 'info_requested'
               return (
@@ -414,6 +417,7 @@ export function AdminSPAppsScreen() {
                 </div>
               )
             })}
+            <div style={{ padding: '0 12px 12px' }}><Pager {...pager} /></div>
           </GGCard>
           )}
 

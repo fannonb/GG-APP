@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { GGBadge, GGCard } from '@/design-system'
 import { C, font } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
@@ -32,6 +33,8 @@ export function AdminLedgerAccessScreen() {
   const accessQuery = useAdminLedgerAccess(100)
   const events = accessQuery.data ?? []
 
+  const { pageItems, pager } = usePaged(events)
+
   return (
     <AdminLayout title="Ledger Access">
       <div style={{ maxWidth: 960, fontFamily: font.family }}>
@@ -50,7 +53,7 @@ export function AdminLedgerAccessScreen() {
             <div style={{ padding: '20px 0', color: C.textSub, fontSize: 14 }}>No ledger access events yet.</div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {events.map((event, index) => {
+              {pageItems.map((event, index) => {
                 const meta = ACTION_META[event.action] ?? { label: event.action, type: 'default' as const }
                 return (
                   <div
@@ -61,7 +64,7 @@ export function AdminLedgerAccessScreen() {
                       gap: 14,
                       alignItems: 'center',
                       padding: '12px 0',
-                      borderBottom: index < events.length - 1 ? `1px solid ${C.border}` : 'none',
+                      borderBottom: index < pageItems.length - 1 ? `1px solid ${C.border}` : 'none',
                     }}
                   >
                     <GGBadge type={meta.type}>{meta.label}</GGBadge>
@@ -82,6 +85,7 @@ export function AdminLedgerAccessScreen() {
                   </div>
                 )
               })}
+              <Pager {...pager} />
             </div>
           )}
         </GGCard>

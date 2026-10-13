@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useRef, useState } from 'react'
 // useRef is used inside ImageUploadSlot
 import type { CSSProperties } from 'react'
@@ -258,6 +259,8 @@ export function AdminAdsScreen() {
     return o[a.status] - o[b.status]
   })
 
+  const { pageItems, pager } = usePaged(sorted)
+
   return (
     <AdminLayout title="Advertising">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 20, fontFamily: font.family }}>
@@ -302,11 +305,11 @@ export function AdminAdsScreen() {
               <div style={{ padding: 40, textAlign: 'center', fontSize: 13, color: C.textSub }}>No banners yet</div>
             )}
 
-            {sorted.map((b, i) => (
+            {pageItems.map((b, i) => (
               <div key={b.id} onClick={() => selectBanner(b)}
                 style={{
                   padding: '13px 16px',
-                  borderBottom: i < sorted.length - 1 ? `1px solid ${C.border}` : 'none',
+                  borderBottom: i < pageItems.length - 1 ? `1px solid ${C.border}` : 'none',
                   cursor: 'pointer',
                   background: selected?.id === b.id ? C.blue100 : '#fff',
                   borderLeft: selected?.id === b.id ? `3px solid ${C.blue500}` : '3px solid transparent',
@@ -350,6 +353,7 @@ export function AdminAdsScreen() {
                 </div>
               </div>
             ))}
+            <div style={{ padding: '0 12px 12px' }}><Pager {...pager} /></div>
           </GGCard>
 
           {/* ── Detail / edit panel ──────────────────────────────────── */}

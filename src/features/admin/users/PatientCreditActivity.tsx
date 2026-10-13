@@ -1,3 +1,4 @@
+import { Pager, usePaged } from '@/features/admin/paging'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
@@ -8,7 +9,6 @@ import { exportCsv } from '@/features/admin/metrics/metricsFormat'
 import { formatDate } from '@/utils/format'
 
 const CYAN_DEEP = '#0B7BC0'
-const PAGE = 20
 
 type Filter = 'all' | 'spending' | 'limits'
 type Entry = CreditInvoiceEntry | CreditLimitEntry
@@ -152,15 +152,14 @@ export function PatientCreditActivity({ userId, patientName, money }: { userId: 
   const { data, isLoading, error } = usePatientCreditActivity(userId)
   const [filter, setFilter] = useState<Filter>('all')
   const [openId, setOpenId] = useState<string | null>(null)
-  const [shown, setShown] = useState(PAGE)
 
   const items = useMemo(() => (data?.items ?? []).filter(e => filter === 'all' || (filter === 'limits' ? e.kind === 'limit' : e.kind === 'invoice')), [data, filter])
 
+  const { pageItems: visible, pager } = usePaged(items, filter)
   if (isLoading) return <div style={{ fontSize: 13.5, color: C.textSub }}>Loading activity…</div>
   if (error || !data) return <div style={{ fontSize: 13.5, color: '#B91C1C' }}>{error instanceof Error ? error.message : 'Couldn’t load credit activity.'}</div>
 
   const { summary } = data
-  const visible = items.slice(0, shown)
   const gap = summary.used - summary.spentFromCredit
 
   const stats: Array<[string, string, string]> = [
@@ -199,7 +198,7 @@ export function PatientCreditActivity({ userId, patientName, money }: { userId: 
               type="button"
               role="tab"
               aria-selected={filter === id}
-              onClick={() => { setFilter(id); setShown(PAGE); setOpenId(null) }}
+              onClick={() => { setFilter(id); setOpenId(null) }}
               style={{ border: 'none', borderRadius: radius.full, padding: '5px 12px', fontSize: 12.5, fontWeight: 700, fontFamily: font.family, cursor: 'pointer', background: filter === id ? '#fff' : 'transparent', color: filter === id ? C.text : C.textSub, boxShadow: filter === id ? '0 1px 3px rgba(15,23,42,0.1)' : 'none' }}
             >
               {label}
@@ -231,11 +230,7 @@ export function PatientCreditActivity({ userId, patientName, money }: { userId: 
               </div>
             )
           })}
-          {items.length > shown && (
-            <button type="button" onClick={() => setShown(s => s + PAGE)} style={{ marginTop: 8, width: '100%', height: 38, borderRadius: radius.sm, border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: 13, fontWeight: 600, fontFamily: font.family, cursor: 'pointer' }}>
-              Show more ({items.length - shown} left)
-            </button>
-          )}
+          <Pager {...pager} />
         </div>
       )}
 
