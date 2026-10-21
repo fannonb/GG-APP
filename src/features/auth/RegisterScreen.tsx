@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useSearchParams, useLocation, Link } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
 import { ROUTES } from '@/router/routes'
 import { useResponsive } from '@/hooks/useResponsive'
@@ -14,12 +14,19 @@ type Tab = 'patient' | 'sp'
 
 export function RegisterScreen() {
   const [searchParams] = useSearchParams()
+  const location = useLocation()
   const [tab, setTab] = useState<Tab>((searchParams.get('tab') as Tab) ?? 'patient')
   const [roleLocked, setRoleLocked] = useState(false)
   const [flowKey, setFlowKey] = useState(0)
   const [showSwitchModal, setShowSwitchModal] = useState(false)
   const { isDesktop } = useResponsive()
   const compactBrand = !isDesktop
+  // A Google sign-up lands back on this same route with the verified profile in
+  // router state. Remount the flow so the form's default values (name + email)
+  // are taken from that profile instead of the empty ones it mounted with.
+  const googleProfileToken =
+    (location.state as { googleProfile?: { googleIdToken?: string } } | null)?.googleProfile
+      ?.googleIdToken ?? ''
 
   const markStarted = useCallback(() => {
     setRoleLocked(true)
@@ -129,7 +136,7 @@ export function RegisterScreen() {
             )}
 
             {tab === 'patient' ? (
-              <PatientRegisterFlow key={flowKey} onStarted={markStarted} />
+              <PatientRegisterFlow key={`${flowKey}:${googleProfileToken}`} onStarted={markStarted} />
             ) : (
               <SPRegisterFlow key={flowKey} onStarted={markStarted} />
             )}

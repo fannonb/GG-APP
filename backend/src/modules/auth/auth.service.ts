@@ -254,7 +254,15 @@ export class AuthService {
         // Google has verified ownership of this patient email — safe to link to the existing account.
         user = await this.prisma.user.update({
           where: { id: existingLocal.id },
-          data: { googleId: profile.sub, authProvider: AuthProvider.GOOGLE },
+          data: {
+            googleId: profile.sub,
+            authProvider: AuthProvider.GOOGLE,
+            // Google proved the address belongs to them, so a local account that
+            // never clicked its verification link is verified now. Without this
+            // the patient would be locked out with "verify your email" despite
+            // having just authenticated with Google.
+            ...(existingLocal.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }),
+          },
         })
       }
     }

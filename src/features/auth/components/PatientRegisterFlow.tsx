@@ -173,6 +173,14 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
   const submitError =
     registerMutation.error instanceof ApiError ? registerMutation.error.message : null
 
+  const stepBlurbs = isGoogleSignup
+    ? [
+        'Confirm the name Google shared and add a phone number.',
+        'Date of birth, gender, and national ID for verification.',
+        'Accept the terms — Google has already verified your email.',
+      ]
+    : STEP_BLURBS
+
   const firstName = register('firstName')
   const lastName = register('lastName')
   const email = register('email')
@@ -197,7 +205,7 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-      <RegisterStepProgress steps={STEPS} blurbs={STEP_BLURBS} step={step} />
+      <RegisterStepProgress steps={STEPS} blurbs={stepBlurbs} step={step} />
 
       {step === 0 && (
         <>
@@ -227,6 +235,11 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
               {googleCallbackMutation.error instanceof ApiError && (
                 <span style={{ fontSize: '12px', color: C.error, fontWeight: 500 }}>{googleCallbackMutation.error.message}</span>
               )}
+            </>
+          )}
+          {/* Names, email and phone are collected for every sign-up — Google only
+              supplies the name and email, and the patient still has to confirm
+              them and add a phone number before the account exists. */}
           <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: '12px' }}>
             <GGInput
               label="First name"
@@ -287,9 +300,6 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
           <StickyActions>
             <GGButton variant="primary" size="md" fullWidth onClick={continueStep0}>Continue</GGButton>
           </StickyActions>
-
-            </>
-          )}
         </>
       )}
 
@@ -436,17 +446,19 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
               </a>.
             </span>
           </label>
-          <div
-            style={{
-              marginTop: 12,
-              fontSize: 12,
-              color: C.textSub,
-              lineHeight: 1.5,
-              fontFamily: font.family,
-            }}
-          >
-            Next: we&apos;ll ask you to verify your email before you can sign in.
-          </div>
+          {!isGoogleSignup && (
+            <div
+              style={{
+                marginTop: 12,
+                fontSize: 12,
+                color: C.textSub,
+                lineHeight: 1.5,
+                fontFamily: font.family,
+              }}
+            >
+              Next: we&apos;ll ask you to verify your email before you can sign in.
+            </div>
+          )}
           {submitError && (
             <div style={{ marginTop: '12px', fontSize: '13px', color: C.error, fontWeight: 500 }}>{submitError}</div>
           )}
