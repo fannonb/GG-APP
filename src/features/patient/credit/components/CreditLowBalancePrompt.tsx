@@ -22,7 +22,7 @@ export function CreditLowBalancePrompt({
 }: CreditLowBalancePromptProps) {
   const navigate = useNavigate()
   const country = getCountryByCode(countryCode)
-  const currency = country?.currencySymbol ?? 'Ksh.'
+  const currency = country?.currencySymbol ?? ''
   const threshold = getLowCreditThreshold(countryCode)
   const remaining = paymentAmount != null ? available - paymentAmount : available
 

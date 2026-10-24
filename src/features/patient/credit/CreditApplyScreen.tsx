@@ -36,11 +36,11 @@ type CoverageType = 'self' | 'self_and_beneficiaries'
 
 type DraftBeneficiary = ApplyCreditBeneficiaryPayload
 
-const emptyBeneficiary = (): DraftBeneficiary => ({
+const emptyBeneficiary = (countryCode: string): DraftBeneficiary => ({
   name: '',
   relation: '',
   dob: '',
-  countryCode: 'KE',
+  countryCode: countryCode as DraftBeneficiary['countryCode'],
   nationalId: '',
 })
 
@@ -127,7 +127,7 @@ export function CreditApplyScreen() {
     consent: false,
     coverageType: 'self' as CoverageType,
   })
-  const [draftBeneficiaries, setDraftBeneficiaries] = useState<DraftBeneficiary[]>([emptyBeneficiary()])
+  const [draftBeneficiaries, setDraftBeneficiaries] = useState<DraftBeneficiary[]>([emptyBeneficiary(user.countryCode ?? '')])
   const [errors, setErrors] = useState<Record<string, string>>({})
   const applyMutation = useApplyCreditMutation()
   const set = <K extends keyof typeof form>(k: K, v: typeof form[K]) => setForm(f => ({ ...f, [k]: v }))
@@ -145,7 +145,7 @@ export function CreditApplyScreen() {
   const residenceLabel = getWorldCountryByCode(residenceCountryCode)?.name
     ?? getCountryByCode(residenceCountryCode)?.name
     ?? residenceCountryCode
-  const livesAbroad = !isOperatingCountryCode(residenceCountryCode)
+  const livesAbroad = Boolean(residenceCountryCode) && !isOperatingCountryCode(residenceCountryCode)
   const maskedId = user.nationalId ? `ID ••••${user.nationalId.slice(-4)}` : 'National ID not set'
 
   const amount = Number(form.amount)
@@ -352,7 +352,7 @@ export function CreditApplyScreen() {
                       aria-checked={selected}
                       onClick={() => {
                         set('coverageType', option.value)
-                        if (option.value === 'self_and_beneficiaries' && draftBeneficiaries.length === 0) setDraftBeneficiaries([emptyBeneficiary()])
+                        if (option.value === 'self_and_beneficiaries' && draftBeneficiaries.length === 0) setDraftBeneficiaries([emptyBeneficiary(user.countryCode ?? '')])
                       }}
                       style={{
                         flex: 1,
@@ -418,7 +418,7 @@ export function CreditApplyScreen() {
                       </div>
                     </div>
                   ))}
-                  <GGButton variant="secondary" size="sm" onClick={() => setDraftBeneficiaries(list => [...list, emptyBeneficiary()])} style={{ alignSelf: 'flex-start' }}>
+                  <GGButton variant="secondary" size="sm" onClick={() => setDraftBeneficiaries(list => [...list, emptyBeneficiary(user.countryCode ?? '')])} style={{ alignSelf: 'flex-start' }}>
                     + Add another family member
                   </GGButton>
                   {errors.beneficiaries && <span style={{ fontSize: 12, color: C.error, fontWeight: 500 }}>{errors.beneficiaries}</span>}

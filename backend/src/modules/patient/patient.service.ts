@@ -457,11 +457,12 @@ export class PatientService {
     fallbackMarketCountry?: string | null,
   ) {
     // The mobile app historically didn't send residenceCountryCode; fall back to
-    // the patient's registered market country so the request still succeeds.
+    // the patient's stored market country so the request still succeeds. If neither
+    // is known, the empty code goes through the "Enter your country of residence" check.
     const code =
       dto.residenceCountryCode?.trim().toUpperCase() ||
       this.toMarketCode(fallbackMarketCountry) ||
-      'KE'
+      ''
     const marketNames: Record<string, string> = {
       KE: 'Kenya',
       ZW: 'Zimbabwe',
@@ -1885,7 +1886,7 @@ export class PatientService {
     }
 
     const reference = await this.referenceService.next('GGA')
-    const residence = this.resolveResidenceUpdate(dto, profile.user.country)
+    const residence = this.resolveResidenceUpdate(dto, profile.countryCode)
     const financePartnerId = this.financePartnerForCountry(residence.countryCode ?? profile.countryCode)
     if (dto.financePartnerId.toLowerCase() !== financePartnerId) {
       throw new BadRequestException(
