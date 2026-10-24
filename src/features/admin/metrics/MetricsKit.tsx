@@ -17,7 +17,7 @@ function formatKpi(kpi: Kpi, country?: MetricsCountry) {
   switch (kpi.format) {
     case 'percent': return `${kpi.value.toFixed(kpi.value % 1 === 0 ? 0 : 1)}%`
     case 'hours': return kpi.value < 48 ? `${kpi.value.toFixed(1)} h` : `${(kpi.value / 24).toFixed(1)} days`
-    case 'money': return money(country ?? 'KE', kpi.value, true)
+    case 'money': return money(country ?? '', kpi.value, true)
     default: return new Intl.NumberFormat('en-US').format(kpi.value)
   }
 }
