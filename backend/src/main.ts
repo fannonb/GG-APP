@@ -1,6 +1,7 @@
 import 'reflect-metadata'
 import { ValidationPipe } from '@nestjs/common'
 import { NestFactory } from '@nestjs/core'
+import type { NestExpressApplication } from '@nestjs/platform-express'
 import express from 'express'
 import helmet from 'helmet'
 import { AppModule } from './app.module'
@@ -10,7 +11,7 @@ import { RedisService } from './redis/redis.service'
 
 async function bootstrap() {
   validateEnv(process.env)
-  const app = await NestFactory.create(AppModule)
+  const app = await NestFactory.create<NestExpressApplication>(AppModule)
   const config = configuration()
 
   // Fail fast in production instead of silently falling back to the
@@ -41,6 +42,17 @@ async function bootstrap() {
     }),
   )
   app.use(express.urlencoded({ extended: true, limit: '25mb' }))
+
+  // Behind Railway's edge proxy the socket address is the proxy, not the
+  // client: without trusting the forwarded hop, req.ip collapses every real
+  // client onto the proxy IP. That silently breaks per-IP rate limiting (the
+  // throttler would treat all users as one bucket). TRUST_PROXY controls the
+  // number of trusted hops (1 is correct for Railway's single edge hop); it
+  // defaults to 1 only in production so local dev keeps raw sockets.
+  if (config.app.trustProxy !== '') {
+    app.set('trust proxy', config.app.trustProxy as string)
+  }
+
   app.enableCors({
     origin: (origin, callback) => {
       // Mobile clients and same-origin tools often send no Origin header.
@@ -49,7 +61,11 @@ async function bootstrap() {
         return
       }
       const allowed = config.app.corsOrigins
-      if (allowed.includes(origin) || allowed.includes('*')) {
+      // Exact-match allowlist only. A wildcard entry would reflect any
+      // request Origin with `credentials: true` (the browser still blocks it,
+      // so supporting `*` buys nothing while a mistyped CORS_ORIGIN would
+      // silently disable the allowlist).
+      if (allowed.includes(origin)) {
         callback(null, true)
         return
       }

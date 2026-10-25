@@ -41,10 +41,21 @@ export function LoginScreen() {
     handledCallback.current = true
     setSearchParams({}, { replace: true })
     if (code) {
+      // The web flow ALWAYS sends a PKCE challenge (client.ts), so the
+      // verifier must exist for the returned state. An unknown state means
+      // the redirect never originated from this app (or the sessionStorage
+      // tab was closed): exchanging without a verifier would prompt Google
+      // to reject anyway, but sending stolen codes toward the API on the
+      // chance they resolve is worse than failing fast here.
+      const codeVerifier = consumeGooglePkceVerifier(searchParams.get('state'))
+      if (!codeVerifier) {
+        setOauthCancelled(true)
+        return
+      }
       googleCallbackMutation.mutate({
         code,
         redirectUri: `${window.location.origin}${ROUTES.LOGIN}`,
-        codeVerifier: consumeGooglePkceVerifier(searchParams.get('state')),
+        codeVerifier,
       })
     } else if (oauthError) {
       setOauthCancelled(true)

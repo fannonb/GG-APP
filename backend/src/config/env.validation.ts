@@ -42,5 +42,47 @@ export function validateEnv(env: Record<string, unknown>) {
     )
   }
 
+  // Production posture checks. These do not block boot (an operator may
+  // consciously stage config mid-migration), but they surface misconfigurations
+  // in Railway logs at deploy time instead of silently degrading security.
+  if (env.NODE_ENV === 'production') {
+    const prodWarnings: string[] = []
+
+    if (!env.RESEND_API_KEY) {
+      // Registration auto-verifies accounts when mail delivery is disabled
+      // (auth.service guarded by mailService.isEnabled). That must be a
+      // conscious decision in production, never a silent default.
+      prodWarnings.push(
+        'RESEND_API_KEY is empty: email delivery is OFF and new accounts are AUTO-VERIFIED ' +
+          '(standard register/login still allow unverified accounts to sign in!).',
+      )
+    }
+    if (!env.GOOGLE_ALLOWED_REDIRECT_URIS) {
+      // Without the server-side allowlist only Google's own console list
+      // protects the OAuth exchange. Defense-in-depth should be pinned.
+      prodWarnings.push(
+        'GOOGLE_ALLOWED_REDIRECT_URIS is empty: the server-side OAuth redirect allowlist is disabled.',
+      )
+    }
+    if (!env.STORAGE_ENDPOINT) {
+      // Legacy mode embeds clinical documents as data URLs inside Postgres —
+      // explicitly documented as dev-only behavior.
+      prodWarnings.push(
+        'STORAGE_ENDPOINT is empty: attachments are embedded in the database as data URLs instead of object storage.',
+      )
+    }
+    if (String(env.CORS_ORIGIN ?? '')
+      .split(',')
+      .some(origin => origin.trim() === '*')) {
+      prodWarnings.push(
+        "CORS_ORIGIN contains '*': credentials are not honored by browsers with a wildcard, and depth of the allowlist is lost. Replace with exact origins.",
+      )
+    }
+
+    for (const warning of prodWarnings) {
+      console.warn(`⚠ [production] ${warning}`)
+    }
+  }
+
   return env
 }

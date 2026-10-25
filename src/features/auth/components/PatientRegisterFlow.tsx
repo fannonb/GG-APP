@@ -64,6 +64,9 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
   const googleMutation = useGoogleLoginMutation(ROUTES.REGISTER)
   const googleCallbackMutation = useGoogleCallbackMutation()
   const handledGoogleCallback = useRef(false)
+  // Set when the Google sign-up redirect loop ends in `?error=` or an
+  // untrusted state (missing PKCE verifier): shown inline like submitError.
+  const [googleAuthError, setGoogleAuthError] = useState<string | null>(null)
 
   const googleProfile = (location.state as { googleProfile?: GoogleProfileState } | null)?.googleProfile ?? null
   const isGoogleSignup = googleProfile !== null
@@ -80,11 +83,24 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
     handledGoogleCallback.current = true
     setSearchParams({}, { replace: true })
     if (code) {
+      // Same guard as LoginScreen: the web flow always sends a PKCE
+      // challenge, so a missing verifier for the returned state means the
+      // redirect never came from this app's flow. Fail fast instead of
+      // handing a possibly-stolen code to the API.
+      const codeVerifier = consumeGooglePkceVerifier(searchParams.get('state'))
+      if (!codeVerifier) {
+        setGoogleAuthError('This Google sign-up link is no longer valid. Please start again.')
+        return
+      }
       googleCallbackMutation.mutate({
         code,
         redirectUri: `${window.location.origin}${ROUTES.REGISTER}`,
-        codeVerifier: consumeGooglePkceVerifier(searchParams.get('state')),
+        codeVerifier,
       })
+    } else if (oauthError) {
+      // Previously this param was silently ignored; surface it so users
+      // understand why no profile arrived (popup blocked / consent denied).
+      setGoogleAuthError('Google sign-up was cancelled before it completed. Please try again.')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
@@ -171,7 +187,9 @@ export function PatientRegisterFlow({ onStarted }: PatientRegisterFlowProps) {
   })
 
   const submitError =
-    registerMutation.error instanceof ApiError ? registerMutation.error.message : null
+    registerMutation.error instanceof ApiError
+      ? registerMutation.error.message
+      : googleAuthError
 
   const stepBlurbs = isGoogleSignup
     ? [

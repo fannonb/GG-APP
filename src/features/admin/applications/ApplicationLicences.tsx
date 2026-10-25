@@ -92,9 +92,20 @@ function LicenceRow({ applicationId, credential: c, onUpdated }: { applicationId
     try {
       const doc = await adminService.getCredentialDocument(applicationId, c.id)
       let href = doc.url
-      if (href.startsWith('data:')) href = URL.createObjectURL(await (await fetch(href)).blob())
-      if (win) win.location.href = href
-      else window.location.assign(href)
+      // Only https of data: URLs are acceptable for a server-provided document
+      // location. Anything else (custom schemes, javascript:, file:, relative
+      // paths from a misbehaving backend) must never reach a browser
+      // navigation — this surfaces as an admin-visible error instead.
+      if (href.startsWith('data:')) {
+        href = URL.createObjectURL(await (await fetch(href)).blob())
+      } else if (!href.startsWith('https://')) {
+        throw new Error('Document is not served over a secure HTTPS location.')
+      }
+      if (win) {
+        win.location.href = href
+      } else {
+        window.location.assign(href)
+      }
     } catch (e) {
       win?.close()
       setError(e instanceof ApiError ? e.message : 'The certificate could not be opened.')
@@ -134,8 +145,8 @@ function LicenceRow({ applicationId, credential: c, onUpdated }: { applicationId
             {busy === 'doc' ? 'Opening…' : 'View certificate'}
           </GGButton>
         )}
-        {c.verifyUrl && (
-          <a href={c.verifyUrl} target="_blank" rel="noreferrer" style={{ fontSize: 12.5, fontWeight: 700, color: '#0B7BC0' }}>
+        {c.verifyUrl && /^https:\/\//i.test(c.verifyUrl) && (
+          <a href={c.verifyUrl} target="_blank" rel="noreferrer noopener" style={{ fontSize: 12.5, fontWeight: 700, color: '#0B7BC0' }}>
             Check the {c.regulator} register ↗
           </a>
         )}

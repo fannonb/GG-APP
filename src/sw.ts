@@ -7,13 +7,18 @@
 //
 // Buckets:
 //   gg-app-shell-<rev>    precached app shell — rebuilt every deploy
-//   gg-app-runtime-<rev>  runtime cache for fonts, images and same-origin API reads
+//   gg-app-runtime-<rev>  runtime cache for fonts, images and static assets
+//
+// API responses are deliberately NOT cached here: offline reads are served by
+// the ENCRYPTED react-query persist cache (query-persister.ts) instead. The
+// service-worker cache would store PHI/c financial data unencrypted on disk
+// and only ever purge on orderly logout — v6 dropped API caching entirely.
 
 declare const self: ServiceWorkerGlobalScope & {
   __WB_MANIFEST: Array<{ url: string; revision: string | null } | string>
 }
 
-const VERSION = 'v5'
+const VERSION = 'v6'
 const SHELL_CACHE = `gg-app-shell-${VERSION}`
 const RUNTIME_CACHE = `gg-app-runtime-${VERSION}`
 const CURRENT_CACHES = [SHELL_CACHE, RUNTIME_CACHE]
@@ -92,19 +97,18 @@ self.addEventListener('fetch', event => {
     return
   }
 
-  // Same-origin API reads: network-first with cache fallback, so screens
-  // can render the last known data when offline.
+  // Same-origin API calls: always the network, never the SW cache. Authenticated
+  // responses can carry PHI and financial data; offline behaviour is provided
+  // by the encrypted react-query IndexedDB persist layer instead.
   if (url.pathname.startsWith('/api/')) {
     event.respondWith(
-      fetch(request)
-        .then(response => {
-          if (response && response.status === 200) {
-            const copy = response.clone()
-            void caches.open(RUNTIME_CACHE).then(cache => cache.put(request, copy))
-          }
-          return response
-        })
-        .catch(() => caches.match(request).then(hit => hit ?? new Response('', { status: 504 }))),
+      fetch(request).catch(
+        () =>
+          new Response(
+            JSON.stringify({ message: 'You are offline. Reconnect to load this data.' }),
+            { status: 504, headers: { 'Content-Type': 'application/json' } },
+          ),
+      ),
     )
     return
   }
@@ -119,8 +123,10 @@ self.addEventListener('fetch', event => {
   event.respondWith(cacheFallbackNetwork(request, RUNTIME_CACHE).catch(() => caches.match('/index.html') as Promise<Response>))
 })
 
-// The app posts this message on logout so authenticated API responses
-// cached for offline reads don't leak to the next user of the device.
+// The app posts this message on logout. v5-era service workers cached
+// authenticated API responses in the runtime cache; v6 no longer does, but the
+// handler stays so upgraded installs on old caches still scrub the legacy PHI
+// copies (also driven by the activate cleanup below).
 self.addEventListener('message', event => {
   if (event.data?.type !== 'CLEAR_RUNTIME_CACHE') return
   event.waitUntil(
@@ -142,8 +148,27 @@ self.addEventListener('push', event => {
 
 self.addEventListener('notificationclick', event => {
   event.notification.close()
-  const target = event.notification.data?.url ?? '/'
+  const target = safeNotificationTarget(event.notification.data?.url)
   event.waitUntil(self.clients.openWindow(target))
 })
+
+/**
+ * Push notifications carry a server-controlled `url`; only allow navigating to
+ * a same-target relative path (or an exact same-origin URL). Anything else —
+ * cross-origin addresses, exotic schemes, garbage — falls back to the app
+ * root. The app's own router treats a leading `/` as an internal route.
+ */
+function safeNotificationTarget(raw: unknown): string {
+  if (typeof raw === 'string') {
+    if (raw.startsWith('/')) return raw
+    try {
+      const parsed = new URL(raw, self.location.origin)
+      if (parsed.origin === self.location.origin) return parsed.pathname + parsed.search + parsed.hash
+    } catch {
+      // fall through to default
+    }
+  }
+  return '/'
+}
 
 export {}

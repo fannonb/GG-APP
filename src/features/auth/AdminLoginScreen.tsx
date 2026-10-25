@@ -110,6 +110,7 @@ export function AdminLoginScreen() {
               onChange={emailField.onChange}
               onBlur={emailField.onBlur}
               inputRef={emailField.ref}
+              autoComplete="email"
               error={errors.email?.message}
               required
             />
@@ -132,6 +133,7 @@ export function AdminLoginScreen() {
                 onChange={passwordField.onChange}
                 onBlur={passwordField.onBlur}
                 inputRef={passwordField.ref}
+                autoComplete="current-password"
                 error={errors.password?.message}
                 required
                 rightEl={
