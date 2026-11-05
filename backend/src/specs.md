@@ -38,7 +38,7 @@ The patient experience on GG’APP is designed to be intuitive, secure, and empo
 4.1 Registration & Onboarding 
 The journey begins with a simple, secure sign-up process via email or Google Auth. Mandatory email verification is implemented to ensure account security and prevent bot registrations, protecting the integrity of the platform. 
 4.2 Credit Application & Management 
-Patients can apply for credit directly within the app. Applications are securely forwarded to finance partners via API for real-time processing. The personalized home dashboard provides a clear view of the available credit wallet balance, recent transactions, and upcoming appointments.
+Patients can apply for credit directly within the app. Applications are securely forwarded to finance partners via API for real-time processing. The personalized home dashboard provides a clear view of the available credit allocation balance, recent transactions, and upcoming appointments.
 
 4.3 Finding & Engaging Service Providers 
 Patients can easily browse verified providers by category (Pharmacy, Laboratory, Doctor, Radiology, Hospital). The platform displays provider profiles, including ratings, distance, and operating hours. Patients can initiate service requests, upload necessary documents (e.g., prescriptions, referral letters), and select preferred appointment times. 

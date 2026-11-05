@@ -8,9 +8,17 @@
   var bootState = {
     mounted: false,
     errors: [],
+    deferredInstallPrompt: null,
   }
 
   window.__GG_APP_BOOT__ = bootState
+
+  // Capture `beforeinstallprompt` as early as possible — Chromium can fire it
+  // before the main ES module bundle finishes downloading and executing.
+  window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault()
+    bootState.deferredInstallPrompt = event
+  })
 
   function escapeHtml(value) {
     return String(value)

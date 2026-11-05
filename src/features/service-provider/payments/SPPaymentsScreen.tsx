@@ -1,22 +1,71 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGAvatar, GGButton, GGCard } from '@/design-system'
-import { C, font } from '@/design-system/tokens'
+import { GGAvatar, GGCard } from '@/design-system'
+import { SimplePager } from '@/components/SimplePager'
+import { C, font, radius } from '@/design-system/tokens'
 import { PaymentAlertBanner } from '@/components/PaymentAlertBanner'
+import { InvoiceTable, type InvoiceTableColumn } from '@/components/InvoiceTable'
 import { useSPDashboard, useSPNotifications, useSPPayments } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
+import { useResponsive } from '@/hooks/useResponsive'
 import { SPLayout } from '@/layouts/sp/SPLayout'
+import type { Payment, PaymentType } from '@/types/invoice.types'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
+import { useSPCurrency } from '@/hooks/useCurrency'
+
+// One distinct pill per payment type, built from existing tokens.
+const PAYMENT_TYPE_PILL: Record<PaymentType, { label: string; background: string; color: string; border: string }> = {
+  prescription: { label: 'Prescription', background: C.blue100, color: '#1A5D8A', border: C.blue300 },
+  appointment: { label: 'Appointment', background: C.navy800, color: '#fff', border: C.navy800 },
+}
+
+const PAYMENT_COLUMNS = (currency: string): InvoiceTableColumn<Payment>[] => [
+  {
+    key: 'patient',
+    header: 'Patient',
+    render: payment => (
+      <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+        <GGAvatar name={payment.patient} size={34} />
+        <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{payment.patient}</span>
+      </div>
+    ),
+  },
+  { key: 'ref', header: 'Reference', render: payment => <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{payment.ref}</span> },
+  { key: 'date', header: 'Date', render: payment => <span style={{ whiteSpace: 'nowrap', color: C.textSub }}>{formatDate(payment.date)}</span> },
+  {
+    key: 'type',
+    header: 'Type',
+    render: payment => {
+      const type = payment.type ?? (payment.isPrescription ? 'prescription' : 'appointment')
+      const pill = PAYMENT_TYPE_PILL[type]
+      return (
+        <div>
+          <span style={{ padding: '3px 8px', borderRadius: radius.full, background: pill.background, color: pill.color, border: `1px solid ${pill.border}`, fontSize: '11px', fontWeight: 700, fontFamily: font.family, whiteSpace: 'nowrap' }}>
+            {pill.label}
+          </span>
+          {payment.service && (
+            <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px', whiteSpace: 'nowrap' }}>
+              {payment.service}
+            </div>
+          )}
+        </div>
+      )
+    },
+  },
+  { key: 'amount', header: 'Amount', align: 'right', render: payment => <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{formatCurrency(payment.amount, currency)}</span> },
+]
 
 export function SPPaymentsScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
+  const { isMobile } = useResponsive()
   const { data: payments = [], isLoading: paymentsLoading } = useSPPayments()
   const { data: dashboard } = useSPDashboard()
   const { data: notifications = [] } = useSPNotifications()
   const markNotificationRead = useMarkSPNotificationReadMutation()
   const [page, setPage] = useState(1)
-  const pageSize = 8
+  const pageSize = 10
   const paymentItems = getUnreadPaymentBannerItems(notifications)
 
   const paymentSummary = useMemo(
@@ -63,8 +112,8 @@ export function SPPaymentsScreen() {
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {[
-            { label: 'All-time earnings', value: formatCurrency(dashboard?.sp.totalEarnings ?? paymentSummary.totalReceived), helper: 'Authorized lifetime', color: C.text },
-            { label: 'Total Received', value: formatCurrency(paymentSummary.totalReceived), helper: 'Disbursement records', color: C.blue500 },
+            { label: 'All-time earnings', value: formatCurrency(dashboard?.sp.totalEarnings ?? paymentSummary.totalReceived, currency), helper: 'Authorized lifetime', color: C.text },
+            { label: 'Total Received', value: formatCurrency(paymentSummary.totalReceived, currency), helper: 'Disbursement records', color: C.blue500 },
             { label: 'Unique patients', value: String(dashboard?.sp.totalPatients ?? 0), helper: 'Patients served', color: C.text },
             { label: 'Payment Records', value: String(paymentSummary.paymentCount), helper: 'All disbursements', color: C.text },
           ].map(item => (
@@ -91,7 +140,7 @@ export function SPPaymentsScreen() {
             <div style={{ padding: '24px 22px', fontSize: '14px', color: C.textSub, fontFamily: font.family }}>
               No payment records yet.
             </div>
-          ) : (
+          ) : isMobile ? (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {visiblePayments.map(payment => (
                 <div key={payment.id} style={{ padding: '16px 22px', borderBottom: `1px solid ${C.border}` }}>
@@ -110,28 +159,23 @@ export function SPPaymentsScreen() {
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '15px', fontWeight: 800, color: C.text, fontFamily: font.family }}>
-                        {formatCurrency(payment.amount)}
+                        {formatCurrency(payment.amount, currency)}
                       </div>
                     </div>
                   </div>
                 </div>
               ))}
             </div>
+          ) : (
+            <InvoiceTable
+              label="Payments"
+              columns={PAYMENT_COLUMNS(currency)}
+              rows={visiblePayments}
+              getKey={payment => payment.id}
+            />
           )}
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 22px', gap: '12px', flexWrap: 'wrap' }}>
-            <div style={{ fontSize: '12px', color: C.textSub, fontFamily: font.family }}>
-              Showing {payments.length === 0 ? 0 : start + 1} to {Math.min(start + pageSize, payments.length)} of {payments.length}
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <GGButton variant="secondary" size="sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>
-                Previous
-              </GGButton>
-              <GGButton variant="secondary" size="sm" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>
-                Next
-              </GGButton>
-            </div>
-          </div>
+          <SimplePager page={currentPage} total={payments.length} pageSize={pageSize} onPageChange={setPage} />
         </GGCard>
       </div>
     </SPLayout>

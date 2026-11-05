@@ -8,7 +8,7 @@ const DISCLOSURES = [
   { title: 'Third-Party Finance Partner', body: "Credit is processed and held by our authorised finance partner. GG'APP acts as a facilitator and is not the lender." },
   { title: 'Credit Check Consent', body: 'By proceeding, you consent to a credit bureau enquiry. This may temporarily affect your credit score.' },
   { title: 'Healthcare Use Only', body: "Approved credit can only be used to pay GG'APP-verified service providers. Funds cannot be transferred to a personal bank account." },
-  { title: 'Platform Admin Fee', body: "A platform administration fee of 2.5% of the approved credit amount is deducted and remitted to GG'APP upon disbursement. This fee covers platform facilitation, provider verification, and transaction processing. The remaining balance is loaded to your wallet for healthcare use." },
+  { title: 'Platform Admin Fee', body: "A platform administration fee of 2.5% of the approved credit amount is deducted and remitted to GG'APP upon disbursement. This fee covers platform facilitation, provider verification, and transaction processing. The remaining balance is loaded to your allocation for healthcare use." },
   { title: 'Credit Obligation', body: 'You are responsible for settling the full approved amount plus applicable interest as per the credit agreement issued by the finance partner upon approval. The admin fee is included in the amount you repay to the finance partner.' },
   { title: 'Eligibility', body: "Approval is subject to the finance partner's assessment criteria. GG'APP does not guarantee credit approval." },
 ]

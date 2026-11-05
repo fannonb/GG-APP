@@ -14,7 +14,7 @@ export const PATIENT_NAV: PatientNavItem[] = [
   { id: 'services',     label: 'Find Service',   path: ROUTES.FIND_SERVICE, matchPaths: [ROUTES.FIND_SERVICE, ROUTES.BOOKING] },
   { id: 'appointments', label: 'Appointments',   path: ROUTES.APPOINTMENTS },
   { id: 'prescriptions', label: 'Prescriptions', path: ROUTES.PRESCRIPTION_REQUESTS, matchPaths: [ROUTES.PRESCRIPTION_REQUESTS] },
-  { id: 'credit',       label: 'Credit',         path: ROUTES.CREDIT_WALLET },
+  { id: 'credit',       label: 'Allocation',         path: ROUTES.CREDIT_WALLET },
   { id: 'invoices',     label: 'Invoices',       path: ROUTES.INVOICE_LIST },
   { id: 'transactions', label: 'Transactions',   path: ROUTES.TRANSACTIONS },
   { id: 'ledger',       label: 'Health Ledger',  path: ROUTES.LEDGER },

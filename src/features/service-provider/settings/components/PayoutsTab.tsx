@@ -390,7 +390,7 @@ export function PayoutsTab({
             {form.method === 'mobile_money' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <GGInput
-                  label="Phone / Wallet Number"
+                  label="Phone / Account Number"
                   value={form.accountNumber}
                   placeholder="e.g. 0771234567"
                   onChange={event => set({ accountNumber: event.target.value })}
@@ -440,7 +440,7 @@ export function PayoutsTab({
                   : 'M-Pesa paybill'
                 : form.method === 'bank'
                   ? 'bank account'
-                  : 'mobile money wallet'}{' '}
+                  : 'mobile money account'}{' '}
               will receive payments.
             </div>
 

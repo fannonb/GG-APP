@@ -16,6 +16,8 @@ import { useLocationStore } from '@/store/location.store'
 interface AppLayoutProps {
   children: ReactNode
   title: string
+  /** Small line shown above the title in the desktop top bar (e.g. a greeting). */
+  eyebrow?: string
   /** Shown before the title in the desktop top bar. */
   titleIcon?: ReactNode
   status?: string
@@ -37,7 +39,7 @@ const SEARCHABLE_CATEGORIES = [
 
 const SEARCHABLE_PAGES = [
   { label: 'Appointments', keywords: ['appointment', 'appointments', 'booking', 'bookings', 'schedule'], path: ROUTES.APPOINTMENTS },
-  { label: 'Healthcare Credit', keywords: ['credit', 'wallet', 'balance', 'loan', 'limit'], path: ROUTES.CREDIT_WALLET },
+  { label: 'Healthcare Allocation', keywords: ['credit', 'allocation', 'balance', 'loan', 'limit'], path: ROUTES.CREDIT_WALLET },
   { label: 'Invoices & Claims', keywords: ['invoice', 'invoices', 'bill', 'bills'], path: ROUTES.INVOICE_LIST },
   { label: 'Transactions', keywords: ['transaction', 'transactions', 'payment', 'payments'], path: ROUTES.TRANSACTIONS },
   { label: 'Profile & Settings', keywords: ['profile', 'setting', 'settings', 'account', 'password'], path: ROUTES.PROFILE },
@@ -52,7 +54,7 @@ const BOTTOM_NAV = [
   { id: 'profile',      label: 'Profile',      path: ROUTES.PROFILE,       icon: (a: boolean) => <svg width="22" height="22" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="5.5" r="3" stroke={a ? C.blue500 : C.textSub} strokeWidth="1.5"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6" stroke={a ? C.blue500 : C.textSub} strokeWidth="1.5" strokeLinecap="round"/></svg> },
 ]
 
-export function AppLayout({ children, title, titleIcon, status, back = false, backLabel }: AppLayoutProps) {
+export function AppLayout({ children, title, eyebrow, titleIcon, status, back = false, backLabel }: AppLayoutProps) {
   const { isDesktop } = useResponsive()
   const { pathname } = useLocation()
   const [menuOpen, setMenuOpen] = useState(false)
@@ -145,7 +147,7 @@ export function AppLayout({ children, title, titleIcon, status, back = false, ba
       }}>
         <AppSidebar />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-          <AppTopBar title={title} titleIcon={titleIcon} status={status} back={back} backLabel={backLabel} />
+          <AppTopBar title={title} eyebrow={eyebrow} titleIcon={titleIcon} status={status} back={back} backLabel={backLabel} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '0 8px 24px 8px' }}>
             {children}
           </main>
@@ -273,13 +275,11 @@ export function AppLayout({ children, title, titleIcon, status, back = false, ba
               </button>
             )}
 
-            {!back && (
-              <img
-                src={LOGO_WORDMARK}
-                alt="GG'APP"
-                style={{ height: 16, width: 'auto', flexShrink: 0, display: 'block', marginRight: 4 }}
-              />
-            )}
+            <img
+              src={LOGO_WORDMARK}
+              alt="GG'APP"
+              style={{ height: 16, width: 'auto', flexShrink: 0, display: 'block', marginRight: 4 }}
+            />
 
             <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: font.family, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', letterSpacing: '-0.01em' }}>{title}</div>

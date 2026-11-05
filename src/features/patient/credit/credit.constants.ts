@@ -1,4 +1,4 @@
-/** Shared copy and metadata for the patient credit / wallet journey */
+/** Shared copy and metadata for the patient credit / allocation journey */
 
 export const CREDIT_JOURNEY_STEPS = [
   {
@@ -16,7 +16,7 @@ export const CREDIT_JOURNEY_STEPS = [
   {
     step: 3,
     title: 'Use Your Balance',
-    desc: 'Once approved, your wallet balance is ready to use at verified providers.',
+    desc: 'Once approved, your allocation balance is ready to use at verified providers.',
     path: '/app/credit',
   },
 ] as const
@@ -25,7 +25,7 @@ export const CREDIT_BENEFITS = [
   {
     icon: 'instant' as const,
     title: 'Instant funding',
-    desc: 'Approved balance loaded directly to your GG\'APP wallet.',
+    desc: 'Approved balance loaded directly to your GG\'APP allocation.',
   },
   {
     icon: 'providers' as const,
@@ -49,7 +49,7 @@ export const FINANCE_PARTNER_SUMMARIES = [
     id: 'moneymart',
     name: 'Moneymart Finance',
     shortName: 'Moneymart',
-    tagline: 'Fast, flexible credit built around your healthcare needs.',
+    tagline: 'Fast, flexible allocations built around your healthcare needs.',
     processingTime: '24–48 hrs',
     accent: '#2e3191',
     accentBg: 'rgba(46,49,145,0.08)',

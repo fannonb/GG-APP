@@ -13,11 +13,12 @@ export function configuration() {
       apiPrefix: process.env.API_PREFIX ?? 'api/v1',
       corsOrigins: parseCorsOrigins(process.env.CORS_ORIGIN),
       // Number of trusted reverse-proxy hops in front of this app (Railway: 1).
-      // TRUST_PROXY=0 forces `1` in production — the deployed app is never
-      // exposed without at least one edge hop, and req.ip must be the client,
-      // not the proxy, for per-IP rate limiting and session ctx to work.
+      // Numeric settings are hop counts, not IP address strings. Use 1 for
+      // Railway's single edge proxy so rate limits track the actual client.
       // (Empty in development so localhost keeps raw sockets.)
-      trustProxy: process.env.TRUST_PROXY ?? (process.env.NODE_ENV === 'production' ? '1' : ''),
+      trustProxy: process.env.TRUST_PROXY?.trim()
+        ? (/^\d+$/.test(process.env.TRUST_PROXY.trim()) ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY)
+        : (process.env.NODE_ENV === 'production' ? 1 : ''),
       // Canonical public app origin for password-reset/deep links. Falls back
       // to the first CORS origin only when unset (local development).
       appBaseUrl: process.env.APP_BASE_URL ?? '',

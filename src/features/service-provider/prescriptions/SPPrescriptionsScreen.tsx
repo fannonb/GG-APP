@@ -9,6 +9,7 @@ import { route } from '@/router/routes'
 import { formatAmount, formatDate, formatRelativeTime } from '@/utils/format'
 import { getCountryByCode } from '@/config/countries'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { Pager, usePaged } from '@/components/paging'
 import type { PrescriptionFulfillmentMode, PrescriptionRequest } from '@/types/prescription.types'
 
 type TabId = 'todo' | 'waiting' | 'completed' | 'closed'
@@ -133,7 +134,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
   let action: ReactNode = null
   switch (stage) {
     case 'quote':
-      status = <Pill tone={AMBER}>Submitted {formatRelativeTime(request.submittedAt)}</Pill>
+      status = <Pill tone={AMBER}>{request.isNearbyRequest && request.distanceKm != null ? `${request.distanceKm.toFixed(1)} km away · ` : ''}Submitted {formatRelativeTime(request.submittedAt)}</Pill>
       action = <button type="button" style={actionBtn} onClick={open}>Send quote</button>
       break
     case 'invoice':
@@ -171,7 +172,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
       )
       break
     case 'awaitQuote':
-      status = <Pill tone={CYAN}>Quote sent{request.quotedAt ? ` ${formatRelativeTime(request.quotedAt)}` : ''}</Pill>
+      status = <Pill tone={CYAN}>Quote sent{request.quotedAt ? ` ${formatRelativeTime(request.quotedAt)}` : ''}{request.isNearbyRequest ? ' · patient comparing' : ''}</Pill>
       break
     case 'awaitPayment':
       status = <Pill tone={CYAN}>Invoice sent · waiting for payment</Pill>
@@ -180,7 +181,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
       status = <Pill tone={GREEN}>{delivery ? 'Delivered' : 'Collected'}{request.fulfilledAt ? ` ${formatDate(request.fulfilledAt, { month: 'short', day: 'numeric' })}` : ''}</Pill>
       break
     case 'closed':
-      status = <Pill tone={GREY}>{request.status === 'rejected' ? 'Declined by you' : 'Cancelled by patient'}</Pill>
+      status = <Pill tone={GREY}>{request.status === 'rejected' ? 'Declined by you' : request.isNearbyRequest ? (request.declineReason ?? 'Closed') : 'Cancelled by patient'}</Pill>
       break
   }
 
@@ -293,8 +294,9 @@ export function SPPrescriptionsScreen() {
     STAGE_HEADING[stage] ??
     new Date(r.fulfilledAt ?? r.declinedAt ?? r.submittedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
+  const { pageItems, pager } = usePaged(items, `${tab}|${query}`)
   const groups: { heading: string; rows: typeof items }[] = []
-  for (const item of items) {
+  for (const item of pageItems) {
     const heading = headingOf(item.stage, item.request)
     const last = groups[groups.length - 1]
     if (last && last.heading === heading) last.rows.push(item)
@@ -367,6 +369,7 @@ export function SPPrescriptionsScreen() {
                 ))}
               </section>
             ))}
+            <Pager {...pager} />
           </div>
         )}
       </div>

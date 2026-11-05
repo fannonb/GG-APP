@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isMockApi } from '@/api/config'
 import { GGCard, GGButton, GGBadge } from '@/design-system'
@@ -8,6 +9,14 @@ import { route } from '@/router/routes'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { useAuthStore } from '@/store/auth.store'
 import type { BadgeType } from '@/design-system/GGBadge'
+import { usePatientCurrency } from '@/hooks/useCurrency'
+import { Pager, usePaged } from '@/components/paging'
+import { InvoiceTable, type InvoiceTableColumn } from '@/components/InvoiceTable'
+import { useResponsive } from '@/hooks/useResponsive'
+
+type InvoiceFilter = 'All' | 'Pending' | 'Paid'
+const FILTERS: InvoiceFilter[] = ['All', 'Pending', 'Paid']
+const isPaidStatus = (status: string) => status === 'paid' || status === 'authorized'
 
 const statusMap: Record<string, { type: BadgeType; label: string }> = {
   pending_auth: { type: 'warning', label: 'Awaiting Auth' },
@@ -18,6 +27,7 @@ const statusMap: Record<string, { type: BadgeType; label: string }> = {
 }
 
 export function InvoiceListScreen() {
+  const currency = usePatientCurrency()
   const navigate = useNavigate()
   const { userMode } = useAuthStore()
   const { data: invoiceData } = usePatientInvoices()
@@ -34,6 +44,22 @@ export function InvoiceListScreen() {
         isPrescription: Boolean(invoice.isPrescription),
         prescriptionQuoteReviewed: Boolean(invoice.prescriptionQuoteReviewed),
       }))
+  const { isMobile } = useResponsive()
+  const [filter, setFilter] = useState<InvoiceFilter>('All')
+  const filteredInvoices = invoices.filter(invoice =>
+    filter === 'All' ? true : filter === 'Paid' ? isPaidStatus(invoice.status) : !isPaidStatus(invoice.status) && invoice.status !== 'rejected',
+  )
+  const { pageItems: pagedInvoices, pager } = usePaged(filteredInvoices, filter)
+  type Row = (typeof invoices)[number]
+  const statusOf = (invoice: Row) => statusMap[invoice.status] ?? { type: 'default' as BadgeType, label: invoice.status }
+  const columns: InvoiceTableColumn<Row>[] = [
+    { key: 'id', header: 'Invoice', render: invoice => <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{invoice.id}</span> },
+    { key: 'provider', header: 'Provider', render: invoice => invoice.provider },
+    { key: 'service', header: 'Service', render: invoice => <span style={{ color: C.textSub }}>{invoice.service}</span> },
+    { key: 'date', header: 'Date', render: invoice => <span style={{ whiteSpace: 'nowrap', color: C.textSub }}>{formatDate(invoice.date)}</span> },
+    { key: 'amount', header: 'Amount', align: 'right', render: invoice => <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{formatCurrency(invoice.amount, currency)}</span> },
+    { key: 'status', header: 'Status', align: 'right', render: invoice => <GGBadge type={statusOf(invoice).type}>{statusOf(invoice).label}</GGBadge> },
+  ]
   const pendingInvoices = invoices.filter(invoice => {
     if (invoice.status !== 'pending_auth') return false
     // Prescription invoices wait until the patient has reviewed the pharmacy quote.
@@ -55,7 +81,7 @@ export function InvoiceListScreen() {
               <div style={{ fontSize: '14px', fontWeight: 700, color: '#8A4D00' }}>{pendingCount} invoice{pendingCount > 1 ? 's require' : ' requires'} your authorization</div>
               {firstPendingInvoice && (
                 <div style={{ fontSize: '12px', color: '#A06000', marginTop: '2px' }}>
-                  {firstPendingInvoice.id} from {firstPendingInvoice.provider} — {formatCurrency(firstPendingInvoice.amount)}
+                  {firstPendingInvoice.id} from {firstPendingInvoice.provider} — {formatCurrency(firstPendingInvoice.amount, currency)}
                 </div>
               )}
             </div>
@@ -75,12 +101,15 @@ export function InvoiceListScreen() {
             <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>All Invoices</div>
             {!isNew && (
               <div style={{ display: 'flex', gap: '8px' }}>
-                {['All', 'Pending', 'Paid'].map(filter => (
+                {FILTERS.map(option => (
                   <button
-                    key={filter}
-                    style={{ padding: '5px 12px', borderRadius: radius.full, border: `1px solid ${C.border}`, background: filter === 'All' ? C.blue100 : '#fff', color: filter === 'All' ? C.blue500 : C.textSub, fontSize: '12px', fontWeight: filter === 'All' ? 700 : 500, cursor: 'pointer', fontFamily: font.family }}
+                    key={option}
+                    type="button"
+                    aria-pressed={filter === option}
+                    onClick={() => setFilter(option)}
+                    style={{ padding: '5px 12px', borderRadius: radius.full, border: `1px solid ${C.border}`, background: filter === option ? C.blue100 : '#fff', color: filter === option ? C.blue500 : C.textSub, fontSize: '12px', fontWeight: filter === option ? 700 : 500, cursor: 'pointer', fontFamily: font.family }}
                   >
-                    {filter}
+                    {option}
                   </button>
                 ))}
               </div>
@@ -109,16 +138,26 @@ export function InvoiceListScreen() {
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8M6.5 3L9.5 6l-3 3" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
               </button>
             </div>
+          ) : filteredInvoices.length === 0 ? (
+            <div style={{ padding: '32px 22px', fontSize: '13px', color: C.textSub }}>No {filter.toLowerCase()} invoices.</div>
+          ) : !isMobile ? (
+            <InvoiceTable
+              label="Invoices"
+              columns={columns}
+              rows={pagedInvoices}
+              getKey={invoice => invoice.id}
+              onRowClick={invoice => navigate(route.patientInvoice(invoice.id))}
+            />
           ) : (
-            invoices.map((invoice, index) => {
-              const status = statusMap[invoice.status] ?? { type: 'default' as BadgeType, label: invoice.status }
+            pagedInvoices.map((invoice, index) => {
+              const status = statusOf(invoice)
               const canOpen = true
 
               return (
                 <div
                   key={invoice.id}
                   onClick={() => canOpen ? navigate(route.patientInvoice(invoice.id)) : undefined}
-                  style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '18px 22px', borderBottom: index < invoices.length - 1 ? `1px solid ${C.border}` : 'none', cursor: canOpen ? 'pointer' : 'default', transition: 'background 0.12s' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '18px 22px', borderBottom: index < pagedInvoices.length - 1 ? `1px solid ${C.border}` : 'none', cursor: canOpen ? 'pointer' : 'default', transition: 'background 0.12s' }}
                   onMouseEnter={event => { if (canOpen) event.currentTarget.style.background = C.bg }}
                   onMouseLeave={event => { event.currentTarget.style.background = 'transparent' }}
                 >
@@ -131,13 +170,14 @@ export function InvoiceListScreen() {
                     <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>{formatDate(invoice.date)}</div>
                   </div>
                   <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{formatCurrency(invoice.amount)}</div>
+                    <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em' }}>{formatCurrency(invoice.amount, currency)}</div>
                     <div style={{ marginTop: '4px' }}><GGBadge type={status.type}>{status.label}</GGBadge></div>
                   </div>
                 </div>
               )
             })
           )}
+          <div style={{ padding: '0 22px 14px' }}><Pager {...pager} /></div>
         </GGCard>
       </div>
     </AppLayout>

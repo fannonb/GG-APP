@@ -90,7 +90,7 @@ export function SPInvoiceUploadScreen() {
   const updateInvoiceMutation = useUpdateSPInvoiceMutation()
   const { data: spProfile } = useSPProfile()
   const spCountry = getCountryByName(spProfile?.country ?? '')
-  const currencySymbol = spCountry?.currencySymbol ?? '$'
+  const currencySymbol = spCountry?.currencySymbol ?? ''
   const currencyCode = spCountry?.currencyCode ?? ''
 
   const locationState = (location.state as {

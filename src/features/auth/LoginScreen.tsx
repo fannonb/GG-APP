@@ -10,7 +10,6 @@ import { consumeGooglePkceVerifier } from '@/lib/google-pkce'
 import { AuthBrandPanel } from './components/AuthBrandPanel'
 import { AuthCompactBrandHeader } from './components/AuthCompactBrandHeader'
 import { EntityTabBar } from './components/EntityTabBar'
-import { InstallAppPrompt } from '@/components/InstallApp'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useLoginMutation, useGoogleLoginMutation, useGoogleCallbackMutation } from '@/hooks/api'
 import { ApiError } from '@/api/types'
@@ -372,13 +371,10 @@ export function LoginScreen() {
             </form>
 
             {compactBrand && (
-              <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <InstallAppPrompt variant="slim" />
-                <div style={{ display: 'flex', justifyContent: 'center', gap: 18, fontSize: 12.5 }}>
-                  <Link to={ROUTES.TERMS} style={{ color: C.textSub, textDecoration: 'none' }}>Terms</Link>
-                  <Link to={ROUTES.PRIVACY_POLICY} style={{ color: C.textSub, textDecoration: 'none' }}>Privacy</Link>
-                  <a href="mailto:support@gatewayglobal.africa" style={{ color: C.textSub, textDecoration: 'none' }}>Help</a>
-                </div>
+              <div style={{ marginTop: 'auto', paddingTop: 24, display: 'flex', justifyContent: 'center', gap: 18, fontSize: 12.5 }}>
+                <Link to={ROUTES.TERMS} style={{ color: C.textSub, textDecoration: 'none' }}>Terms</Link>
+                <Link to={ROUTES.PRIVACY_POLICY} style={{ color: C.textSub, textDecoration: 'none' }}>Privacy</Link>
+                <a href="mailto:support@gatewayglobal.africa" style={{ color: C.textSub, textDecoration: 'none' }}>Help</a>
               </div>
             )}
           </div>

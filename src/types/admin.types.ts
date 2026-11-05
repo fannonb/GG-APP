@@ -54,6 +54,12 @@ export interface ApplicationCredential {
 }
 
 export interface SPApplication {
+  importedAt?: string
+  invitedAt?: string
+  activatedAt?: string
+  address?: string
+  lat?: number
+  lng?: number
   id: string
   name: string
   serviceTypes: string[]

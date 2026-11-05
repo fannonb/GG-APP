@@ -13,6 +13,8 @@ import { SPBottomNav } from './SPBottomNav'
 interface SPLayoutProps {
   children: ReactNode
   title: string
+  /** Small line shown above the title in the desktop top bar (e.g. a greeting). */
+  eyebrow?: string
   /** Shown before the title in the desktop top bar. */
   titleIcon?: ReactNode
   status?: string
@@ -22,7 +24,7 @@ interface SPLayoutProps {
   back?: boolean
 }
 
-export function SPLayout({ children, title, titleIcon, status, back = false }: SPLayoutProps) {
+export function SPLayout({ children, title, eyebrow, titleIcon, status, back = false }: SPLayoutProps) {
   const { isDesktop } = useResponsive()
   const navigate = useNavigate()
   const logoutMutation = useLogoutMutation()
@@ -283,7 +285,7 @@ export function SPLayout({ children, title, titleIcon, status, back = false }: S
       }}>
         <SPSidebar />
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, height: '100%', overflow: 'hidden' }}>
-          <SPTopBar title={title} titleIcon={titleIcon} status={status} back={back} />
+          <SPTopBar title={title} eyebrow={eyebrow} titleIcon={titleIcon} status={status} back={back} />
           <main style={{ flex: 1, overflowY: 'auto', padding: '0 8px 24px 8px' }}>
             {children}
           </main>

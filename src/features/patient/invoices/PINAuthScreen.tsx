@@ -10,6 +10,7 @@ import { isMockApi } from '@/api/config'
 import { MOCK_INVOICE } from '@/mock/patient.mock'
 import { useUserStore } from '@/store/user.store'
 import { route, ROUTES } from '@/router/routes'
+import { usePatientCurrency } from '@/hooks/useCurrency'
 
 const PIN_LENGTH = 4
 
@@ -21,6 +22,7 @@ const KEYS = [
 ]
 
 export function PINAuthScreen() {
+  const currency = usePatientCurrency()
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
   const user = useUserStore(s => s.user)
@@ -177,8 +179,8 @@ export function PINAuthScreen() {
     3: {
       title: 'Final confirmation',
       sub: isPartialPay
-        ? `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount)} from your allocation. Settle ${formatCurrency(offAppDue)} off-app with ${inv.provider.name}.`
-        : `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount)} to ${inv.provider.name}. This action is irreversible.`,
+        ? `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount, currency)} from your allocation. Settle ${formatCurrency(offAppDue, currency)} off-app with ${inv.provider.name}.`
+        : `Enter your PIN one last time to authorize ${formatCurrency(walletPayAmount, currency)} to ${inv.provider.name}. This action is irreversible.`,
     },
   }
 
@@ -219,11 +221,11 @@ export function PINAuthScreen() {
                 <div style={{ fontSize: '11px', color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, marginBottom: '4px' }}>
                   {isPartialPay ? 'Authorizing In-App Portion' : 'Authorizing Payment'}
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{formatCurrency(walletPayAmount)}</div>
+                <div style={{ fontSize: '28px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>{formatCurrency(walletPayAmount, currency)}</div>
                 <div style={{ fontSize: '12px', color: C.textSub, marginTop: '2px' }}>to {inv.provider.name}</div>
                 {isPartialPay && (
                   <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>
-                    Invoice {formatCurrency(inv.amount)} · Off-app remainder {formatCurrency(offAppDue)}
+                    Invoice {formatCurrency(inv.amount, currency)} · Off-app remainder {formatCurrency(offAppDue, currency)}
                   </div>
                 )}
                 {step === 3 && <div style={{ fontSize: '12px', color: '#8A4D00', marginTop: '6px', fontWeight: 600 }}>Warning: This action is irreversible</div>}

@@ -2,15 +2,14 @@ import { useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { GGAvatar, GGCard, StarRating } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
-import { COUNTRIES, getCountryByCode, getCountryByName } from '@/config/countries'
+import { COUNTRIES, getCountryByName } from '@/config/countries'
 import { useProvider, useProviderReviews, usePatientInvoices, useSubmitReviewMutation } from '@/hooks/api'
 import { useResponsive } from '@/hooks/useResponsive'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { isMockApi } from '@/api/config'
 import { DEMO_SP_PROVIDER_ID, useSPProfileStore } from '@/store/sp-profile.store'
-import { providerHasCategory, type Provider } from '@/types/provider.types'
-import { useUserStore } from '@/store/user.store'
-import { formatAmount } from '@/utils/format'
+import type { Provider } from '@/types/provider.types'
+import { ROUTES } from '@/router/routes'
 import { useLocationStore } from '@/store/location.store'
 import { ProviderReviewForm } from '@/features/patient/components/ProviderReviewForm'
 import { ProviderLocationMap } from '@/features/patient/components/ProviderLocationMap'
@@ -199,21 +198,10 @@ const primaryBtn: React.CSSProperties = {
   cursor: 'pointer',
 }
 
-const secondaryBtn: React.CSSProperties = {
-  ...primaryBtn,
-  height: 44,
-  background: '#fff',
-  boxShadow: 'none',
-  border: '1px solid rgba(11,123,192,0.35)',
-  color: CYAN_DEEP,
-  fontSize: 14,
-}
-
 export function ProviderProfileScreen() {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
   const position = useLocationStore(s => s.position)
-  const user = useUserStore(s => s.user)
   const { id } = useParams<{ id: string }>()
   const { state } = useLocation() as { state?: { provider?: Provider } }
   const { data: fetchedProvider, isLoading } = useProvider(id)
@@ -296,9 +284,8 @@ export function ProviderProfileScreen() {
   }
 
   const categoryLabels = Array.from(new Set([provider.category, ...(provider.categories ?? [])]))
-  // Pharmacy can be the main category or one of several (e.g. a hospital with an in-house pharmacy).
-  const offersPharmacy = providerHasCategory(provider, 'pharmacy')
-    || provider.services.some(service => /pharmac/i.test(service))
+  // Prescriptions are not sent to one pharmacy from its profile: the Pharmacy section sends them to
+  // every registered pharmacy nearby. A pharmacy-only profile therefore has no booking action.
   const pharmacyOnly = provider.category === 'pharmacy' && (provider.categories ?? []).every(c => c === 'pharmacy')
   const services = provider.services.filter(service =>
     !categoryLabels.some(cat => cat.toLowerCase() === service.toLowerCase()))
@@ -316,8 +303,6 @@ export function ProviderProfileScreen() {
   const starCounts = [5, 4, 3, 2, 1].map(star => ({ star, count: reviews.filter(r => Math.round(r.rating) === star).length }))
   const visibleReviews = showAllReviews ? reviews : reviews.slice(0, REVIEW_PREVIEW)
 
-  const userCountry = getCountryByCode(user.countryCode)
-  const hasCredit = user.creditStatus === 'approved'
 
   const handleProfileReviewSubmit = async (rating: number, text: string) => {
     if (!provider || !reviewableInvoice) return
@@ -337,7 +322,15 @@ export function ProviderProfileScreen() {
   }
 
   const bookVisit = () => navigate('/app/booking', { state: { provider, intent: 'appointment' } })
-  const sendPrescription = () => navigate('/app/booking', { state: { provider, intent: 'prescription' } })
+  const pharmacyNote = (
+    <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.55, padding: '12px 14px', borderRadius: radius.sm, background: C.bg }}>
+      To fill a prescription, send it from the{' '}
+      <button type="button" onClick={() => navigate(ROUTES.PHARMACY)} style={{ background: 'none', border: 'none', padding: 0, color: '#0B7BC0', fontWeight: 700, cursor: 'pointer', fontFamily: font.family, fontSize: 13 }}>
+        Pharmacy section
+      </button>
+      . It goes to every pharmacy near you, and you choose the best price.
+    </div>
+  )
 
   const actionPanel = (
     <GGCard padding="22px" style={{ position: isMobile ? 'static' : 'sticky', top: 20 }}>
@@ -346,25 +339,12 @@ export function ProviderProfileScreen() {
         <span style={{ fontSize: 14, fontWeight: 700, color: openNow.open ? '#15803D' : '#B45309' }}>{openNow.text}</span>
       </div>
 
-      <div style={{ marginTop: 14, padding: '12px 14px', background: C.blue100, borderRadius: radius.sm, fontSize: 13, color: '#1A5D8A', lineHeight: 1.5 }}>
-        <strong>GG&apos;APP credit accepted.</strong> No payment at the counter.
-        {hasCredit && (
-          <div style={{ marginTop: 2 }}>
-            You have <strong>{formatAmount(user.creditAvailable, userCountry?.currencySymbol ?? '')}</strong> available.
-          </div>
-        )}
-      </div>
 
       {!isMobile && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 16 }}>
-        {!pharmacyOnly && (
+        {pharmacyOnly ? pharmacyNote : (
           <button type="button" style={primaryBtn} onClick={bookVisit}>
             Book a visit
-          </button>
-        )}
-        {offersPharmacy && (
-          <button type="button" style={pharmacyOnly ? primaryBtn : secondaryBtn} onClick={sendPrescription}>
-            Send a prescription
           </button>
         )}
       </div>
@@ -563,7 +543,9 @@ export function ProviderProfileScreen() {
         {!isMobile && actionPanel}
       </div>
 
-      {isMobile && (
+      {isMobile && pharmacyOnly && <div style={{ marginTop: 16 }}>{pharmacyNote}</div>}
+
+      {isMobile && !pharmacyOnly && (
         <>
           {/* Keeps the last card clear of the fixed action bar. */}
           <div aria-hidden style={{ height: 76 }} />
@@ -582,16 +564,9 @@ export function ProviderProfileScreen() {
               borderTop: `1px solid ${C.border}`,
             }}
           >
-            {!pharmacyOnly && (
-              <button type="button" style={{ ...primaryBtn, height: 44, flex: 1 }} onClick={bookVisit}>
-                Book a visit
-              </button>
-            )}
-            {offersPharmacy && (
-              <button type="button" style={{ ...(pharmacyOnly ? primaryBtn : secondaryBtn), height: 44, flex: 1 }} onClick={sendPrescription}>
-                Send a prescription
-              </button>
-            )}
+            <button type="button" style={{ ...primaryBtn, height: 44, flex: 1 }} onClick={bookVisit}>
+              Book a visit
+            </button>
           </div>
         </>
       )}

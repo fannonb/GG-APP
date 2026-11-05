@@ -5,8 +5,21 @@ export type PrescriptionStage = 'reviewQuote' | 'approvePayment' | 'awaitQuote' 
 
 export const isPrescriptionPaid = (r: PrescriptionRequest) => r.invoiceStatus === 'paid' || r.invoiceStatus === 'authorized'
 
+/** Still out to nearby pharmacies: no pharmacy chosen yet. */
+export const isChoosingPharmacy = (r: PrescriptionRequest) =>
+  r.providerId == null && (r.status === 'submitted' || r.status === 'quoted')
+
+/** The chosen pharmacy's name, or a description of who the request went to. */
+export function prescriptionPharmacyLabel(r: PrescriptionRequest) {
+  if (r.provider) return r.provider
+  const quotes = r.offers?.length ?? 0
+  if (quotes > 0) return `${quotes} ${quotes === 1 ? 'quote' : 'quotes'} from nearby pharmacies`
+  if (r.pharmaciesContacted) return `${r.pharmaciesContacted} nearby ${r.pharmaciesContacted === 1 ? 'pharmacy' : 'pharmacies'}`
+  return 'Nearby pharmacies'
+}
+
 export function prescriptionStage(r: PrescriptionRequest): PrescriptionStage {
-  if (r.status === 'cancelled' || r.status === 'rejected') return 'closed'
+  if (r.status === 'cancelled' || r.status === 'rejected' || r.status === 'expired') return 'closed'
   if (r.status === 'quoted') return 'reviewQuote'
   // A fulfilled order can still be waiting for the patient to approve its invoice.
   if (r.invoiceId && r.invoiceStatus === 'pending_auth') return 'approvePayment'

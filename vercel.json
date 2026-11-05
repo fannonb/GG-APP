@@ -20,6 +20,14 @@
     {
       "source": "/manifest.webmanifest",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }, { "key": "Content-Type", "value": "application/manifest+json" }]
+    },
+    {
+      "source": "/gg-app.mobileconfig",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" },
+        { "key": "Content-Type", "value": "application/x-apple-aspen-config" },
+        { "key": "Content-Disposition", "value": "attachment; filename=\"gg-app.mobileconfig\"" }
+      ]
     }
   ]
 }

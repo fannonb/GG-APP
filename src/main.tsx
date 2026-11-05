@@ -18,14 +18,6 @@ createRoot(root).render(
   </StrictMode>,
 )
 
-declare global {
-  interface Window {
-    __GG_APP_BOOT__?: {
-      mounted?: boolean
-    }
-  }
-}
-
 if (window.__GG_APP_BOOT__) {
   window.__GG_APP_BOOT__.mounted = true
 }

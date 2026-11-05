@@ -11,6 +11,23 @@ export const VITAL_LABELS: Record<string, string> = {
   bmi: 'BMI',
 }
 
+const VITAL_UNITS: Record<string, string> = {
+  bp: 'mmHg',
+  temp: '°C',
+  weight: 'kg',
+  sats: '%',
+  glucose: 'mmol/L',
+  pulse: 'bpm',
+  height: 'cm',
+}
+
+/** A vital's value with its unit, added only when the provider typed a bare number (or a BP pair). */
+export function vitalWithUnit(key: string, value: string) {
+  const unit = VITAL_UNITS[key]
+  const bare = /^\d+(\.\d+)?(\/\d+(\.\d+)?)?$/.test(value.trim())
+  return { value: value.trim(), unit: unit && bare ? unit : '' }
+}
+
 /** A family member's name without the "(Son)" style relation suffix. */
 export function ledgerFamilyName(entry: LedgerEntry) {
   return (entry.beneficiaryName ?? '').replace(/\s*\([^)]*\)/, '').trim()

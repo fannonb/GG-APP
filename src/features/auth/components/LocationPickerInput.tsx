@@ -38,14 +38,14 @@ function toSuggestion(r: any): LocationSuggestion {
   }
 }
 
-async function searchNominatim(query: string): Promise<LocationSuggestion[]> {
+export async function searchNominatim(query: string): Promise<LocationSuggestion[]> {
   const url = `${NOMINATIM}/search?q=${encodeURIComponent(query)}&countrycodes=zw,ke,zm&format=json&addressdetails=1&limit=6`
   const res  = await fetch(url, { headers: HEADERS })
   const data = await res.json()
   return (data as unknown[]).map(toSuggestion)
 }
 
-async function reverseNominatim(lat: number, lon: number): Promise<LocationSuggestion> {
+export async function reverseNominatim(lat: number, lon: number): Promise<LocationSuggestion> {
   const url = `${NOMINATIM}/reverse?lat=${lat}&lon=${lon}&format=json&addressdetails=1`
   const res  = await fetch(url, { headers: HEADERS })
   const data = await res.json()

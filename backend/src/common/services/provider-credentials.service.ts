@@ -5,7 +5,6 @@ import {
   allowedCredentialKinds,
   credentialType,
   credentialsFor,
-  needsBusinessRegistration,
   toCredentialCountry,
 } from '../constants/credentials'
 import { StorageService } from './storage.service'
@@ -82,15 +81,13 @@ export class ProviderCredentialsService {
 
     if (!input.credentials || input.credentials.length === 0) {
       const legacy = input.licenseNumber?.trim()
-      if (!legacy) throw new BadRequestException('Add your licence details.')
-      return { items: [], licenseNumber: legacy, businessRegNumber, taxPin, uploadedKeys: [] }
+      return { items: [], licenseNumber: legacy ?? '', businessRegNumber, taxPin, uploadedKeys: [] }
     }
 
     const country = toCredentialCountry(input.country)
     if (!country) throw new BadRequestException('GG’APP accepts providers in Kenya, Zimbabwe and Zambia.')
 
     const allowed = allowedCredentialKinds(country, input.serviceTypes)
-    const { required } = credentialsFor(country, input.serviceTypes)
     const problems: string[] = []
     const seen = new Set<string>()
     const now = Date.now()
@@ -103,24 +100,10 @@ export class ProviderCredentialsService {
       }
       if (seen.has(c.kind)) problems.push(`${type.label} was added twice`)
       seen.add(c.kind)
-      if (type.holder === 'person' && !c.holderName?.trim()) problems.push(`Add the name for ${type.label}`)
-      if (type.expires && !type.optionalOnly && !c.expiresAt) problems.push(`Add the expiry date for ${type.label}`)
+      if (!c.number?.trim()) problems.push(`Add the number for ${type.label}`)
       if (c.expiresAt && new Date(c.expiresAt).getTime() < now) problems.push(`${type.label} has expired`)
-      if (type.document && !type.optionalOnly && !c.document) problems.push(`Upload the ${type.label} certificate`)
     }
 
-    for (const group of required) {
-      if (!group.some(kind => seen.has(kind))) {
-        const types = group.map(k => credentialType(k))
-        problems.push(
-          types.length === 1 && types[0]?.holder === 'person'
-            ? `Add the ${types[0].label.toLowerCase()}'s details`
-            : `Add your ${types.map((t, i) => t?.label.toLowerCase() ?? group[i]).join(' or ')}`,
-        )
-      }
-    }
-    if (needsBusinessRegistration(input.serviceTypes) && !businessRegNumber) problems.push('Add your business registration number')
-    if (!taxPin) problems.push('Add your tax PIN')
 
     if (problems.length > 0) throw new BadRequestException(`${problems.join('. ')}.`)
 

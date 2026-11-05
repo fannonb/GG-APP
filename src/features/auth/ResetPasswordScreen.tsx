@@ -1,3 +1,5 @@
+import { apiClient } from '@/api/client'
+import { useMutation } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { GGButton, GGInput } from '@/design-system'
@@ -14,6 +16,7 @@ export function ResetPasswordScreen() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const token = searchParams.get('token') ?? ''
+  const setup = searchParams.get('setup') === '1'
   const role =
     searchParams.get('role') === 'admin'
       ? 'admin'
@@ -30,7 +33,9 @@ export function ResetPasswordScreen() {
   const [success, setSuccess] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
-  const mutation = useResetPasswordMutation()
+  const resetMutation = useResetPasswordMutation()
+  const setupMutation = useMutation({ mutationFn: async (payload: { token: string; password: string }) => { const { data } = await apiClient.post('/auth/activate-provider', payload); return data } })
+  const mutation = setup ? setupMutation : resetMutation
   const apiError = mutation.error instanceof ApiError ? mutation.error.message : null
 
   const handleSubmit = (event: React.FormEvent) => {
@@ -137,11 +142,11 @@ export function ResetPasswordScreen() {
           </div>
 
           <div style={{ fontSize: '24px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
-            {success ? 'Password Reset Complete' : 'Set New Password'}
+            {success ? (setup ? 'Account Ready' : 'Password Reset Complete') : (setup ? 'Create Your Password' : 'Set New Password')}
           </div>
           <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6, marginBottom: '28px' }}>
             {success
-              ? 'Your password has been updated. You can now sign in with your new password.'
+              ? (setup ? 'Your account is ready. Sign in as a service provider, then open Settings to review and update your profile.' : 'Your password has been updated. You can now sign in with your new password.')
               : 'Choose a strong password for your account.'}
           </div>
 

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { C, font, radius } from '@/design-system/tokens'
 import { useResponsive } from '@/hooks/useResponsive'
+import { useAttentionDismissals } from '@/utils/attention-dismissals'
 
 /** alert = something went wrong · action = waiting on you · info = in progress · success = good news */
 export type AttentionTone = 'alert' | 'action' | 'info' | 'success'
@@ -115,10 +116,13 @@ const COLLAPSED_COUNT = 3
  * Single home for everything the user should act on or know about now,
  * shared by the patient and provider dashboards.
  */
-export function DashboardAttention({ items, title = 'Needs your attention' }: { items: AttentionItem[]; title?: string }) {
+export function DashboardAttention({ items: allItems, title = 'Needs your attention' }: { items: AttentionItem[]; title?: string }) {
   const { isMobile } = useResponsive()
+  const { filterVisible, dismiss } = useAttentionDismissals()
+  const items = filterVisible(allItems)
   const [expanded, setExpanded] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
+  // All items dismissed (or none given): render nothing, not an empty card.
   if (items.length === 0) return null
 
   const sorted = items
@@ -137,6 +141,11 @@ export function DashboardAttention({ items, title = 'Needs your attention' }: { 
     } finally {
       setBusy(null)
     }
+  }
+
+  const handleDismiss = (item: AttentionItem) => {
+    dismiss(item)
+    item.onDismiss?.()
   }
 
   return (
@@ -261,31 +270,7 @@ export function DashboardAttention({ items, title = 'Needs your attention' }: { 
                 >
                   {busy === primaryKey ? 'Saving…' : item.actionLabel}
                 </button>
-                {item.onDismiss && (
-                  <button
-                    type="button"
-                    onClick={item.onDismiss}
-                    aria-label={`Dismiss: ${item.title}`}
-                    title="Dismiss"
-                    style={{
-                      width: 34,
-                      height: 34,
-                      borderRadius: radius.sm,
-                      border: 'none',
-                      background: 'transparent',
-                      color: C.textLight,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
-                      <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-                    </svg>
-                  </button>
-                )}
+                <DismissButton onClick={() => handleDismiss(item)} />
               </div>
             </div>
           )
@@ -313,6 +298,41 @@ export function DashboardAttention({ items, title = 'Needs your attention' }: { 
         </button>
       )}
     </section>
+  )
+}
+
+function DismissButton({ onClick }: { onClick: () => void }) {
+  const [hovered, setHovered] = useState(false)
+  return (
+    <button
+      type="button"
+      onClick={event => {
+        event.stopPropagation()
+        onClick()
+      }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      aria-label="Dismiss"
+      title="Dismiss"
+      style={{
+        width: 32,
+        height: 32,
+        padding: 0,
+        borderRadius: radius.sm,
+        border: 'none',
+        background: hovered ? 'rgba(13,30,66,0.06)' : 'transparent',
+        color: hovered ? C.textSub : C.textLight,
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexShrink: 0,
+      }}
+    >
+      <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+      </svg>
+    </button>
   )
 }
 

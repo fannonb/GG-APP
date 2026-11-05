@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { AppErrorBoundary } from '@/components/errors/AppErrorBoundary'
+import { InstallTopBanner } from '@/components/InstallApp'
 import { OfflineBanner } from '@/components/OfflineBanner'
 import { AppRouter } from '@/router/AppRouter'
 import { syncPushSubscription } from '@/services/push-notifications'
@@ -17,6 +18,7 @@ export default function App() {
   return (
     <AppErrorBoundary>
       <OfflineBanner />
+      <InstallTopBanner />
       <AppRouter />
     </AppErrorBoundary>
   )

@@ -87,6 +87,26 @@ export function usePatientPrescriptionRequests() {
     staleTime: 0,
     refetchOnMount: 'always',
     refetchOnWindowFocus: true,
+    // While pharmacies are still answering, keep the quotes fresh.
+    refetchInterval: query =>
+      query.state.data?.some(
+        request => request.providerId == null && (request.status === 'submitted' || request.status === 'quoted'),
+      )
+        ? 20_000
+        : false,
+  })
+}
+
+/** How many registered pharmacies a prescription sent from this point would reach. */
+export function useNearbyPharmacies(point: { lat: number; lng: number } | null) {
+  // Round to ~10 m so tiny pin drags don't refetch.
+  const lat = point ? Number(point.lat.toFixed(4)) : null
+  const lng = point ? Number(point.lng.toFixed(4)) : null
+  return useQuery({
+    queryKey: ['patient', 'nearbyPharmacies', lat, lng] as const,
+    queryFn: () => patientService.getNearbyPharmacies(lat!, lng!),
+    enabled: lat != null && lng != null,
+    staleTime: 60_000,
   })
 }
 

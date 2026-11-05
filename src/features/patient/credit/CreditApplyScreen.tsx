@@ -242,7 +242,7 @@ export function CreditApplyScreen() {
       {summaryRow("You're requesting", hasAmount ? formatAmount(amount, currency) : '—')}
       {summaryRow('Platform fee (2.5%)', hasAmount ? `− ${formatAmount(fee, currency)}` : '—')}
       <div style={{ height: 1, background: 'rgba(11,123,192,0.18)', margin: '6px 0' }} />
-      {summaryRow('Loaded to your wallet', hasAmount ? formatAmount(walletAmount, currency) : '—', true, CYAN_DEEP)}
+      {summaryRow('Loaded to your allocation', hasAmount ? formatAmount(walletAmount, currency) : '—', true, CYAN_DEEP)}
       <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.55, marginTop: 10 }}>
         You repay {partnerName} the full {hasAmount ? formatAmount(amount, currency) : 'amount you request'}, plus any interest they charge.
         The fee covers GG&apos;APP&apos;s service.
@@ -256,7 +256,7 @@ export function CreditApplyScreen() {
   )
 
   return (
-    <AppLayout title="Apply for credit" back notifCount={1}>
+    <AppLayout title="Apply for an allocation" back notifCount={1}>
       <div style={{ maxWidth: 1040, margin: '0 auto', fontFamily: font.family }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
           <div style={{ height: 40, padding: '0 12px', borderRadius: 10, background: '#fff', border: `1px solid ${C.border}`, display: 'flex', alignItems: 'center' }}>
@@ -341,7 +341,7 @@ export function CreditApplyScreen() {
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }} role="radiogroup" aria-label="Who should it cover?">
                 {[
                   { value: 'self' as CoverageType, label: 'Just me', hint: 'You can add family later in Settings.' },
-                  { value: 'self_and_beneficiaries' as CoverageType, label: 'Me and my family', hint: 'Add family members now. They can use this credit too.' },
+                  { value: 'self_and_beneficiaries' as CoverageType, label: 'Me and my family', hint: 'Add family members now. They can use this allocation too.' },
                 ].map(option => {
                   const selected = form.coverageType === option.value
                   return (

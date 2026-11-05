@@ -89,7 +89,7 @@ export function FinancePartnerLockedCard({ partnerId, subtitle }: FinancePartner
               <rect x="1.5" y="4" width="7" height="5" rx="1" stroke={C.textSub} strokeWidth="1.2" />
               <path d="M3.5 4V3a1.5 1.5 0 013 0v1" stroke={C.textSub} strokeWidth="1.2" strokeLinecap="round" />
             </svg>
-            Linked to your active credit line
+            Linked to your active allocation
           </div>
         </div>
       </div>

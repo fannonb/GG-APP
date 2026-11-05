@@ -15,6 +15,7 @@ import { appointmentRebookPath, buildAppointmentRebookState } from '@/utils/rebo
 import { ROUTES } from '@/router/routes'
 import { useAuthStore } from '@/store/auth.store'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { Pager, usePaged } from '@/components/paging'
 import { useUserStore } from '@/store/user.store'
 import type { Appointment } from '@/types/user.types'
 import type { Provider } from '@/types/provider.types'
@@ -354,7 +355,10 @@ export function AppointmentsScreen() {
         }),
       ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
 
-  const pastGrouped = past.reduce<Record<string, Appointment[]>>((acc, apt) => {
+  const { pageItems: pagedUpcoming, pager: upcomingPager } = usePaged(upcoming)
+  const { pageItems: pagedPast, pager: pastPager } = usePaged(past)
+
+  const pastGrouped = pagedPast.reduce<Record<string, Appointment[]>>((acc, apt) => {
     const key = new Date(apt.date).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
     if (!acc[key]) acc[key] = []
     acc[key].push(apt)
@@ -396,7 +400,7 @@ export function AppointmentsScreen() {
             {upcoming.length === 0 ? (
               <EmptyState label="No upcoming appointments" sub="Find a verified provider and request a time that suits you." />
             ) : (
-              upcoming.map(apt => (
+              pagedUpcoming.map(apt => (
                 <AppointmentCard
                   key={apt.id}
                   apt={apt}
@@ -404,6 +408,7 @@ export function AppointmentsScreen() {
                 />
               ))
             )}
+            <Pager {...upcomingPager} />
           </div>
         )}
 
@@ -425,6 +430,7 @@ export function AppointmentsScreen() {
                 </section>
               ))
             )}
+            <Pager {...pastPager} />
           </div>
         )}
       </div>

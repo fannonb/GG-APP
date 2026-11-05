@@ -18,6 +18,7 @@ import {
   NotificationType,
   Prisma,
   PrescriptionFulfillmentMode,
+  PrescriptionOfferStatus,
   PrescriptionRequestStatus,
   ProviderCategory,
   TransactionStatus,
@@ -36,6 +37,10 @@ import {
 } from '../../common/utils/invoice-attachment.util'
 import { StorageService } from '../../common/services/storage.service'
 import type { AttachmentMetadata } from '../../common/services/storage.service'
+import {
+  PRESCRIPTION_SEARCH_RINGS_KM,
+  PrescriptionDispatchService,
+} from '../../common/services/prescription-dispatch.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { formatMoney } from '../../common/utils/money.util'
 import { RedisService } from '../../redis/redis.service'
@@ -81,6 +86,7 @@ export class PatientService {
     @Inject(ReferenceService) referenceService: ReferenceService,
     @Inject(MailService) mailService: MailService,
     @Inject(StorageService) private readonly storage: StorageService,
+    @Inject(PrescriptionDispatchService) private readonly prescriptionDispatch: PrescriptionDispatchService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
@@ -1636,7 +1642,7 @@ export class PatientService {
         const available = this.toNumber(profile.creditAvailable)
         walletDebit = Math.min(available, invoiceAmount)
         if (walletDebit <= 0) {
-          throw new BadRequestException('No wallet balance available for this invoice')
+          throw new BadRequestException('No allocation balance available for this invoice')
         }
         offAppDue = Number((invoiceAmount - walletDebit).toFixed(2))
 
@@ -1749,7 +1755,7 @@ export class PatientService {
             data: {
               userId: invoice.provider.authUserId,
               type: NotificationType.PAYMENT,
-              title: offAppDue > 0 ? 'Partial Wallet Payment Received' : 'Payment Authorized by Patient',
+              title: offAppDue > 0 ? 'Partial Allocation Payment Received' : 'Payment Authorized by Patient',
               body: providerBody,
               screen: `/sp/invoices/${invoiceReference}`,
             },
@@ -2464,6 +2470,16 @@ export class PatientService {
     return `invoice-pin-progress:${userId}:${invoiceReference}`
   }
 
+  /** How far a prescription sent from this point would reach, before the patient uploads anything. */
+  async getNearbyPharmacies(lat: number, lng: number) {
+    const ring = await this.prescriptionDispatch.findInitialRing(lat, lng)
+    return {
+      radiusKm: ring?.radiusKm ?? null,
+      count: ring?.pharmacies.length ?? 0,
+      maxRadiusKm: PRESCRIPTION_SEARCH_RINGS_KM[PRESCRIPTION_SEARCH_RINGS_KM.length - 1],
+    }
+  }
+
   async createPrescriptionRequest(userId: string, dto: CreatePrescriptionRequestDto) {
     const profile = await this.prisma.patientProfile.findUnique({
       where: { userId },
@@ -2472,22 +2488,6 @@ export class PatientService {
 
     if (!profile) {
       throw new NotFoundException('Patient profile not found')
-    }
-
-    const provider = await this.prisma.provider.findUnique({
-      where: { id: dto.providerId },
-    })
-
-    if (!provider) {
-      throw new NotFoundException('Provider not found')
-    }
-
-    const isPharmacy =
-      provider.category === ProviderCategory.PHARMACY ||
-      provider.categories.includes(ProviderCategory.PHARMACY)
-
-    if (!isPharmacy) {
-      throw new BadRequestException('Prescription requests are only supported for pharmacies')
     }
 
     if (!dto.forSelf && !profile.beneficiariesEnabled && profile.beneficiaries.length === 0) {
@@ -2506,10 +2506,16 @@ export class PatientService {
     }
 
     if (dto.fulfillmentMode === 'delivery' && !dto.deliveryAddress?.trim()) {
-      throw new BadRequestException('Delivery address is required for delivery orders')
+      throw new BadRequestException('Enter the full delivery address and drop a pin on the map')
     }
 
-    const patientName = `${profile.firstName} ${profile.lastName}`.trim()
+    const ring = await this.prescriptionDispatch.findInitialRing(dto.searchLat, dto.searchLng)
+    if (!ring) {
+      throw new BadRequestException(
+        `No available pharmacies within ${PRESCRIPTION_SEARCH_RINGS_KM[PRESCRIPTION_SEARCH_RINGS_KM.length - 1]} km of this location.`,
+      )
+    }
+
     const fulfillmentMode =
       dto.fulfillmentMode === 'delivery'
         ? PrescriptionFulfillmentMode.DELIVERY
@@ -2522,61 +2528,59 @@ export class PatientService {
     const request = await this.prisma.$transaction(async tx => {
       const reference = await this.referenceService.next('RX', tx)
 
-      return tx.prescriptionRequest.create({
+      const created = await tx.prescriptionRequest.create({
         data: {
           reference,
           patientUserId: userId,
-          providerId: dto.providerId,
           beneficiaryId: beneficiary?.id,
           sourceAppointmentId: dto.sourceAppointmentId,
           status: PrescriptionRequestStatus.SUBMITTED,
           fulfillmentMode,
-          deliveryAddress: dto.deliveryAddress?.trim() || null,
+          deliveryAddress:
+            fulfillmentMode === PrescriptionFulfillmentMode.DELIVERY
+              ? dto.deliveryAddress?.trim() || null
+              : null,
+          searchLat: dto.searchLat,
+          searchLng: dto.searchLng,
+          searchRadiusKm: ring.radiusKm,
+          dispatchedAt: new Date(),
           patientNotes: dto.patientNotes?.trim() || null,
           prescriptionAttachment: storedPrescriptionFile as unknown as Prisma.InputJsonValue,
           forSelf: dto.forSelf,
         },
-        include: {
-          provider: true,
-          beneficiary: true,
+      })
+
+      await this.prescriptionDispatch.createOffers(tx, created, ring.radiusKm, ring.pharmacies)
+
+      await tx.notification.create({
+        data: {
+          userId,
+          type: NotificationType.PRESCRIPTION,
+          title: 'Prescription Sent',
+          body: `Your prescription went to ${ring.pharmacies.length} ${ring.pharmacies.length === 1 ? 'pharmacy' : 'pharmacies'} within ${ring.radiusKm} km. Compare their prices as they come in.`,
+          screen: `/app/prescriptions/${created.reference}`,
         },
+      })
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'patient.prescription.created',
+          entityType: 'PrescriptionRequest',
+          entityId: created.id,
+          metadata: {
+            reference: created.reference,
+            radiusKm: ring.radiusKm,
+            pharmacies: ring.pharmacies.length,
+          } as Prisma.JsonObject,
+        },
+      })
+
+      return tx.prescriptionRequest.findUniqueOrThrow({
+        where: { id: created.id },
+        include: PATIENT_PRESCRIPTION_INCLUDE,
       })
     }).catch(error => this.storage.discardOnFailure([storedPrescriptionFile?.storageKey], error))
-
-    await this.prisma.notification.create({
-      data: {
-        userId,
-        type: NotificationType.PRESCRIPTION,
-        title: 'Prescription Submitted',
-        body: `Your prescription was sent to ${provider.name}. They will confirm availability and pricing.`,
-        screen: `/app/prescriptions/${request.reference}`,
-      },
-    })
-
-    if (provider.authUserId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: provider.authUserId,
-          type: NotificationType.PRESCRIPTION,
-          title: 'New Prescription Upload',
-          body: `${patientName} uploaded a prescription for review.`,
-          screen: `/sp/prescriptions/${request.reference}`,
-        },
-      })
-    }
-
-    await this.prisma.auditLog.create({
-      data: {
-        actorUserId: userId,
-        action: 'patient.prescription.created',
-        entityType: 'PrescriptionRequest',
-        entityId: request.id,
-        metadata: {
-          reference: request.reference,
-          providerId: dto.providerId,
-        } as Prisma.JsonObject,
-      },
-    })
 
     return this.mapPrescriptionRequest(request)
   }
@@ -2584,11 +2588,7 @@ export class PatientService {
   async getPrescriptionRequests(userId: string) {
     const requests = await this.prisma.prescriptionRequest.findMany({
       where: { patientUserId: userId },
-      include: {
-        provider: true,
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+      include: PATIENT_PRESCRIPTION_INCLUDE,
       orderBy: { createdAt: 'desc' },
     })
 
@@ -2601,11 +2601,7 @@ export class PatientService {
         patientUserId: userId,
         OR: [{ id: requestReference }, { reference: requestReference }],
       },
-      include: {
-        provider: true,
-        beneficiary: true,
-        invoice: { select: { id: true, reference: true, status: true } },
-      },
+      include: PATIENT_PRESCRIPTION_INCLUDE,
     })
 
     if (!request) {
@@ -2623,16 +2619,118 @@ export class PatientService {
     const updated = await this.prisma.prescriptionRequest.update({
       where: { id: request.id },
       data: { quoteReviewedAt: new Date() },
-      include: {
-        provider: true,
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
+      include: PATIENT_PRESCRIPTION_INCLUDE,
+    })
+
+    return this.mapPrescriptionRequest(updated)
+  }
+
+  /**
+   * The patient picks one pharmacy's quote. That pharmacy now owns the order (same as an accepted
+   * quote), and every other pharmacy that was asked is told the request is closed.
+   */
+  async selectPrescriptionOffer(userId: string, requestReference: string, offerId: string) {
+    const request = await this.prisma.prescriptionRequest.findFirst({
+      where: {
+        patientUserId: userId,
+        OR: [{ id: requestReference }, { reference: requestReference }],
+      },
+    })
+
+    if (!request) {
+      throw new NotFoundException('Prescription request not found')
+    }
+
+    if (request.providerId != null) {
+      throw new BadRequestException('You already chose a pharmacy for this prescription')
+    }
+
+    const offer = await this.prisma.prescriptionOffer.findFirst({
+      where: { id: offerId, requestId: request.id },
+      include: { provider: true },
+    })
+
+    if (!offer) {
+      throw new NotFoundException('Quote not found')
+    }
+
+    if (offer.status !== PrescriptionOfferStatus.QUOTED || offer.quotedAmount == null) {
+      throw new BadRequestException('This pharmacy has not sent a price yet')
+    }
+
+    const now = new Date()
+    const { updated, closedOffers } = await this.prisma.$transaction(async tx => {
+      // Guard against a double tap or a concurrent cancel.
+      const claimed = await tx.prescriptionRequest.updateMany({
+        where: {
+          id: request.id,
+          providerId: null,
+          status: { in: [PrescriptionRequestStatus.SUBMITTED, PrescriptionRequestStatus.QUOTED] },
+        },
+        data: {
+          providerId: offer.providerId,
+          status: PrescriptionRequestStatus.ACCEPTED,
+          quotedItems: offer.quotedItems ?? Prisma.JsonNull,
+          quotedAmount: offer.quotedAmount,
+          deliveryFee: offer.deliveryFee,
+          pharmacyNotes: offer.pharmacyNotes,
+          quotedAt: offer.quotedAt ?? now,
+          quoteReviewedAt: request.quoteReviewedAt ?? now,
+          acceptedAt: now,
+        },
+      })
+
+      if (claimed.count === 0) {
+        throw new BadRequestException('This prescription can no longer be changed')
+      }
+
+      await tx.prescriptionOffer.update({
+        where: { id: offer.id },
+        data: { status: PrescriptionOfferStatus.SELECTED },
+      })
+
+      const closedOffers = await this.prescriptionDispatch.closeOtherOffers(tx, request.id, offer.id)
+
+      const updated = await tx.prescriptionRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        include: PATIENT_PRESCRIPTION_INCLUDE,
+      })
+
+      return { updated, closedOffers }
+    })
+
+    if (offer.provider.authUserId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: offer.provider.authUserId,
+          type: NotificationType.PRESCRIPTION,
+          title: 'Quote Accepted',
+          body: `The patient chose your quote for ${request.reference}. Upload the invoice so they can approve payment.`,
+          screen: `/sp/prescriptions/${request.reference}`,
+        },
+      })
+    }
+
+    await this.notifyClosedOffers(closedOffers, request.reference, 'The patient went with another pharmacy.')
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: 'patient.prescription.offer_selected',
+        entityType: 'PrescriptionRequest',
+        entityId: request.id,
+        metadata: {
+          reference: request.reference,
+          offerId: offer.id,
+          providerId: offer.providerId,
+        } as Prisma.JsonObject,
       },
     })
 
     return this.mapPrescriptionRequest(updated)
   }
 
+  /** Accepts the quote on a request that was sent to one pharmacy (orders made before nearby search). */
   async acceptPrescriptionQuote(userId: string, requestReference: string) {
     const request = await this.prisma.prescriptionRequest.findFirst({
       where: {
@@ -2646,6 +2744,10 @@ export class PatientService {
       throw new NotFoundException('Prescription request not found')
     }
 
+    if (!request.provider) {
+      throw new BadRequestException('Choose one of the pharmacy quotes to continue')
+    }
+
     if (request.status !== PrescriptionRequestStatus.QUOTED) {
       throw new BadRequestException('Only quoted requests can be accepted')
     }
@@ -2657,11 +2759,7 @@ export class PatientService {
         acceptedAt: new Date(),
         quoteReviewedAt: request.quoteReviewedAt ?? new Date(),
       },
-      include: {
-        provider: true,
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+      include: PATIENT_PRESCRIPTION_INCLUDE,
     })
 
     if (request.provider.authUserId) {
@@ -2679,6 +2777,10 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
+  /**
+   * While pharmacies are still being asked this cancels the whole request. Once a pharmacy was
+   * chosen it declines that pharmacy's quote, as before.
+   */
   async declinePrescriptionQuote(
     userId: string,
     requestReference: string,
@@ -2696,30 +2798,55 @@ export class PatientService {
       throw new NotFoundException('Prescription request not found')
     }
 
-    if (
+    const reason = dto.reason?.trim() || null
+    const searching = request.providerId == null
+
+    if (searching) {
+      if (
+        request.status !== PrescriptionRequestStatus.SUBMITTED &&
+        request.status !== PrescriptionRequestStatus.QUOTED
+      ) {
+        throw new BadRequestException('This prescription can no longer be cancelled')
+      }
+    } else if (
       request.status !== PrescriptionRequestStatus.QUOTED &&
       request.status !== PrescriptionRequestStatus.ACCEPTED
     ) {
       throw new BadRequestException('Only quoted or accepted requests can be declined')
     }
 
-    const reason = dto.reason?.trim() || null
+    if (!searching && request.status === PrescriptionRequestStatus.ACCEPTED) {
+      const invoice = await this.prisma.invoice.findFirst({
+        where: {
+          prescriptionRequestId: request.id,
+          status: { notIn: [InvoiceStatus.REJECTED, InvoiceStatus.DISPUTED] },
+        },
+        select: { id: true },
+      })
+      if (invoice) {
+        throw new BadRequestException('An invoice was already issued. Reject the invoice instead.')
+      }
+    }
 
-    const updated = await this.prisma.prescriptionRequest.update({
-      where: { id: request.id },
-      data: {
-        status: PrescriptionRequestStatus.CANCELLED,
-        declinedAt: new Date(),
-        declineReason: reason,
-      },
-      include: {
-        provider: true,
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+    const { updated, closedOffers } = await this.prisma.$transaction(async tx => {
+      const updated = await tx.prescriptionRequest.update({
+        where: { id: request.id },
+        data: {
+          status: PrescriptionRequestStatus.CANCELLED,
+          declinedAt: new Date(),
+          declineReason: reason,
+        },
+        include: PATIENT_PRESCRIPTION_INCLUDE,
+      })
+      const closedOffers = searching
+        ? await this.prescriptionDispatch.closeOtherOffers(tx, request.id, null)
+        : []
+      return { updated, closedOffers }
     })
 
-    if (request.provider.authUserId) {
+    if (searching) {
+      await this.notifyClosedOffers(closedOffers, request.reference, 'The patient cancelled this request.')
+    } else if (request.provider?.authUserId) {
       await this.prisma.notification.create({
         data: {
           userId: request.provider.authUserId,
@@ -2736,46 +2863,73 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
-  private async mapPrescriptionRequest(
-    request: {
-      id: string
-      reference: string
-      status: PrescriptionRequestStatus
-      fulfillmentMode: PrescriptionFulfillmentMode
-      deliveryAddress: string | null
-      patientNotes: string | null
-      pharmacyNotes: string | null
-      prescriptionAttachment: Prisma.JsonValue
-      quotedItems: Prisma.JsonValue | null
-      quotedAmount: Prisma.Decimal | null
-      deliveryFee?: Prisma.Decimal | null
-      quotedAt: Date | null
-      quoteReviewedAt?: Date | null
-      acceptedAt: Date | null
-      declinedAt: Date | null
-      declineReason: string | null
-      readyAt: Date | null
-      fulfilledAt: Date | null
-      forSelf: boolean
-      createdAt: Date
-      provider: { id: number; name: string; category: ProviderCategory }
-      beneficiary: { name: string } | null
-      invoice?: { reference: string; status: InvoiceStatus } | null
-    },
+  private async notifyClosedOffers(
+    offers: Array<{ provider: { authUserId: string | null } }>,
+    reference: string,
+    body: string,
   ) {
+    const recipients = offers
+      .map(offer => offer.provider.authUserId)
+      .filter((id): id is string => !!id)
+    if (recipients.length === 0) return
+
+    await this.prisma.notification.createMany({
+      data: recipients.map(recipient => ({
+        userId: recipient,
+        type: NotificationType.PRESCRIPTION,
+        title: 'Prescription Closed',
+        body: `${reference}: ${body}`,
+        screen: `/sp/prescriptions/${reference}`,
+      })),
+    })
+  }
+
+  private async mapPrescriptionRequest(
+    request: Prisma.PrescriptionRequestGetPayload<{ include: typeof PATIENT_PRESCRIPTION_INCLUDE }>,
+  ) {
+    const offers = request.offers ?? []
+    const visibleOffers = offers.filter(
+      offer =>
+        offer.status === PrescriptionOfferStatus.QUOTED ||
+        offer.status === PrescriptionOfferStatus.SELECTED,
+    )
+
     return {
       id: request.reference,
-      providerId: request.provider.id,
-      provider: request.provider.name,
+      providerId: request.provider?.id,
+      provider: request.provider?.name,
       category: 'pharmacy' as const,
       status: request.status.toLowerCase(),
       fulfillmentMode: request.fulfillmentMode.toLowerCase(),
       deliveryAddress: request.deliveryAddress ?? undefined,
+      searchLat: request.searchLat != null ? Number(request.searchLat) : undefined,
+      searchLng: request.searchLng != null ? Number(request.searchLng) : undefined,
+      searchRadiusKm: request.searchRadiusKm ?? undefined,
+      widenedAt: request.widenedAt?.toISOString(),
+      expiredAt: request.expiredAt?.toISOString(),
+      pharmaciesContacted: offers.length,
+      pharmaciesPending: offers.filter(offer => offer.status === PrescriptionOfferStatus.PENDING).length,
+      pharmaciesDeclined: offers.filter(offer => offer.status === PrescriptionOfferStatus.DECLINED).length,
+      offers: visibleOffers.map(offer => ({
+        id: offer.id,
+        providerId: offer.provider.id,
+        provider: offer.provider.name,
+        address: offer.provider.address,
+        rating: Number(offer.provider.rating),
+        logoUrl: offer.provider.logoUrl ?? undefined,
+        distanceKm: Number(offer.distanceKm),
+        status: offer.status.toLowerCase(),
+        quotedItems: offer.quotedItems ?? undefined,
+        quotedAmount: offer.quotedAmount != null ? Number(offer.quotedAmount) : undefined,
+        deliveryFee: offer.deliveryFee != null ? Number(offer.deliveryFee) : undefined,
+        pharmacyNotes: offer.pharmacyNotes ?? undefined,
+        quotedAt: offer.quotedAt?.toISOString(),
+      })),
       patientNotes: request.patientNotes ?? undefined,
       pharmacyNotes: request.pharmacyNotes ?? undefined,
       attachment: await this.storage.hydrate(request.prescriptionAttachment as unknown as AttachmentMetadata | null),
       quotedItems: request.quotedItems ?? undefined,
-      quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
+      quotedAmount: request.quotedAmount != null ? Number(request.quotedAmount) : undefined,
       deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,
       quotedAt: request.quotedAt?.toISOString(),
       quoteReviewedAt: request.quoteReviewedAt?.toISOString(),
@@ -2792,3 +2946,15 @@ export class PatientService {
     }
   }
 }
+
+const PATIENT_PRESCRIPTION_INCLUDE = {
+  provider: true,
+  beneficiary: true,
+  invoice: { select: { reference: true, status: true } },
+  offers: {
+    include: {
+      provider: { select: { id: true, name: true, address: true, rating: true, logoUrl: true } },
+    },
+    orderBy: { distanceKm: 'asc' },
+  },
+} satisfies Prisma.PrescriptionRequestInclude

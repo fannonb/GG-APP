@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GGButton, GGCard, GGInput } from '@/design-system'
 import { authService } from '@/api/services/auth.service'
@@ -21,7 +21,15 @@ export function SPPendingScreen() {
   const state = (location.state as PendingState | null) ?? null
   const applicationId = searchParams.get('applicationId') ?? state?.applicationId
 
-  const { data: liveStatus, isLoading, refetch } = useSPApplicationStatus(applicationId)
+  const [access, setAccess] = useState<{ applicationId: string; accessToken: string; expiresAt: number } | null>(null)
+  const applicationToken = access && access.applicationId === applicationId && access.expiresAt > Date.now() ? access.accessToken : undefined
+  const { data, isLoading, isError, refetch } = useSPApplicationStatus(applicationId, applicationToken)
+  const liveStatus = applicationToken && !isError ? data : undefined
+  useEffect(() => {
+    if (!access) return
+    const timeout = window.setTimeout(() => setAccess(null), Math.max(0, access.expiresAt - Date.now()))
+    return () => window.clearTimeout(timeout)
+  }, [access])
 
   const status = liveStatus?.status ?? state?.status ?? 'pending'
   const submittedAt = liveStatus?.submittedAt ?? state?.submittedAt
@@ -173,6 +181,10 @@ export function SPPendingScreen() {
           </div>
         </GGCard>
 
+        {applicationId && (!applicationToken || isError) && (
+          <ApplicationAccessCard key={applicationId} applicationId={applicationId} onAccess={value => setAccess({ applicationId, ...value })} />
+        )}
+
         <GGCard padding="28px">
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '22px', flexWrap: 'wrap' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Application Status</div>
@@ -251,7 +263,7 @@ export function SPPendingScreen() {
           </GGCard>
         )}
 
-        {status === 'info_requested' && applicationId && (
+        {status === 'info_requested' && applicationId && applicationToken && !isError && (
           <ReplyCard applicationId={applicationId} onSent={() => void refetch()} />
         )}
 
@@ -268,13 +280,43 @@ export function SPPendingScreen() {
               Start a New Application
             </GGButton>
           ) : (
-            <GGButton variant="success" size="md" onClick={() => window.location.reload()} style={{ flex: 2 }}>
+            <GGButton variant="success" size="md" disabled={!applicationToken || isError} onClick={() => void refetch()} style={{ flex: 2 }}>
               Refresh Status
             </GGButton>
           )}
         </div>
       </div>
     </div>
+  )
+}
+
+function ApplicationAccessCard({ applicationId, onAccess }: { applicationId: string; onAccess: (value: { accessToken: string; expiresAt: number }) => void }) {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const unlock = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const access = await authService.getApplicationAccess(applicationId, { email: email.trim(), password })
+      setPassword('')
+      onAccess(access)
+    } catch {
+      setError('We couldn’t verify this application. Check your registered email and password, then try again.')
+    } finally { setBusy(false) }
+  }
+  return (
+    <GGCard padding="20px">
+      <form onSubmit={event => { event.preventDefault(); void unlock() }} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>View your application securely</div>
+        <div style={{ fontSize: 13, color: C.textSub }}>Confirm the email and password you registered with to view the review notes and current status.</div>
+        <GGInput label="Registered email" type="email" autoComplete="email" required value={email} onChange={event => setEmail(event.target.value)} />
+        <GGInput label="Password" type="password" autoComplete="current-password" required value={password} onChange={event => setPassword(event.target.value)} />
+        {error && <div role="alert" style={{ color: C.error, fontSize: 13 }}>{error}</div>}
+        <GGButton type="submit" disabled={busy}>{busy ? 'Verifying…' : 'View application'}</GGButton>
+      </form>
+    </GGCard>
   )
 }
 

@@ -939,7 +939,8 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
       vitals: this.normalizeVitals(visit.vitals),
     }))
 
-    const prescriptionEntries = fulfilledPrescriptions.map(request => ({
+    // A fulfilled prescription always has the pharmacy the patient chose.
+    const prescriptionEntries = fulfilledPrescriptions.flatMap(request => request.provider ? [{
       kind: 'prescription' as const,
       id: request.id,
       date: (request.fulfilledAt ?? request.updatedAt).toISOString(),
@@ -949,7 +950,7 @@ export class LedgerService implements OnModuleInit, OnModuleDestroy {
       fulfillmentMode: request.fulfillmentMode,
       items: this.normalizeQuotedItems(request.quotedItems),
       amount: request.quotedAmount != null ? Number(request.quotedAmount) : null,
-    }))
+    }] : [])
 
     return [...visitEntries, ...prescriptionEntries].sort(
       (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),

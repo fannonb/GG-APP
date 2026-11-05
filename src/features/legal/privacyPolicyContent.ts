@@ -44,7 +44,7 @@ export const PRIVACY_POLICY_SECTIONS: LegalSection[] = [
         intro: 'We may collect:',
         bullets: [
           'Credit application data',
-          'Wallet balances',
+          'Allocation balances',
           'Transaction references',
           'Payment authorization records',
         ],

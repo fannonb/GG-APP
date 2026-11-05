@@ -1,10 +1,11 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { LedgerTimeline } from '@/components/LedgerTimeline'
-import { VITAL_LABELS, isOwnEntry, matchesLedgerPerson, type LedgerBeneficiaryOption } from '@/utils/ledger-entries'
+import { LedgerOverview } from '@/components/LedgerOverview'
+import { isOwnEntry, matchesLedgerPerson, type LedgerBeneficiaryOption } from '@/utils/ledger-entries'
 import { formatTimeLeft } from '@/utils/ledger-access'
 import { getPatientDisplayName } from '@/features/patient/patientAccount'
 import { useLedgerStatus, useOwnLedger } from '@/hooks/api'
@@ -100,113 +101,12 @@ function RecordHeader({ name, entries, access }: { name: string; entries: Ledger
   )
 }
 
-function SideCard({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
-  return (
-    <GGCard padding="16px 18px">
-      <h2 style={{ margin: 0, fontSize: 14, fontWeight: 800, color: C.text }}>{title}</h2>
-      {note && <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>{note}</div>}
-      <div style={{ marginTop: 10 }}>{children}</div>
-    </GGCard>
-  )
-}
-
-const row: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '7px 0', fontSize: 13.5 }
-
-function Snapshot({ entries, now, compact }: { entries: LedgerEntry[]; now: number; compact?: boolean }) {
-  const own = entries.filter(isOwnEntry).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  const vitalsVisit = own.find((entry): entry is Extract<LedgerEntry, { kind: 'visit' }> => entry.kind === 'visit' && Object.values(entry.vitals).some(Boolean))
-  const medicines = own
-    .filter((entry): entry is Extract<LedgerEntry, { kind: 'prescription' }> => entry.kind === 'prescription' && now - new Date(entry.date).getTime() <= 90 * 86_400_000)
-    .flatMap(entry => entry.items.map(item => ({ name: item.name, date: entry.date, key: `${entry.id}-${item.name}` })))
-    .slice(0, 5)
-
-  if (compact) {
-    if (!vitalsVisit && medicines.length === 0) return null
-    return (
-      <GGCard padding="14px 16px">
-        {vitalsVisit && (
-          <>
-            <div style={{ fontSize: 12.5, color: C.textSub }}>Latest vitals · {shortDate(vitalsVisit.date)}</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginTop: 8 }}>
-              {Object.entries(vitalsVisit.vitals).filter(([, value]) => value).map(([key, value]) => (
-                <div key={key}>
-                  <div style={{ fontSize: 12, color: C.textSub }}>{VITAL_LABELS[key] ?? key}</div>
-                  <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>{value}</div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-        {medicines.length > 0 && (
-          <div style={{ marginTop: vitalsVisit ? 12 : 0, paddingTop: vitalsVisit ? 12 : 0, borderTop: vitalsVisit ? `1px solid ${C.border}` : 'none' }}>
-            <div style={{ fontSize: 12.5, color: C.textSub }}>Recent medicines</div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: C.text, marginTop: 4, lineHeight: 1.5 }}>{[...new Set(medicines.map(item => item.name))].join(', ')}</div>
-          </div>
-        )}
-      </GGCard>
-    )
-  }
-
-  return (
-    <>
-      {vitalsVisit && (
-        <SideCard title="Latest vitals" note={`${shortDate(vitalsVisit.date)} · ${vitalsVisit.provider.name}`}>
-          {Object.entries(vitalsVisit.vitals).filter(([, value]) => value).map(([key, value], index) => (
-            <div key={key} style={{ ...row, borderTop: index > 0 ? `1px solid ${C.border}` : 'none' }}>
-              <span style={{ color: C.textSub }}>{VITAL_LABELS[key] ?? key}</span>
-              <span style={{ fontWeight: 800, color: C.text }}>{value}</span>
-            </div>
-          ))}
-        </SideCard>
-      )}
-      {medicines.length > 0 && (
-        <SideCard title="Recent medicines" note="Last 90 days">
-          {medicines.map((item, index) => (
-            <div key={item.key} style={{ ...row, borderTop: index > 0 ? `1px solid ${C.border}` : 'none' }}>
-              <span style={{ fontWeight: 600, color: C.text, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-              <span style={{ color: C.textSub, whiteSpace: 'nowrap' }}>{new Date(item.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>
-            </div>
-          ))}
-        </SideCard>
-      )}
-    </>
-  )
-}
-
-function People({ options, entries, value, onChange }: { options: LedgerBeneficiaryOption[]; entries: LedgerEntry[]; value: string | undefined; onChange: (id: string | undefined) => void }) {
-  return (
-    <SideCard title="People">
-      <div role="radiogroup" aria-label="Whose records" style={{ display: 'flex', flexDirection: 'column', gap: 2, margin: '0 -8px' }}>
-        {options.map(option => {
-          const active = value === option.id
-          const count = entries.filter(entry => matchesLedgerPerson(entry, option.id, options)).length
-          return (
-            <button
-              key={option.id ?? 'all'}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              onClick={() => onChange(option.id)}
-              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 10px', border: 'none', borderRadius: radius.sm, background: active ? C.blue100 : 'transparent', color: active ? CYAN_DEEP : C.text, fontSize: 13.5, fontWeight: active ? 700 : 500, fontFamily: font.family, cursor: 'pointer', textAlign: 'left' }}
-            >
-              <span>{option.label}</span>
-              <span style={{ fontSize: 12, color: active ? CYAN_DEEP : C.textLight, fontWeight: 600 }}>{count}</span>
-            </button>
-          )
-        })}
-      </div>
-    </SideCard>
-  )
-}
-
 export function HealthLedgerScreen() {
-  const { isDesktop } = useResponsive()
   const statusQuery = useLedgerStatus()
   const ledgerQuery = useOwnLedger()
   const user = useUserStore(s => s.user)
   const storeBeneficiaries = useUserStore(s => s.beneficiaries)
   const [now] = useState(() => Date.now())
-  const [person, setPerson] = useState<string | undefined>(undefined)
 
   const entries = useMemo(() => ledgerQuery.data?.entries ?? [], [ledgerQuery.data?.entries])
   const queryBeneficiaries = useMemo(() => ledgerQuery.data?.patient.beneficiaries ?? [], [ledgerQuery.data?.patient.beneficiaries])
@@ -231,35 +131,15 @@ export function HealthLedgerScreen() {
     return [{ id: undefined, label: 'Everyone' }, { id: 'self', label: 'You' }, ...withRecords]
   }, [queryBeneficiaries, storeBeneficiaries, entries])
 
-  const timeline = ledgerQuery.isLoading ? (
-    <GGCard padding="24px"><div style={{ textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading your record…</div></GGCard>
-  ) : (
-    <LedgerTimeline
-      entries={entries}
-      beneficiaryOptions={personOptions}
-      viewer="patient"
-      {...(isDesktop && personOptions.length > 0 ? { person, onPersonChange: setPerson } : {})}
-    />
-  )
-
   return (
     <AppLayout title="Health Ledger">
-      <div style={{ maxWidth: 1160, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 20 }}>
+      <div style={{ maxWidth: 1240, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 18 }}>
         <RecordHeader name={name} entries={entries} access={access} />
-
-        {isDesktop ? (
-          <div style={{ display: 'grid', gridTemplateColumns: '290px minmax(0, 1fr)', gap: 24, alignItems: 'start' }}>
-            <aside style={{ position: 'sticky', top: 0, display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {personOptions.length > 0 && <People options={personOptions} entries={entries} value={person} onChange={setPerson} />}
-              <Snapshot entries={entries} now={now} />
-            </aside>
-            <div>{timeline}</div>
-          </div>
+        <LedgerOverview entries={entries} now={now} />
+        {ledgerQuery.isLoading ? (
+          <GGCard padding="24px"><div style={{ textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading your record…</div></GGCard>
         ) : (
-          <>
-            <Snapshot entries={entries} now={now} compact />
-            {timeline}
-          </>
+          <LedgerTimeline entries={entries} beneficiaryOptions={personOptions} viewer="patient" />
         )}
       </div>
     </AppLayout>

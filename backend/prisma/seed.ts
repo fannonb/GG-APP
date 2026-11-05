@@ -336,7 +336,7 @@ async function seedPatient() {
       {
         userId: patient.id,
         type: NotificationType.CREDIT,
-        title: 'Credit Wallet Active',
+        title: 'Credit Allocation Active',
         body: 'Your available balance is ready for healthcare spending.',
         screen: '/app/credit',
       },

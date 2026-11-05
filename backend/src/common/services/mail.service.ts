@@ -511,8 +511,8 @@ export class MailService {
         <p>Hi ${escapeHtml(data.patientName)},</p>
         <p>${outcome}</p>
         ${data.note ? `<p>${escapeHtml(data.note)}</p>` : ''}
-        <p>Sign in to see your credit wallet.</p>`,
-        { label: 'View credit wallet', url: `${this.appBaseUrl}/app/credit` },
+        <p>Sign in to see your credit allocation.</p>`,
+        { label: 'View credit allocation', url: `${this.appBaseUrl}/app/credit` },
       ),
     })
   }

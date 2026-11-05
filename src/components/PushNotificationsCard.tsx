@@ -64,9 +64,9 @@ export function PushNotificationsCard() {
   } else if (permission === 'denied') {
     detail = 'Notifications are blocked for GG’APP. Allow them in your browser’s site settings, then come back here.'
   } else if (enabled) {
-    detail = 'You’ll get alerts on this device for payments, invoices, appointments and your credit.'
+    detail = 'You’ll get alerts on this device for payments, invoices, appointments and your allocation.'
   } else {
-    detail = 'Get alerts on this device for payments, invoices, appointments and your credit, even when GG’APP is closed.'
+    detail = 'Get alerts on this device for payments, invoices, appointments and your allocation, even when GG’APP is closed.'
   }
 
   const canToggle = permission !== 'unsupported' && permission !== 'denied'

@@ -115,6 +115,8 @@ export interface SPInvoice {
   patientReview?: SPInvoiceReview
 }
 
+export type PaymentType = 'appointment' | 'prescription'
+
 export interface Payment {
   id: string
   patient: string
@@ -124,4 +126,8 @@ export interface Payment {
   ref: string
   invoiceId?: string
   isPrescription?: boolean
+  /** What the payment was for. Optional so older payloads and mocks without it still render. */
+  type?: PaymentType
+  /** Appointment service name, else the first line item name. */
+  service?: string | null
 }

@@ -1,3 +1,5 @@
+import { UpdateProviderLicencesDto } from './dto/provider-licences.dto'
+import { ProviderCredentialsService } from '../../common/services/provider-credentials.service'
 import { normalizeRegion } from '../../common/constants/health-data'
 import { normalizeCountry } from '../admin/admin-metrics.service'
 import {
@@ -15,6 +17,7 @@ import {
   Prisma,
   PrescriptionRequestStatus,
   PrescriptionFulfillmentMode,
+  PrescriptionOfferStatus,
   ProviderCategory,
   ProviderLifecycleStatus,
   ProviderOpenStatus,
@@ -52,6 +55,7 @@ import {
 import { StorageService } from '../../common/services/storage.service'
 import type { AttachmentMetadata } from '../../common/services/storage.service'
 import { ReferenceService } from '../../common/services/reference.service'
+import { PrescriptionDispatchService } from '../../common/services/prescription-dispatch.service'
 import { MailService } from '../../common/services/mail.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { formatMoney } from '../../common/utils/money.util'
@@ -74,6 +78,8 @@ export class SpService {
     @Inject(MailService) mailService: MailService,
     @Inject(AuthService) authService: AuthService,
     @Inject(StorageService) private readonly storage: StorageService,
+    @Inject(ProviderCredentialsService) private readonly providerCredentials: ProviderCredentialsService,
+    @Inject(PrescriptionDispatchService) private readonly prescriptionDispatch: PrescriptionDispatchService,
   ) {
     this.prisma = prisma
     this.redis = redis
@@ -81,6 +87,41 @@ export class SpService {
     this.fieldEncryption = fieldEncryption
     this.mailService = mailService
     this.authService = authService
+  }
+
+  async getLicences(userId: string) {
+    const provider = await this.resolveProvider(userId)
+    const application = await this.prisma.providerApplication.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { credentials: true } })
+    if (!application) throw new NotFoundException('Provider application not found')
+    return { country: application.country, serviceTypes: application.serviceTypes, businessRegNumber: application.businessRegNumber ?? '', taxPin: application.taxPin ?? '', credentials: application.credentials.map(c => ({ kind: c.kind, number: c.number, holderName: c.holderName ?? '', expiresAt: c.expiresAt?.toISOString().slice(0, 10) ?? '', hasDocument: !!c.documentId, status: c.status })) }
+  }
+
+  async updateLicences(userId: string, dto: UpdateProviderLicencesDto) {
+    const provider = await this.resolveProvider(userId)
+    const application = await this.prisma.providerApplication.findFirst({ where: { userId }, orderBy: { createdAt: 'desc' } })
+    if (!application) throw new NotFoundException('Provider application not found')
+    const services = Array.isArray(application.serviceTypes) ? application.serviceTypes.filter((s): s is string => typeof s === 'string') : []
+    const prepared = await this.providerCredentials.prepareForRegistration({ ...dto, country: application.country, serviceTypes: services })
+    try {
+      await this.prisma.$transaction(async tx => {
+        for (const item of prepared.items) {
+          const existing = await tx.providerCredential.findFirst({ where: { applicationId: application.id, kind: item.kind } })
+          if (existing && !item.document && existing.number === item.number && existing.holderName === item.holderName && existing.expiresAt?.getTime() === item.expiresAt?.getTime()) continue
+          let documentId = existing?.documentId ?? null
+          if (item.document) {
+            const doc = await tx.providerApplicationDocument.create({ data: { applicationId: application.id, kind: 'LICENSE', ...item.document } })
+            documentId = doc.id
+          }
+          const data = { number: item.number, holderName: item.holderName, expiresAt: item.expiresAt, documentId, status: 'SUBMITTED' as const, verifiedAt: null, verifiedById: null, note: null }
+          if (existing) await tx.providerCredential.update({ where: { id: existing.id }, data })
+          else await tx.providerCredential.create({ data: { ...data, applicationId: application.id, providerId: provider.id, kind: item.kind } })
+        }
+        await tx.providerApplication.update({ where: { id: application.id }, data: { businessRegNumber: dto.businessRegNumber === undefined ? undefined : prepared.businessRegNumber, taxPin: dto.taxPin === undefined ? undefined : prepared.taxPin, ...(prepared.items.length ? { licenseNumber: prepared.licenseNumber } : {}) } })
+        if (prepared.items.length) await tx.provider.update({ where: { id: provider.id }, data: { license: prepared.licenseNumber } })
+        await tx.auditLog.create({ data: { actorUserId: userId, action: 'sp.licences.updated', entityType: 'ProviderApplication', entityId: application.id } })
+      })
+    } catch (error) { await this.providerCredentials.discardUploads(prepared.uploadedKeys); throw error }
+    return this.getLicences(userId)
   }
 
   async getDashboard(userId: string) {
@@ -112,12 +153,12 @@ export class SpService {
         invoices,
         appointments,
         patients.length,
-        prescriptionRequests,
+        prescriptionRequests.map(request => ({ status: this.prescriptionStatusFor(request, provider.id) })),
       ),
       isPharmacy,
       isPharmacyOnly,
       appointments: await Promise.all(appointments.map(appointment => this.mapAppointment(appointment))),
-      prescriptionRequests: await Promise.all(prescriptionRequests.map(request => this.mapPrescriptionRequest(request))),
+      prescriptionRequests: await Promise.all(prescriptionRequests.map(request => this.mapPrescriptionRequest(request, provider.id))),
       patients,
       payments: invoices
         .filter(
@@ -143,28 +184,18 @@ export class SpService {
   async getPrescriptionRequests(userId: string) {
     const provider = await this.resolveProvider(userId)
     const requests = await this.getPrescriptionRequestRecords(provider.id)
-    return await Promise.all(requests.map(request => this.mapPrescriptionRequest(request)))
+    return await Promise.all(requests.map(request => this.mapPrescriptionRequest(request, provider.id)))
   }
 
   async getPrescriptionRequest(userId: string, requestReference: string) {
     const provider = await this.resolveProvider(userId)
-    const request = await this.prisma.prescriptionRequest.findFirst({
-      where: {
-        providerId: provider.id,
-        OR: [{ id: requestReference }, { reference: requestReference }],
-      },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
-    })
+    const request = await this.findVisiblePrescriptionRequest(provider.id, requestReference)
 
     if (!request) {
       throw new NotFoundException('Prescription request not found')
     }
 
-    return this.mapPrescriptionRequest(request)
+    return this.mapPrescriptionRequest(request, provider.id)
   }
 
   async quotePrescriptionRequest(
@@ -178,21 +209,98 @@ export class SpService {
       throw new BadRequestException('Only pharmacies can quote prescription requests')
     }
 
-    const request = await this.prisma.prescriptionRequest.findFirst({
-      where: {
-        providerId: provider.id,
-        OR: [{ id: requestReference }, { reference: requestReference }],
-      },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-      },
-    })
+    const request = await this.findVisiblePrescriptionRequest(provider.id, requestReference)
 
     if (!request) {
       throw new NotFoundException('Prescription request not found')
     }
 
+    const isDelivery = request.fulfillmentMode === PrescriptionFulfillmentMode.DELIVERY
+    const deliveryFee = Number(dto.deliveryFee ?? 0)
+    if (isDelivery && deliveryFee < 0) {
+      throw new BadRequestException('Delivery fee cannot be negative')
+    }
+    if (isDelivery && !(deliveryFee > 0)) {
+      throw new BadRequestException('Delivery fee is required for delivery orders')
+    }
+
+    const quote = {
+      quotedItems: dto.items as unknown as Prisma.InputJsonValue,
+      quotedAmount: dto.amount,
+      deliveryFee: isDelivery ? deliveryFee : null,
+      pharmacyNotes: dto.pharmacyNotes?.trim() || null,
+      quotedAt: new Date(),
+    }
+
+    // Sent to every nearby pharmacy: this pharmacy answers its own offer.
+    if (request.providerId == null) {
+      const offer = request.offers[0]
+      if (!offer) {
+        throw new NotFoundException('Prescription request not found')
+      }
+      if (
+        (request.status !== PrescriptionRequestStatus.SUBMITTED &&
+          request.status !== PrescriptionRequestStatus.QUOTED) ||
+        (offer.status !== PrescriptionOfferStatus.PENDING && offer.status !== PrescriptionOfferStatus.QUOTED)
+      ) {
+        throw new BadRequestException('This prescription request is no longer open')
+      }
+
+      const firstQuote = request.status === PrescriptionRequestStatus.SUBMITTED
+      const updated = await this.prisma.$transaction(async tx => {
+        const answered = await tx.prescriptionOffer.updateMany({
+          where: {
+            id: offer.id,
+            status: { in: [PrescriptionOfferStatus.PENDING, PrescriptionOfferStatus.QUOTED] },
+          },
+          data: { ...quote, status: PrescriptionOfferStatus.QUOTED, declinedAt: null, declineReason: null },
+        })
+        if (answered.count === 0) {
+          throw new BadRequestException('This prescription request is no longer open')
+        }
+
+        await tx.prescriptionRequest.updateMany({
+          where: {
+            id: request.id,
+            providerId: null,
+            status: { in: [PrescriptionRequestStatus.SUBMITTED, PrescriptionRequestStatus.QUOTED] },
+          },
+          data: {
+            status: PrescriptionRequestStatus.QUOTED,
+            quotedAt: request.quotedAt ?? quote.quotedAt,
+            // A new price came in, so the patient has something new to look at.
+            quoteReviewedAt: null,
+          },
+        })
+
+        await tx.notification.create({
+          data: {
+            userId: request.patientUserId,
+            type: NotificationType.PRESCRIPTION,
+            title: 'New Pharmacy Quote',
+            body: `${provider.name} sent a price for your prescription. Compare quotes and choose a pharmacy.`,
+            screen: `/app/prescriptions/${request.reference}`,
+          },
+        })
+
+        return tx.prescriptionRequest.findUniqueOrThrow({
+          where: { id: request.id },
+          include: this.spPrescriptionInclude(provider.id),
+        })
+      })
+
+      if (firstQuote) {
+        void this.mailService.sendPrescriptionQuoteReadyEmail(updated.patient.email, {
+          patientName: formatPatientFullName(updated.patient.patientProfile),
+          providerName: provider.name,
+          reference: updated.reference,
+        })
+      }
+
+      return this.mapPrescriptionRequest(updated, provider.id)
+    }
+
+    // Sent to this pharmacy only (requests made before nearby search).
     if (
       request.status !== PrescriptionRequestStatus.SUBMITTED &&
       request.status !== PrescriptionRequestStatus.QUOTED
@@ -200,33 +308,16 @@ export class SpService {
       throw new BadRequestException('This prescription request can no longer be accepted')
     }
 
-    const deliveryFee = Number(dto.deliveryFee ?? 0)
-    if (request.fulfillmentMode === PrescriptionFulfillmentMode.DELIVERY && deliveryFee < 0) {
-      throw new BadRequestException('Delivery fee cannot be negative')
-    }
-    if (request.fulfillmentMode === PrescriptionFulfillmentMode.DELIVERY && !(deliveryFee > 0)) {
-      throw new BadRequestException('Delivery fee is required for delivery orders')
-    }
-
     const updated = await this.prisma.prescriptionRequest.update({
       where: { id: request.id },
       data: {
+        ...quote,
         status: PrescriptionRequestStatus.QUOTED,
-        quotedItems: dto.items as unknown as Prisma.InputJsonValue,
-        quotedAmount: dto.amount,
-        deliveryFee:
-          request.fulfillmentMode === PrescriptionFulfillmentMode.DELIVERY ? deliveryFee : null,
-        pharmacyNotes: dto.pharmacyNotes?.trim() || null,
-        quotedAt: new Date(),
         quoteReviewedAt: null,
         declinedAt: null,
         declineReason: null,
       },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+      include: this.spPrescriptionInclude(provider.id),
     })
 
     await this.prisma.notification.create({
@@ -239,14 +330,13 @@ export class SpService {
       },
     })
 
-    const quotePatientName = formatPatientFullName(updated.patient.patientProfile)
     void this.mailService.sendPrescriptionQuoteReadyEmail(updated.patient.email, {
-      patientName: quotePatientName,
+      patientName: formatPatientFullName(updated.patient.patientProfile),
       providerName: provider.name,
       reference: updated.reference,
     })
 
-    return this.mapPrescriptionRequest(updated)
+    return this.mapPrescriptionRequest(updated, provider.id)
   }
 
   async rejectPrescriptionRequest(
@@ -260,20 +350,56 @@ export class SpService {
       throw new BadRequestException('Only pharmacies can reject prescription requests')
     }
 
-    const request = await this.prisma.prescriptionRequest.findFirst({
-      where: {
-        providerId: provider.id,
-        OR: [{ id: requestReference }, { reference: requestReference }],
-      },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
-    })
+    const request = await this.findVisiblePrescriptionRequest(provider.id, requestReference)
 
     if (!request) {
       throw new NotFoundException('Prescription request not found')
+    }
+
+    const reason = dto.reason.trim()
+
+    // Sent to every nearby pharmacy: decline this pharmacy's offer, then widen or expire if needed.
+    if (request.providerId == null) {
+      const offer = request.offers[0]
+      if (!offer) {
+        throw new NotFoundException('Prescription request not found')
+      }
+
+      const declined = await this.prisma.prescriptionOffer.updateMany({
+        where: {
+          id: offer.id,
+          status: { in: [PrescriptionOfferStatus.PENDING, PrescriptionOfferStatus.QUOTED] },
+        },
+        data: {
+          status: PrescriptionOfferStatus.DECLINED,
+          declinedAt: new Date(),
+          declineReason: reason,
+        },
+      })
+      if (declined.count === 0) {
+        throw new BadRequestException('This prescription request is no longer open')
+      }
+
+      // If this pharmacy had quoted, the request may have no live quotes left.
+      if (offer.status === PrescriptionOfferStatus.QUOTED) {
+        const liveQuotes = await this.prisma.prescriptionOffer.count({
+          where: { requestId: request.id, status: PrescriptionOfferStatus.QUOTED },
+        })
+        if (liveQuotes === 0) {
+          await this.prisma.prescriptionRequest.updateMany({
+            where: { id: request.id, providerId: null, status: PrescriptionRequestStatus.QUOTED },
+            data: { status: PrescriptionRequestStatus.SUBMITTED },
+          })
+        }
+      }
+
+      await this.prescriptionDispatch.advanceAfterDecline(request.id)
+
+      const refreshed = await this.prisma.prescriptionRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        include: this.spPrescriptionInclude(provider.id),
+      })
+      return this.mapPrescriptionRequest(refreshed, provider.id)
     }
 
     if (
@@ -287,7 +413,6 @@ export class SpService {
       throw new BadRequestException('This prescription already has an invoice and cannot be rejected')
     }
 
-    const reason = dto.reason.trim()
     const updated = await this.prisma.prescriptionRequest.update({
       where: { id: request.id },
       data: {
@@ -295,11 +420,7 @@ export class SpService {
         declinedAt: new Date(),
         declineReason: reason,
       },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+      include: this.spPrescriptionInclude(provider.id),
     })
 
     await this.prisma.notification.create({
@@ -312,7 +433,7 @@ export class SpService {
       },
     })
 
-    return this.mapPrescriptionRequest(updated)
+    return this.mapPrescriptionRequest(updated, provider.id)
   }
 
   async markPrescriptionReady(userId: string, requestReference: string) {
@@ -2548,6 +2669,8 @@ export class SpService {
     paidAt?: Date | null
     walletAmountPaid?: Prisma.Decimal | null
     prescriptionRequestId?: string | null
+    appointment?: { service: string } | null
+    lineItems?: Array<{ name: string }>
   }) {
     const status = 'authorized' as const
 
@@ -2561,6 +2684,12 @@ export class SpService {
         ? Number(invoice.walletAmountPaid)
         : Number(invoice.amount)
 
+    // What the payment was for: a prescription order, otherwise an appointment.
+    const type: 'prescription' | 'appointment' =
+      invoice.prescriptionRequestId != null ? 'prescription' : 'appointment'
+    // Appointment service name, else the first line item (medication or service name).
+    const service = invoice.appointment?.service || invoice.lineItems?.[0]?.name || null
+
     return {
       id: invoice.paymentRef ?? `PAY-${invoice.reference}`,
       patient: invoice.billedToName,
@@ -2570,6 +2699,8 @@ export class SpService {
       ref: invoice.paymentRef ?? invoice.reference,
       invoiceId: invoice.reference,
       isPrescription: invoice.prescriptionRequestId != null,
+      type,
+      service,
     }
   }
 
@@ -2953,16 +3084,60 @@ export class SpService {
     return age
   }
 
+  /** Requests this pharmacy owns, plus requests it was asked to quote on as a nearby pharmacy. */
+  private spPrescriptionInclude(providerId: number) {
+    return {
+      patient: { include: { patientProfile: true } },
+      beneficiary: true,
+      invoice: { select: { reference: true, status: true } },
+      offers: { where: { providerId } },
+    } satisfies Prisma.PrescriptionRequestInclude
+  }
+
   private async getPrescriptionRequestRecords(providerId: number) {
     return this.prisma.prescriptionRequest.findMany({
-      where: { providerId },
-      include: {
-        patient: { include: { patientProfile: true } },
-        beneficiary: true,
-        invoice: { select: { reference: true, status: true } },
-      },
+      where: { OR: [{ providerId }, { offers: { some: { providerId } } }] },
+      include: this.spPrescriptionInclude(providerId),
       orderBy: { createdAt: 'desc' },
     })
+  }
+
+  private async findVisiblePrescriptionRequest(providerId: number, requestReference: string) {
+    return this.prisma.prescriptionRequest.findFirst({
+      where: {
+        OR: [{ id: requestReference }, { reference: requestReference }],
+        AND: [{ OR: [{ providerId }, { offers: { some: { providerId } } }] }],
+      },
+      include: this.spPrescriptionInclude(providerId),
+    })
+  }
+
+  /**
+   * What the request looks like to this pharmacy. Once the patient chooses it, it is the request
+   * itself. Before that, it is this pharmacy's own offer, and the patient's contact details and exact
+   * address stay hidden. Pharmacies that were not chosen see the request as closed.
+   */
+  private prescriptionStatusFor(
+    request: {
+      providerId: number | null
+      status: PrescriptionRequestStatus
+      offers?: Array<{ status: PrescriptionOfferStatus }>
+    },
+    providerId: number,
+  ): PrescriptionRequestStatus {
+    if (request.providerId === providerId) return request.status
+    const offer = request.offers?.[0]
+    const open =
+      request.providerId == null &&
+      (request.status === PrescriptionRequestStatus.SUBMITTED ||
+        request.status === PrescriptionRequestStatus.QUOTED)
+
+    if (!offer) return PrescriptionRequestStatus.CANCELLED
+    if (offer.status === PrescriptionOfferStatus.DECLINED) return PrescriptionRequestStatus.REJECTED
+    if (!open) return PrescriptionRequestStatus.CANCELLED
+    if (offer.status === PrescriptionOfferStatus.QUOTED) return PrescriptionRequestStatus.QUOTED
+    if (offer.status === PrescriptionOfferStatus.PENDING) return PrescriptionRequestStatus.SUBMITTED
+    return PrescriptionRequestStatus.CANCELLED
   }
 
   private async resolvePharmacyPrescriptionRequest(
@@ -2995,9 +3170,12 @@ export class SpService {
     request: {
       id: string
       reference: string
+      providerId: number | null
       status: PrescriptionRequestStatus
       fulfillmentMode: string
       deliveryAddress: string | null
+      searchLat?: Prisma.Decimal | null
+      searchLng?: Prisma.Decimal | null
       patientNotes: string | null
       pharmacyNotes: string | null
       prescriptionAttachment: Prisma.JsonValue
@@ -3015,38 +3193,86 @@ export class SpService {
       patient: { phone: string | null; email: string; patientProfile: { firstName: string; lastName: string; countryCode?: string | null } | null }
       beneficiary: { name: string; relation?: string } | null
       invoice?: { reference: string; status: InvoiceStatus } | null
+      offers?: Array<{
+        status: PrescriptionOfferStatus
+        distanceKm: Prisma.Decimal
+        radiusKm: number
+        quotedItems: Prisma.JsonValue | null
+        quotedAmount: Prisma.Decimal | null
+        deliveryFee: Prisma.Decimal | null
+        pharmacyNotes: string | null
+        quotedAt: Date | null
+        declinedAt: Date | null
+        declineReason: string | null
+      }>
     },
+    viewerProviderId?: number,
   ) {
-    const patientName = request.patient.patientProfile
-      ? `${request.patient.patientProfile.firstName} ${request.patient.patientProfile.lastName}`.trim()
-      : 'Patient'
-
-    return {
+    const profile = request.patient.patientProfile
+    const offer = request.offers?.[0]
+    const isOwner = viewerProviderId == null || request.providerId === viewerProviderId
+    const attachment = await this.storage.hydrate(request.prescriptionAttachment as unknown as AttachmentMetadata | null)
+    const shared = {
       id: request.reference,
-      patient: patientName,
-      patientPhone: request.patient.phone ?? undefined,
-      patientEmail: request.patient.email,
-      countryCode: request.patient.patientProfile?.countryCode ?? undefined,
-      status: request.status.toLowerCase(),
+      countryCode: profile?.countryCode ?? undefined,
       fulfillmentMode: request.fulfillmentMode.toLowerCase(),
-      deliveryAddress: request.deliveryAddress ?? undefined,
       patientNotes: request.patientNotes ?? undefined,
-      pharmacyNotes: request.pharmacyNotes ?? undefined,
-      attachment: await this.storage.hydrate(request.prescriptionAttachment as unknown as AttachmentMetadata | null),
-      quotedItems: request.quotedItems ?? undefined,
-      quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
-      deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,
-      quotedAt: request.quotedAt?.toISOString(),
-      acceptedAt: request.acceptedAt?.toISOString(),
-      declinedAt: request.declinedAt?.toISOString(),
-      declineReason: request.declineReason ?? undefined,
-      readyAt: request.readyAt?.toISOString(),
-      fulfilledAt: request.fulfilledAt?.toISOString(),
+      attachment,
       forSelf: request.forSelf,
       for: request.forSelf ? 'Self' : request.beneficiary?.name ?? 'Beneficiary',
       submittedAt: request.createdAt.toISOString(),
-      invoiceId: request.invoice?.reference,
-      invoiceStatus: request.invoice?.status.toLowerCase(),
+      distanceKm: offer ? Number(offer.distanceKm) : undefined,
+      searchRadiusKm: offer?.radiusKm,
+    }
+
+    if (isOwner) {
+      return {
+        ...shared,
+        patient: profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Patient',
+        patientPhone: request.patient.phone ?? undefined,
+        patientEmail: request.patient.email,
+        status: request.status.toLowerCase(),
+        deliveryAddress: request.deliveryAddress ?? undefined,
+        deliveryLat: request.searchLat != null && request.fulfillmentMode === 'DELIVERY' ? Number(request.searchLat) : undefined,
+        deliveryLng: request.searchLng != null && request.fulfillmentMode === 'DELIVERY' ? Number(request.searchLng) : undefined,
+        pharmacyNotes: request.pharmacyNotes ?? undefined,
+        quotedItems: request.quotedItems ?? undefined,
+        quotedAmount: request.quotedAmount ? Number(request.quotedAmount) : undefined,
+        deliveryFee: request.deliveryFee != null ? Number(request.deliveryFee) : undefined,
+        quotedAt: request.quotedAt?.toISOString(),
+        acceptedAt: request.acceptedAt?.toISOString(),
+        declinedAt: request.declinedAt?.toISOString(),
+        declineReason: request.declineReason ?? undefined,
+        readyAt: request.readyAt?.toISOString(),
+        fulfilledAt: request.fulfilledAt?.toISOString(),
+        invoiceId: request.invoice?.reference,
+        invoiceStatus: request.invoice?.status.toLowerCase(),
+      }
+    }
+
+    const status = this.prescriptionStatusFor(request, viewerProviderId)
+    const closedReason =
+      status !== PrescriptionRequestStatus.CANCELLED
+        ? undefined
+        : request.providerId != null
+          ? 'The patient chose another pharmacy.'
+          : request.status === PrescriptionRequestStatus.CANCELLED
+            ? 'The patient cancelled this request.'
+            : 'This request is closed.'
+
+    return {
+      ...shared,
+      // Only a first name until the patient picks this pharmacy.
+      patient: profile?.firstName?.trim() || 'Patient',
+      status: status.toLowerCase(),
+      isNearbyRequest: true,
+      pharmacyNotes: offer?.pharmacyNotes ?? undefined,
+      quotedItems: offer?.quotedItems ?? undefined,
+      quotedAmount: offer?.quotedAmount != null ? Number(offer.quotedAmount) : undefined,
+      deliveryFee: offer?.deliveryFee != null ? Number(offer.deliveryFee) : undefined,
+      quotedAt: offer?.quotedAt?.toISOString(),
+      declinedAt: offer?.declinedAt?.toISOString(),
+      declineReason: status === PrescriptionRequestStatus.REJECTED ? offer?.declineReason ?? undefined : closedReason,
     }
   }
 

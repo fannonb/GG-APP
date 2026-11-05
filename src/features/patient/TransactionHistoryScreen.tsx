@@ -8,6 +8,7 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { getCountryByCode } from '@/config/countries'
 import { useAuthStore } from '@/store/auth.store'
+import { Pager, usePaged } from '@/components/paging'
 import { useUserStore } from '@/store/user.store'
 
 const TABLE_COLUMNS = [
@@ -25,7 +26,7 @@ export function TransactionHistoryScreen() {
   const { data: liveTransactions = [] } = usePatientTransactions()
   const [filter, setFilter] = useState('all')
   const isNew = isMockApi && userMode === 'new'
-  const currency = getCountryByCode(user.countryCode)?.currencySymbol ?? 'Z$'
+  const currency = getCountryByCode(user.countryCode)?.currencySymbol ?? ''
 
   const transactions = isNew ? [] : liveTransactions
   const spendableTransactions = transactions.filter(txn => txn.status !== 'failed')
@@ -49,6 +50,7 @@ export function TransactionHistoryScreen() {
 
     return transactions
   }, [filter, lastMonth, now, transactions])
+  const { pageItems: pagedTransactions, pager } = usePaged(filteredTransactions, filter)
   const thisMonthTotal = spendableTransactions
     .filter(txn => {
       const date = new Date(txn.date)
@@ -122,7 +124,7 @@ export function TransactionHistoryScreen() {
                       </div>
                     </td>
                   </tr>
-                ) : filteredTransactions.map(txn => (
+                ) : pagedTransactions.map(txn => (
                   <tr key={txn.id} style={{ borderBottom: `1px solid ${C.border}`, transition: 'background 0.1s', cursor: 'pointer' }}
                     onMouseEnter={e => (e.currentTarget.style.background = C.bg)}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -139,6 +141,7 @@ export function TransactionHistoryScreen() {
               </tbody>
             </table>
           </div>
+          <div style={{ padding: '0 22px 14px' }}><Pager {...pager} /></div>
         </GGCard>
       </div>
     </AppLayout>

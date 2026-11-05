@@ -8,7 +8,6 @@ import {
   CREDENTIAL_NUMBER_PATTERN,
   credentialType,
   credentialsFor,
-  needsBusinessRegistration,
   type CredentialCountry,
   type CredentialType,
 } from '@/config/credentials'
@@ -69,17 +68,14 @@ export function validateLicences(country: CredentialCountry | null, services: st
   const now = today()
   let totalBytes = 0
 
-  const check = (type: CredentialType, required: boolean) => {
+  const check = (type: CredentialType) => {
     const entry = state.entries[type.kind] ?? EMPTY_ENTRY
     const number = entry.number.trim()
     const touched = number || entry.holderName.trim() || entry.expiresAt || entry.file
-    if (!required && !touched) return
+    if (!touched) return
     if (!number) errors[`${type.kind}.number`] = `Enter the ${type.numberLabel}`
     else if (!CREDENTIAL_NUMBER_PATTERN.test(number)) errors[`${type.kind}.number`] = 'Use letters, digits, / . - and spaces (2 to 40 characters)'
-    if (type.holder === 'person' && !entry.holderName.trim()) errors[`${type.kind}.holderName`] = 'Enter their full name'
-    if (type.expires && !type.optionalOnly && !entry.expiresAt) errors[`${type.kind}.expiresAt`] = 'Enter the expiry date'
     if (entry.expiresAt && entry.expiresAt < now) errors[`${type.kind}.expiresAt`] = 'This licence has expired. Renew it before applying'
-    if (type.document && !type.optionalOnly && !entry.file) errors[`${type.kind}.file`] = 'Upload the certificate (PDF, JPG or PNG)'
     if (entry.file) totalBytes += entry.file.size
     credentials.push({
       kind: type.kind,
@@ -90,11 +86,9 @@ export function validateLicences(country: CredentialCountry | null, services: st
     })
   }
 
-  requiredCards.forEach(card => check(card.type, true))
-  optionalCards.forEach(type => check(type, false))
+  requiredCards.forEach(card => check(card.type))
+  optionalCards.forEach(type => check(type))
 
-  if (needsBusinessRegistration(services) && !state.businessRegNumber.trim()) errors['business.registration'] = 'Enter the registration number'
-  if (!state.taxPin.trim()) errors['business.tax'] = `Enter the ${BUSINESS_FIELDS[country].tax}`
   if (totalBytes > MAX_TOTAL_BYTES) errors.files = 'The certificates add up to more than 15 MB. Upload smaller scans or photos.'
 
   return { errors, credentials }
@@ -141,7 +135,7 @@ export function ProviderLicencesSection({ country, services, value, onChange, er
       <div>
         <div style={{ fontSize: 15, fontWeight: 700, color: C.text }}>Licences</div>
         <div style={{ fontSize: 12.5, color: C.textSub, marginTop: 4, lineHeight: 1.55 }}>
-          Based on the services you picked. We check each one with its regulator before your practice goes live.
+          Optional during registration. You can add these details later. Our team verifies licences before approving your practice.
         </div>
       </div>
 
@@ -168,26 +162,25 @@ export function ProviderLicencesSection({ country, services, value, onChange, er
               })}
             </div>
           )}
-          <LicenceCard type={type} entry={value.entries[type.kind] ?? EMPTY_ENTRY} onChange={patch => setEntry(type.kind, patch)} errors={errors} required focusColor={focusColor} focusShadow={focusShadow} />
+          <LicenceCard type={type} entry={value.entries[type.kind] ?? EMPTY_ENTRY} onChange={patch => setEntry(type.kind, patch)} errors={errors} focusColor={focusColor} focusShadow={focusShadow} />
         </div>
       ))}
 
       <div style={{ border: `1px solid ${C.border}`, borderRadius: radius.md, padding: 14, display: 'flex', flexDirection: 'column', gap: 12, background: '#fff' }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Business details</div>
         <GGInput
-          label={needsBusinessRegistration(services) ? business.registration : `${business.registration} (optional)`}
+          label={`${business.registration} (optional)`}
           value={value.businessRegNumber}
           onChange={e => onChange({ ...value, businessRegNumber: e.target.value })}
-          required={needsBusinessRegistration(services)}
+
           error={errors['business.registration']}
           focusColor={focusColor}
           focusShadow={focusShadow}
         />
         <GGInput
-          label={business.tax}
+          label={`${business.tax} (optional)`}
           value={value.taxPin}
           onChange={e => onChange({ ...value, taxPin: e.target.value })}
-          required
           error={errors['business.tax']}
           focusColor={focusColor}
           focusShadow={focusShadow}

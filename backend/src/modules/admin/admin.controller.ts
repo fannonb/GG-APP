@@ -1,4 +1,9 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { PROVIDER_CSV_HEADERS } from './provider-import/csv'
+import { ProviderImportService } from './provider-import/provider-import.service'
+import { ProviderImportDto } from './dto/provider-import.dto'
+import { ProviderInviteBatchDto } from './dto/provider-invite-batch.dto'
+import { AuthService } from '../auth/auth.service'
+import { Body, Controller, Delete, Get, Header, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { UserRole } from '@prisma/client'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { Roles } from '../../common/decorators/roles.decorator'
@@ -27,6 +32,8 @@ export class AdminController {
   private readonly accounts: AdminAccountsService
 
   constructor(
+    @Inject(ProviderImportService) private readonly providerImport: ProviderImportService,
+    @Inject(AuthService) private readonly auth: AuthService,
     @Inject(AdminService) adminService: AdminService,
     @Inject(AdminMetricsService) metrics: AdminMetricsService,
     @Inject(AdminAccountsService) accounts: AdminAccountsService,
@@ -121,6 +128,29 @@ export class AdminController {
   @Get('analytics')
   getAnalytics() {
     return this.adminService.getAnalytics()
+  }
+
+  // Its own path so it can never be read as a provider id by `providers/:id`; the old path stays as an alias.
+  @Get(['provider-import/template', 'providers/import-template'])
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header('Content-Disposition', 'attachment; filename="provider-import-template.csv"')
+  providerImportTemplate() { return PROVIDER_CSV_HEADERS.join(',') + '\r\n' }
+
+  @Post('providers/import')
+  importProviders(@CurrentUser() user: AuthenticatedUser, @Body() dto: ProviderImportDto) {
+    return this.providerImport.run(user.sub, dto.csv, dto.commit)
+  }
+
+  // One request per chunk of up to 50 ids, so a 500-provider import stays well inside the
+  // 120 requests/minute limit. Each id gets its own result; one failure never stops the rest.
+  @Post('applications/invitations')
+  inviteProviders(@CurrentUser() user: AuthenticatedUser, @Body() dto: ProviderInviteBatchDto) {
+    return this.auth.inviteImportedProviders(user.sub, dto.ids)
+  }
+
+  @Post('applications/:id/invite')
+  inviteProvider(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return this.auth.inviteImportedProvider(user.sub, id)
   }
 
   @Get('applications')

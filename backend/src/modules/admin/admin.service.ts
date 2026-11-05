@@ -380,18 +380,7 @@ export class AdminService {
         },
       }),
       this.prisma.provider.findMany({
-        include: {
-          authUser: { select: { email: true } },
-          appointments: { select: { id: true, patientUserId: true } },
-          invoices: {
-            select: {
-              amount: true,
-              status: true,
-              issueDate: true,
-              patientUserId: true,
-            },
-          },
-        },
+        include: ADMIN_PROVIDER_DETAIL_INCLUDE,
       }),
       this.prisma.invoice.findMany({
         where: {
@@ -415,7 +404,7 @@ export class AdminService {
     const monthlyTrend = this.buildMonthlyTrend(invoices)
     const categoryStats = this.buildCategoryStats(providers)
     const topProviders = providers
-      .map(provider => this.mapProvider(provider as unknown as AdminProviderRecord, null))
+      .map(provider => this.mapProvider(provider, null))
       .sort((a, b) => b.totalEarnings - a.totalEarnings)
       .slice(0, 5)
 
@@ -434,7 +423,6 @@ export class AdminService {
 
   async getApplications() {
     const applications = await this.prisma.providerApplication.findMany({
-      where: ADMIN_REVIEWABLE_APPLICATION_WHERE,
       include: APPLICATION_REVIEW_INCLUDE,
       orderBy: { submittedAt: 'desc' },
     })
@@ -470,6 +458,8 @@ export class AdminService {
   }
 
   async approveApplication(actorUserId: string, applicationId: string, note?: string) {
+    // Approval is the decision; a written explanation is optional, including imports.
+    note = note?.trim() || undefined
     const application = await this.prisma.providerApplication.findUnique({
       where: { id: applicationId },
       include: { credentials: true },
@@ -509,7 +499,7 @@ export class AdminService {
           license: application.licenseNumber,
           country: application.country,
           region: normalizeRegion(normalizeCountry(application.country), application.region),
-          lifecycleStatus: ProviderLifecycleStatus.ACTIVE,
+          lifecycleStatus: application.importedAt && !application.activatedAt ? ProviderLifecycleStatus.SUSPENDED : ProviderLifecycleStatus.ACTIVE,
           status: ProviderOpenStatus.OPEN,
           tags: serviceNames,
           hoursJson: application.openingHours as Prisma.InputJsonValue,
@@ -536,7 +526,7 @@ export class AdminService {
           country: application.country,
           region: normalizeRegion(normalizeCountry(application.country), application.region),
           tags: serviceNames,
-          lifecycleStatus: ProviderLifecycleStatus.ACTIVE,
+          lifecycleStatus: application.importedAt && !application.activatedAt ? ProviderLifecycleStatus.SUSPENDED : ProviderLifecycleStatus.ACTIVE,
           status: ProviderOpenStatus.OPEN,
           hoursJson: application.openingHours as Prisma.InputJsonValue,
           hours: this.summarizeApplicationHours(application.openingHours),
@@ -611,7 +601,7 @@ export class AdminService {
         screen: '/sp/dashboard',
       },
     })
-    void this.mailService.sendProviderApplicationApprovedEmail(application.email, {
+    if (!application.importedAt) void this.mailService.sendProviderApplicationApprovedEmail(application.email, {
       practiceName: application.practiceName,
       note: note ?? undefined,
     })
@@ -1066,6 +1056,10 @@ export class AdminService {
     status: ProviderApplicationStatus,
     note?: string,
   ) {
+    if (!note?.trim()) throw new BadRequestException(status === ProviderApplicationStatus.REJECTED
+      ? 'Add a reason for rejecting this application.'
+      : 'Add a note explaining what information the applicant should provide.')
+    note = note.trim()
     await this.prisma.providerApplicationMessage.create({
       data: {
         applicationId,
@@ -1235,6 +1229,12 @@ export class AdminService {
   }
 
   private mapApplication(application: {
+    importedAt?: Date | null
+    invitedAt?: Date | null
+    activatedAt?: Date | null
+    address?: string
+    lat?: Prisma.Decimal | null
+    lng?: Prisma.Decimal | null
     id: string
     practiceName: string
     country: string
@@ -1268,6 +1268,12 @@ export class AdminService {
     return {
       id: application.id,
       name: application.practiceName,
+      importedAt: application.importedAt?.toISOString(),
+      invitedAt: application.invitedAt?.toISOString(),
+      activatedAt: application.activatedAt?.toISOString(),
+      address: application.address,
+      lat: application.lat == null ? undefined : Number(application.lat),
+      lng: application.lng == null ? undefined : Number(application.lng),
       serviceTypes: Array.isArray(application.serviceTypes) ? application.serviceTypes : [],
       country: application.country,
       email: application.email,
@@ -2347,7 +2353,7 @@ export class AdminService {
             : 'Credit Application Approved',
           body: application.type === CreditApplicationType.INCREASE
             ? `Your limit increase of ${approvedAmount} was approved. Your updated balance is ready to use.`
-            : `Your credit application ${application.reference} was approved. ${approvedAmount} has been loaded to your wallet.`,
+            : `Your credit application ${application.reference} was approved. ${approvedAmount} has been loaded to your allocation.`,
           screen: '/app/credit',
         },
       })

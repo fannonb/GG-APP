@@ -180,7 +180,7 @@ export function validatePayoutForm(form: PayoutFormState): string | null {
     return null
   }
 
-  if (!form.accountNumber.trim()) return 'Enter the wallet / phone number.'
+  if (!form.accountNumber.trim()) return 'Enter the account / phone number.'
   if (!form.accountName.trim()) return 'Enter the account name.'
   return null
 }

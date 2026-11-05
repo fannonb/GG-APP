@@ -95,7 +95,7 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
             flexShrink: 0,
           }}
         >
-          View wallet →
+          View allocation →
         </button>
       )}
     </div>
@@ -115,7 +115,7 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
         <div>
           <div
             role="progressbar"
-            aria-label="Credit used"
+            aria-label="Allocation used"
             aria-valuenow={Math.round(usedPct)}
             aria-valuemin={0}
             aria-valuemax={100}
@@ -133,9 +133,6 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 8, fontSize: 13, color: C.textSub }}>
             <span>
               <strong style={{ color: C.text, fontWeight: 700 }}>{formatAmount(user.creditUsed, currency)}</strong> used
-            </span>
-            <span>
-              of <strong style={{ color: C.text, fontWeight: 700 }}>{formatAmount(user.creditLimit, currency)}</strong> limit
             </span>
           </div>
         </div>
@@ -169,12 +166,12 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
       <>
         <div>
           <div style={{ fontSize: 20, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>
-            {declined ? 'No active credit line' : 'Get care now, pay over time'}
+            {declined ? 'No active allocation' : 'Get care now, pay over time'}
           </div>
           <div style={{ fontSize: 14, color: C.textSub, marginTop: 6, lineHeight: 1.5 }}>
             {declined
               ? 'Your last application was declined. You can re-apply 30 days after the decision.'
-              : 'Apply for healthcare credit to pay verified providers without paying at the counter.'}
+              : 'Apply for a healthcare allocation to pay verified providers without paying at the counter.'}
           </div>
         </div>
         <button
@@ -182,7 +179,7 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
           onClick={() => navigate(declined ? ROUTES.CREDIT_STATUS : ROUTES.CREDIT_DISCLAIMER)}
           style={{ ...(declined ? secondaryBtn : primaryBtn), marginTop: 'auto', alignSelf: 'flex-start' }}
         >
-          {declined ? 'View decision' : 'Apply for credit'}
+          {declined ? 'View decision' : 'Apply for an allocation'}
         </button>
       </>
     )
@@ -190,7 +187,7 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
 
   return (
     <section
-      aria-label="Healthcare credit"
+      aria-label="Healthcare allocation"
       style={{
         position: 'relative',
         overflow: 'hidden',

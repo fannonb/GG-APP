@@ -7,6 +7,38 @@ import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route, ROUTES } from '@/router/routes'
 import type { SPInvoice } from '@/types/invoice.types'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { useSPCurrency } from '@/hooks/useCurrency'
+import { Pager, usePaged } from '@/components/paging'
+import { InvoiceTable, type InvoiceTableColumn } from '@/components/InvoiceTable'
+import { useResponsive } from '@/hooks/useResponsive'
+
+function KindTag({ invoice }: { invoice: SPInvoice }) {
+  if (invoice.isPrescription) {
+    return (
+      <span style={{ padding: '3px 8px', borderRadius: radius.full, background: C.blue100, color: '#1A5D8A', fontSize: '11px', fontWeight: 700, fontFamily: font.family, whiteSpace: 'nowrap' }}>
+        Prescription
+      </span>
+    )
+  }
+  return invoice.appointmentId
+    ? <span style={{ fontSize: '12px', color: C.textSub, whiteSpace: 'nowrap' }}>Appointment {invoice.appointmentId}</span>
+    : <span style={{ fontSize: '12px', color: C.textLight }}>—</span>
+}
+
+const SP_COLUMNS = (currency: string): InvoiceTableColumn<SPInvoice>[] => [
+  { key: 'id', header: 'Invoice', render: invoice => <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{invoice.id}</span> },
+  { key: 'patient', header: 'Patient', render: invoice => invoice.patient },
+  {
+    key: 'services',
+    header: 'Services',
+    width: '26%',
+    render: invoice => <span style={{ color: C.textSub }}>{invoice.services.map(service => service.name).join(', ') || '—'}</span>,
+  },
+  { key: 'kind', header: 'For', render: invoice => <KindTag invoice={invoice} /> },
+  { key: 'issued', header: 'Issued', render: invoice => <span style={{ whiteSpace: 'nowrap', color: C.textSub }}>{formatDate(invoice.issueDate)}</span> },
+  { key: 'amount', header: 'Amount', align: 'right', render: invoice => <span style={{ fontWeight: 800, whiteSpace: 'nowrap' }}>{formatCurrency(invoice.amount, currency)}</span> },
+  { key: 'status', header: 'Status', align: 'right', render: invoice => <InvoiceStatusChip status={invoice.status} /> },
+]
 
 function InvoiceStatusChip({ status }: { status: SPInvoice['status'] }) {
   const config = {
@@ -44,7 +76,9 @@ function InvoiceStatusChip({ status }: { status: SPInvoice['status'] }) {
 }
 
 export function SPInvoicesScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
+  const { isMobile } = useResponsive()
   const { data: invoices = [], isLoading } = useSPInvoices()
   const [filter, setFilter] = useState<'all' | SPInvoice['status']>('all')
 
@@ -53,6 +87,7 @@ export function SPInvoicesScreen() {
       filter === 'all' ? invoices : invoices.filter(invoice => invoice.status === filter),
     [invoices, filter],
   )
+  const { pageItems: pagedInvoices, pager } = usePaged(filteredInvoices, filter)
 
   const stats = useMemo(
     () => ({
@@ -81,8 +116,8 @@ export function SPInvoicesScreen() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
           {[
-            { label: 'Total Billed', value: formatCurrency(stats.total), color: C.text },
-            { label: 'Collected', value: formatCurrency(stats.collected), color: C.success },
+            { label: 'Total Billed', value: formatCurrency(stats.total, currency), color: C.text },
+            { label: 'Collected', value: formatCurrency(stats.collected, currency), color: C.success },
           ].map(item => (
             <GGCard key={item.label} padding="18px">
               <div style={{ fontSize: '11px', fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: font.family }}>
@@ -130,9 +165,20 @@ export function SPInvoicesScreen() {
               {invoices.length === 0 ? 'No invoices yet.' : 'No invoices found for this filter.'}
             </div>
           </GGCard>
+        ) : !isMobile ? (
+          <GGCard padding="0" noPad>
+            <InvoiceTable
+              label="Invoices"
+              columns={SP_COLUMNS(currency)}
+              rows={pagedInvoices}
+              getKey={invoice => invoice.id}
+              onRowClick={invoice => navigate(route.spInvoice(invoice.id), { state: { invoice } })}
+            />
+            <div style={{ padding: '0 22px 14px' }}><Pager {...pager} /></div>
+          </GGCard>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-            {filteredInvoices.map(invoice => (
+            {pagedInvoices.map(invoice => (
               <GGCard
                 key={invoice.id}
                 padding="20px"
@@ -180,7 +226,7 @@ export function SPInvoicesScreen() {
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '18px', fontWeight: 800, color: C.text, fontFamily: font.family }}>
-                      {formatCurrency(invoice.amount)}
+                      {formatCurrency(invoice.amount, currency)}
                     </div>
                     <div style={{ fontSize: '11px', color: C.textSub, marginTop: '6px', fontFamily: font.family }}>
                       Submitted {formatDate(invoice.submittedAt)}
@@ -189,6 +235,7 @@ export function SPInvoicesScreen() {
                 </div>
               </GGCard>
             ))}
+            <Pager {...pager} />
           </div>
         )}
       </div>

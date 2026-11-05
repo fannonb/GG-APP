@@ -43,6 +43,8 @@ export const ROUTES = {
   PIN_AUTH:          '/app/invoices/:id/pay',
   PAYMENT_SUCCESS:   '/app/invoices/:id/success',
   APPOINTMENTS: '/app/appointments',
+  /** Pharmacy section: upload a prescription for every pharmacy nearby. */
+  PHARMACY: '/app/pharmacy',
   PRESCRIPTION_REQUESTS: '/app/prescriptions',
   PRESCRIPTION_CONFIRM: '/app/prescriptions/confirm',
   PRESCRIPTION_DETAIL: '/app/prescriptions/:id',

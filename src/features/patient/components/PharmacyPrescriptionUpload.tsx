@@ -1,15 +1,19 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { GGTextarea } from '@/design-system'
+import { GGInput, GGTextarea } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { ApiError } from '@/api/types'
 import { useCreatePrescriptionRequestMutation } from '@/hooks/api/usePatientMutations'
+import { useNearbyPharmacies } from '@/hooks/api/usePatientQueries'
+import { useLocationStore } from '@/store/location.store'
 import { useUserStore } from '@/store/user.store'
 import { getPatientDisplayName, isBeneficiariesActive } from '@/features/patient/patientAccount'
 import { ROUTES } from '@/router/routes'
 import type { AppointmentAttachmentPayload } from '@/api/types'
-import type { Provider } from '@/types/provider.types'
 import type { PrescriptionFulfillmentMode } from '@/types/prescription.types'
+import { MapPinPicker, type PinnedLocation } from './MapPinPicker'
+
+const CURRENT_LOCATION_LABEL = 'Your current location'
 
 const CYAN_DEEP = '#0B7BC0'
 const CYAN_MID = '#1A9BE6'
@@ -46,11 +50,11 @@ function readFileAsDataUrl(file: File): Promise<string> {
   })
 }
 
-interface PharmacyPrescriptionUploadProps {
-  provider: Provider
-}
-
-export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUploadProps) {
+/**
+ * Upload a prescription once; it goes to every registered pharmacy within 2 km of the pin
+ * (6 km if there are none that close). The patient then compares the prices that come back.
+ */
+export function PharmacyPrescriptionUpload() {
   const navigate = useNavigate()
   const user = useUserStore(s => s.user)
   const beneficiaries = useUserStore(s => s.beneficiaries)
@@ -62,11 +66,30 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
   const [forSelf, setForSelf] = useState(true)
   const [beneficiaryId, setBeneficiaryId] = useState('')
   const [fulfillmentMode, setFulfillmentMode] = useState<PrescriptionFulfillmentMode>('pickup')
-  const [deliveryAddress, setDeliveryAddress] = useState('')
+  const [deliveryDetails, setDeliveryDetails] = useState('')
+  const [pin, setPin] = useState<PinnedLocation | null>(null)
+  const [pinTouched, setPinTouched] = useState(false)
+  const position = useLocationStore(s => s.position)
+  const requestLocation = useLocationStore(s => s.requestLocation)
   const [patientNotes, setPatientNotes] = useState('')
   const [attachment, setAttachment] = useState<UploadedAttachment | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
+
+  useEffect(() => {
+    requestLocation()
+  }, [requestLocation])
+
+  // Start from the device location until the patient moves the pin themselves.
+  const autoPin = !pinTouched && position ? { lat: position.lat, lng: position.lng, label: CURRENT_LOCATION_LABEL } : null
+  const activePin = pinTouched ? pin : autoPin
+  const nearby = useNearbyPharmacies(activePin)
+  const noPharmacies = !!nearby.data && nearby.data.radiusKm == null
+
+  const handlePinChange = (value: PinnedLocation) => {
+    setPinTouched(true)
+    setPin(value)
+  }
 
   const handleFileSelect = async (fileList: FileList | null) => {
     const file = fileList?.[0]
@@ -105,8 +128,20 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
       return
     }
 
-    if (fulfillmentMode === 'delivery' && !deliveryAddress.trim()) {
-      setError('Please enter a delivery address.')
+    if (!activePin) {
+      setError(fulfillmentMode === 'delivery'
+        ? 'Drop a pin on the map where the order should be delivered.'
+        : 'Share your location or drop a pin so we can find pharmacies near you.')
+      return
+    }
+
+    if (fulfillmentMode === 'delivery' && deliveryDetails.trim().length < 3) {
+      setError('Add the house or building number, and a landmark, so the rider can find you.')
+      return
+    }
+
+    if (noPharmacies) {
+      setError('No available pharmacies near this location.')
       return
     }
 
@@ -114,16 +149,19 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
 
     try {
       const result = await createPrescriptionMutation.mutateAsync({
-        providerId: provider.id,
+        searchLat: activePin.lat,
+        searchLng: activePin.lng,
         forSelf,
         beneficiaryId: forSelf ? undefined : beneficiaryId || undefined,
         fulfillmentMode,
-        deliveryAddress: fulfillmentMode === 'delivery' ? deliveryAddress.trim() : undefined,
+        deliveryAddress: fulfillmentMode === 'delivery'
+          ? [deliveryDetails.trim(), activePin.label !== CURRENT_LOCATION_LABEL ? activePin.label : ''].filter(Boolean).join(' — ')
+          : undefined,
         patientNotes: patientNotes.trim() || undefined,
         attachment,
       })
 
-      navigate(ROUTES.PRESCRIPTION_CONFIRM, { state: { provider, result } })
+      navigate(ROUTES.PRESCRIPTION_CONFIRM, { state: { result } })
     } catch (submitError) {
       setError(
         submitError instanceof ApiError
@@ -258,8 +296,8 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
         <div style={sectionLabel}>How do you want to get it?</div>
         <div role="radiogroup" aria-label="Pickup or delivery" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {([
-            { value: 'pickup', label: 'Pick up', hint: `Collect it from ${provider.name}` },
-            { value: 'delivery', label: 'Delivery', hint: 'The pharmacy delivers to you' },
+            { value: 'pickup', label: 'Pick up', hint: 'Collect it from the pharmacy you choose' },
+            { value: 'delivery', label: 'Delivery', hint: 'The pharmacy delivers to you, for a fee' },
           ] as const).map(option => {
             const selected = fulfillmentMode === option.value
             return (
@@ -273,15 +311,54 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
             )
           })}
         </div>
+      </div>
+
+      <div>
+        <div style={sectionLabel}>{fulfillmentMode === 'delivery' ? 'Where should it be delivered?' : 'Find pharmacies near'}</div>
+        <div style={{ fontSize: 12, color: C.textSub, marginTop: -4, marginBottom: 10, lineHeight: 1.5 }}>
+          {fulfillmentMode === 'delivery'
+            ? 'Drag the pin to your exact door. Pharmacies use it to price the delivery.'
+            : 'We send your prescription to pharmacies close to this pin.'}
+        </div>
+        <MapPinPicker
+          value={activePin}
+          onChange={handlePinChange}
+          fallbackCenter={position}
+          hint={fulfillmentMode === 'delivery' ? 'Tap the map or search to drop the delivery pin.' : 'Turn on location, search, or tap the map.'}
+        />
         {fulfillmentMode === 'delivery' && (
           <div style={{ marginTop: 12 }}>
-            <GGTextarea
-              label="Delivery address"
-              value={deliveryAddress}
-              onChange={event => setDeliveryAddress(event.target.value)}
-              placeholder="Street, area, city"
-              rows={2}
+            <GGInput
+              label="House, flat or building, and a landmark"
+              value={deliveryDetails}
+              onChange={event => setDeliveryDetails(event.target.value)}
+              placeholder="e.g. 14 Baines Ave, Flat 3B, opposite the Total garage"
+              required
             />
+          </div>
+        )}
+        {activePin && (
+          <div
+            role="status"
+            style={{
+              marginTop: 12,
+              padding: '10px 12px',
+              borderRadius: radius.sm,
+              fontSize: 13,
+              lineHeight: 1.5,
+              background: noPharmacies ? 'rgba(239,68,68,0.08)' : C.blue100,
+              color: noPharmacies ? '#B91C1C' : '#1A5D8A',
+            }}
+          >
+            {nearby.isLoading
+              ? 'Checking for pharmacies nearby…'
+              : nearby.isError
+                ? 'We could not check nearby pharmacies. You can still try to send it.'
+                : noPharmacies
+                  ? `No available pharmacies within ${nearby.data!.maxRadiusKm} km of this location.`
+                  : nearby.data
+                    ? <>Goes to <strong>{nearby.data.count} registered {nearby.data.count === 1 ? 'pharmacy' : 'pharmacies'}</strong> within {nearby.data.radiusKm} km{nearby.data.radiusKm !== 2 ? ' (none closer than 2 km)' : ''}.</>
+                    : null}
           </div>
         )}
       </div>
@@ -303,7 +380,7 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
       <div>
         <button
           type="button"
-          disabled={createPrescriptionMutation.isPending}
+          disabled={createPrescriptionMutation.isPending || noPharmacies}
           onClick={() => void handleSubmit()}
           style={{
             width: '100%',
@@ -316,14 +393,14 @@ export function PharmacyPrescriptionUpload({ provider }: PharmacyPrescriptionUpl
             fontSize: 15,
             fontWeight: 700,
             fontFamily: font.family,
-            cursor: createPrescriptionMutation.isPending ? 'default' : 'pointer',
-            opacity: createPrescriptionMutation.isPending ? 0.7 : 1,
+            cursor: createPrescriptionMutation.isPending || noPharmacies ? 'default' : 'pointer',
+            opacity: createPrescriptionMutation.isPending || noPharmacies ? 0.6 : 1,
           }}
         >
-          {createPrescriptionMutation.isPending ? 'Sending…' : `Send to ${provider.name}`}
+          {createPrescriptionMutation.isPending ? 'Sending…' : noPharmacies ? 'No available pharmacies' : 'Send to nearby pharmacies'}
         </button>
         <div style={{ fontSize: 12, color: C.textSub, textAlign: 'center', marginTop: 8, lineHeight: 1.5 }}>
-          {provider.name} checks stock and sends you a price first. You pay only after pickup or delivery.
+          Each pharmacy checks stock and sends a price. You choose one, and pay only after you approve its invoice.
         </div>
       </div>
     </div>

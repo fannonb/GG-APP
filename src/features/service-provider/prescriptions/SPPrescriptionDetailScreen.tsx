@@ -33,9 +33,14 @@ function FulfillmentBanner({ request }: { request: PrescriptionRequest }) {
   const isReady = request.status === 'ready'
   const isFulfilled = request.status === 'fulfilled'
 
-  let statusText = isDelivery
-    ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. Include delivery charges when accepting.`
-    : 'Patient will collect from your pharmacy after they approve preparation.'
+  const distance = request.distanceKm != null ? `${request.distanceKm.toFixed(1)} km from your pharmacy` : null
+  let statusText = request.isNearbyRequest
+    ? isDelivery
+      ? `Delivery pin is ${distance ?? 'nearby'}. Include your delivery charge in the price. The exact address is shared if the patient chooses you.`
+      : `Patient is ${distance ?? 'nearby'} and will collect from the pharmacy they choose.`
+    : isDelivery
+      ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. Include delivery charges when accepting.`
+      : 'Patient will collect from your pharmacy after they approve preparation.'
 
   if (isFulfilled) {
     statusText = isDelivery ? 'Order successfully delivered.' : 'Order successfully collected by patient.'
@@ -65,6 +70,16 @@ function FulfillmentBanner({ request }: { request: PrescriptionRequest }) {
       <div style={{ fontSize: '12px', color: isPaid ? '#047857' : isDelivery ? '#8A4D00' : '#1A5D8A', lineHeight: 1.55 }}>
         {statusText}
       </div>
+      {!request.isNearbyRequest && isDelivery && request.deliveryLat != null && request.deliveryLng != null && (
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${request.deliveryLat},${request.deliveryLng}`}
+          target="_blank"
+          rel="noreferrer"
+          style={{ display: 'inline-block', marginTop: 8, fontSize: '12px', fontWeight: 700, color: '#0B7BC0' }}
+        >
+          Open delivery pin in Maps →
+        </a>
+      )}
     </div>
   )
 }
@@ -85,7 +100,9 @@ function ConfirmationModal({
   const content = {
     accept: {
       title: 'Pricing Sent',
-      message: 'Your quote was sent to the patient. They can accept or decline before you upload an invoice.',
+      message: request.isNearbyRequest
+        ? 'Your price was sent. The patient is comparing nearby pharmacies, and you will be notified if they choose you.'
+        : 'Your quote was sent to the patient. They can accept or decline before you upload an invoice.',
       rows: [
         { label: 'Items total', val: request.quotedAmount != null ? formatCurrency(request.quotedAmount, currencySymbol) : '—' },
         {
@@ -96,8 +113,10 @@ function ConfirmationModal({
       ],
     },
     reject: {
-      title: 'Prescription Rejected',
-      message: `${request.patient ?? 'The patient'} has been notified with your reason.`,
+      title: request.isNearbyRequest ? 'Request Declined' : 'Prescription Rejected',
+      message: request.isNearbyRequest
+        ? 'The request stays open for other nearby pharmacies.'
+        : `${request.patient ?? 'The patient'} has been notified with your reason.`,
       rows: [
         { label: 'Reason', val: request.declineReason ?? '—' },
         { label: 'Status', val: <GGBadge type="error">Rejected</GGBadge> },
@@ -152,7 +171,7 @@ export function SPPrescriptionDetailScreen() {
   const { id } = useParams<{ id: string }>()
   const { data: request, isLoading } = useSPPrescriptionRequest(id)
   const { data: spProfile } = useSPProfile()
-  const currencySymbol = getCountryByName(spProfile?.country ?? '')?.currencySymbol ?? '$'
+  const currencySymbol = getCountryByName(spProfile?.country ?? '')?.currencySymbol ?? ''
   const quoteMutation = useQuotePrescriptionRequestMutation()
   const rejectMutation = useRejectPrescriptionRequestMutation()
   const readyMutation = useMarkPrescriptionReadyMutation()
@@ -318,6 +337,7 @@ export function SPPrescriptionDetailScreen() {
                 </div>
                 <div style={{ fontSize: '12px', color: C.textSub, marginBottom: '8px' }}>
                   {request.for} · {isDelivery ? 'Delivery' : 'Pickup'}
+                  {request.distanceKm != null ? ` · ${request.distanceKm.toFixed(1)} km away` : ''}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
                   {request.patientPhone && (
@@ -337,14 +357,20 @@ export function SPPrescriptionDetailScreen() {
                     </a>
                   )}
                   {!request.patientPhone && !request.patientEmail && (
-                    <span style={{ fontSize: '12px', color: C.textSub }}>Contact details unavailable</span>
+                    <span style={{ fontSize: '12px', color: C.textSub }}>
+                      {request.isNearbyRequest
+                        ? 'Contact details are shared if the patient chooses your pharmacy.'
+                        : 'Contact details unavailable'}
+                    </span>
                   )}
                 </div>
               </div>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text }}>Request Details</div>
-              <GGBadge type={request.status === 'rejected' ? 'error' : 'info'}>{request.status}</GGBadge>
+              <GGBadge type={request.status === 'rejected' ? 'error' : 'info'}>
+                {request.isNearbyRequest && request.status === 'cancelled' ? 'closed' : request.status === 'rejected' && request.isNearbyRequest ? 'declined' : request.status}
+              </GGBadge>
             </div>
 
             {isReadyForPickup && (
@@ -486,7 +512,7 @@ export function SPPrescriptionDetailScreen() {
             {request.quotedAmount != null && <InfoRow label="Items total" val={formatCurrency(request.quotedAmount, currencySymbol)} />}
             {request.deliveryFee != null && <InfoRow label="Delivery fee" val={formatCurrency(request.deliveryFee, currencySymbol)} />}
             {(request.status === 'cancelled' || request.status === 'rejected') && request.declineReason && (
-              <InfoRow label="Rejection reason" val={request.declineReason} />
+              <InfoRow label={request.isNearbyRequest && request.status === 'cancelled' ? 'Closed' : 'Reason'} val={request.declineReason} />
             )}
           </GGCard>
 
@@ -524,11 +550,14 @@ export function SPPrescriptionDetailScreen() {
           {canDecide && !showReject && (
             <GGCard padding="24px">
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>
-                Accept or Reject
+                {request.isNearbyRequest ? 'Send a price or decline' : 'Accept or Reject'}
               </div>
               <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '14px' }}>
+                {request.isNearbyRequest
+                  ? 'This prescription went to every registered pharmacy nearby. The patient compares prices and chooses one. '
+                  : ''}
                 Review the prescription. If available, add items with quantity and amount
-                {isDelivery ? ', include the delivery fee,' : ''} then accept. If not available, reject with a reason.
+                {isDelivery ? ', include the delivery fee,' : ''} then accept. If not available, {request.isNearbyRequest ? 'decline' : 'reject'} with a reason.
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '12px' }}>
@@ -584,7 +613,7 @@ export function SPPrescriptionDetailScreen() {
                   Accept &amp; Send Pricing →
                 </GGButton>
                 <GGButton variant="danger" size="md" fullWidth onClick={() => { setShowReject(true); setActionError(null) }}>
-                  Reject Prescription
+                  {request.isNearbyRequest ? 'Decline' : 'Reject Prescription'}
                 </GGButton>
               </div>
             </GGCard>
@@ -619,7 +648,9 @@ export function SPPrescriptionDetailScreen() {
             <GGCard padding="24px">
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Waiting on Patient</div>
               <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>
-                Your quote was sent. The patient can accept or decline before you upload an invoice.
+                {request.isNearbyRequest
+                  ? 'Your price was sent. The patient is comparing nearby pharmacies. If they choose you, you upload the invoice next.'
+                  : 'Your quote was sent. The patient can accept or decline before you upload an invoice.'}
               </div>
             </GGCard>
           )}

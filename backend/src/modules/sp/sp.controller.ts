@@ -1,3 +1,4 @@
+import { UpdateProviderLicencesDto } from './dto/provider-licences.dto'
 import {
   Body,
   Controller,
@@ -162,6 +163,12 @@ export class SpController {
   updateProfile(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProviderProfileDto) {
     return this.spService.updateProfile(user.sub, dto)
   }
+
+  @Get('settings/licences')
+  getLicences(@CurrentUser() user: AuthenticatedUser) { return this.spService.getLicences(user.sub) }
+
+  @Patch('settings/licences')
+  updateLicences(@CurrentUser() user: AuthenticatedUser, @Body() dto: UpdateProviderLicencesDto) { return this.spService.updateLicences(user.sub, dto) }
 
   @Get('settings')
   getSettings(@CurrentUser() user: AuthenticatedUser) {

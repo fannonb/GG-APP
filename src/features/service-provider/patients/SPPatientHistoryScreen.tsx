@@ -7,10 +7,13 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route } from '@/router/routes'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { useSPCurrency } from '@/hooks/useCurrency'
+import { Pager, usePaged } from '@/components/paging'
 
 type SortMode = 'lastVisit' | 'billedHigh' | 'visitsHigh' | 'nameAsc'
 
 export function SPPatientHistoryScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
   const { data: patients = [], isLoading } = useSPPatients()
   const { isMobile } = useResponsive()
@@ -58,6 +61,7 @@ export function SPPatientHistoryScreen() {
       return 0
     })
   }, [patients, search, sortMode])
+  const { pageItems: pagedPatients, pager } = usePaged(filteredPatients, `${search}|${sortMode}`)
 
   if (isLoading) {
     return (
@@ -257,7 +261,7 @@ export function SPPatientHistoryScreen() {
           
           /* MOBILE RESPONSIVE PATIENT LIST */
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {filteredPatients.map(patient => {
+            {pagedPatients.map(patient => {
               const hasGender = patient.gender && patient.gender !== 'Not specified' && patient.gender !== 'Unknown'
               const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null
               const hasAge = age !== null && !isNaN(age) && age > 0
@@ -317,7 +321,7 @@ export function SPPatientHistoryScreen() {
                         Billed
                       </div>
                       <div style={{ fontSize: '12px', fontWeight: 800, color: C.navy800, fontFamily: font.family, marginTop: '1px' }}>
-                        {formatCurrency(patient.totalSpent)}
+                        {formatCurrency(patient.totalSpent, currency)}
                       </div>
                     </div>
                   </div>
@@ -381,7 +385,7 @@ export function SPPatientHistoryScreen() {
                 </tr>
               </thead>
               <tbody>
-                {filteredPatients.map((patient, index) => {
+                {pagedPatients.map((patient, index) => {
                   const hasGender = patient.gender && patient.gender !== 'Not specified' && patient.gender !== 'Unknown'
                   const age = patient.dob ? new Date().getFullYear() - new Date(patient.dob).getFullYear() : null
                   const hasAge = age !== null && !isNaN(age) && age > 0
@@ -427,7 +431,7 @@ export function SPPatientHistoryScreen() {
                       </td>
 
                       <td style={{ padding: '14px 14px', fontSize: '14px', fontWeight: 800, color: C.navy800 }}>
-                        {formatCurrency(patient.totalSpent)}
+                        {formatCurrency(patient.totalSpent, currency)}
                       </td>
 
                       <td style={{ padding: '14px 18px', textAlign: 'right' }}>
@@ -466,6 +470,7 @@ export function SPPatientHistoryScreen() {
           </div>
         )}
 
+        <Pager {...pager} />
       </div>
     </SPLayout>
   )

@@ -71,6 +71,10 @@ export class StorageService {
         region,
         forcePathStyle: (configService.get<string>('storage.forcePathStyle') ?? 'true') !== 'false',
         credentials: { accessKeyId, secretAccessKey },
+        // The SDK otherwise signs a CRC32 checksum header into every upload, which
+        // S3-compatible providers can reject with SignatureDoesNotMatch.
+        requestChecksumCalculation: 'WHEN_REQUIRED',
+        responseChecksumValidation: 'WHEN_REQUIRED',
       })
       this.logger.log(`Object storage enabled (bucket "${this.bucket}").`)
     } else {

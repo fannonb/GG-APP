@@ -29,7 +29,6 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { formatAmount, formatDate, formatTime12h } from '@/utils/format'
 import { SPNewDashboardScreen } from './SPNewDashboardScreen'
 import { SPDashboardWorkspace } from './SPDashboardWorkspace'
-import { InstallAppPrompt } from '@/components/InstallApp'
 
 const SEEN_CANCELLED_APPT_KEY = 'ggapp.spSeenCancelledAppointmentNotifications'
 
@@ -85,7 +84,7 @@ export function SPDashboardScreen() {
   const navigate = useNavigate()
   const { isMobile, isDesktop } = useResponsive()
   const { spMode } = useAuthStore()
-  const { data, isLoading } = useSPDashboard()
+  const { data, isLoading, error: dashboardError, refetch: refetchDashboard } = useSPDashboard()
   const { data: healthNews } = useHealthNews()
   const { buildSetupSteps, onboardingComplete, profileSettingsTab } = useSpOnboardingProgress()
   const markNotificationRead = useMarkSPNotificationReadMutation()
@@ -152,6 +151,18 @@ export function SPDashboardScreen() {
 
   if (spMode === 'new') {
     return <SPNewDashboardScreen />
+  }
+
+  if (dashboardError && !data) {
+    return (
+      <SPLayout title="Dashboard">
+        <GGCard padding="24px">
+          <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>We couldn’t load your dashboard</div>
+          <div style={{ fontSize: '13px', color: C.textSub, marginTop: 6, lineHeight: 1.5, fontFamily: font.family }}>Something went wrong on our side. Your data is safe. Try again in a moment.</div>
+          <button type="button" onClick={() => void refetchDashboard()} style={{ marginTop: 14, padding: '9px 16px', borderRadius: 10, border: 'none', background: C.blue500, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: font.family }}>Try again</button>
+        </GGCard>
+      </SPLayout>
+    )
   }
 
   if (isLoading || !data) {
@@ -532,7 +543,8 @@ export function SPDashboardScreen() {
 
   return (
     <SPLayout
-      title={isDesktop ? greetingLine : 'Dashboard'}
+      title={isDesktop ? sp.name : 'Dashboard'}
+      eyebrow={isDesktop ? greeting : undefined}
       titleIcon={isDesktop ? countryFlag(22) : undefined}
       notifCount={unreadCount}
     >
@@ -548,7 +560,7 @@ export function SPDashboardScreen() {
           }}
         >
           <div style={{ minWidth: 0, flex: 1 }}>
-            {/* On desktop the greeting is the page title in the top bar */}
+            {/* On desktop the greeting and name are the page title in the top bar */}
             {!isDesktop && (
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '2px' }}>
                 {countryFlag(16)}
@@ -633,7 +645,6 @@ export function SPDashboardScreen() {
           onStepAction={handleStepAction}
         />
 
-        <InstallAppPrompt variant="card" />
         <HealthNewsSection articles={healthNews} />
       </div>
     </SPLayout>

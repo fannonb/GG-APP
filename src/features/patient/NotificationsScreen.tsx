@@ -8,6 +8,7 @@ import { useNotificationsStore } from '@/store/notifications.store'
 import type { Notification, NotificationType } from '@/types/user.types'
 import { formatRelativeTime } from '@/utils/format'
 import { resolvePatientNotificationRoute } from './notification-routing'
+import { Pager, usePaged } from '@/components/paging'
 
 type TypeConfig = { color: string; bg: string; icon: React.ReactNode }
 
@@ -27,7 +28,7 @@ const FILTERS = [
   ['appointment', 'Appointments'],
   ['payment', 'Payments'],
   ['invoice', 'Invoices'],
-  ['credit', 'Credit'],
+  ['credit', 'Allocation'],
 ] as const
 
 export function NotificationsScreen() {
@@ -46,6 +47,8 @@ export function NotificationsScreen() {
     if (filter === 'unread') return notifications.filter(notification => !notification.read)
     return notifications.filter(notification => notification.type === filter)
   }, [filter, notifications])
+
+  const { pageItems: pagedNotifications, pager } = usePaged(filteredNotifications, filter)
 
   const handleMarkAllRead = async () => {
     const unreadNotifications = notifications.filter(notification => !notification.read)
@@ -114,7 +117,7 @@ export function NotificationsScreen() {
           </GGCard>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {filteredNotifications.map(notification => {
+            {pagedNotifications.map(notification => {
               const config = TYPE_CONFIG[notification.type] ?? TYPE_CONFIG.system
               return (
                 <div
@@ -156,6 +159,7 @@ export function NotificationsScreen() {
                 </div>
               )
             })}
+            <Pager {...pager} />
           </div>
         )}
       </div>

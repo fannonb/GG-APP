@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { C, font, radius } from '@/design-system/tokens'
 import { ROUTES } from '@/router/routes'
 import { useInstallPrompt } from '@/hooks/useInstallPrompt'
-import { IOSInstallSheet } from '@/components/InstallApp'
+import { BrowserInstallSheet, IOSInstallSheet } from '@/components/InstallApp'
+import { triggerIOSProfileInstall } from '@/services/install-prompt'
 
 const CYAN_DEEP = '#0B7BC0'
 const CYAN_MID = '#1A9BE6'
 const MARK_LIGHT = '/gg-mark-light.png'
+const WORDMARK_LIGHT = '/gg-wordmark-light.png'
 
 const s = { stroke: 'currentColor', strokeWidth: 1.7, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
 const HOW_IT_WORKS: Array<{ title: string; desc: string; icon: ReactNode }> = [
@@ -58,6 +60,8 @@ export function OnboardingScreen() {
   const install = useInstallPrompt()
   const [step, setStep] = useState(0)
   const [showIOS, setShowIOS] = useState(false)
+  const [showBrowser, setShowBrowser] = useState(false)
+  const [autoProfile, setAutoProfile] = useState(false)
 
   // The install step only appears where installing is actually possible.
   const steps = install.canInstall ? ['welcome', 'how', 'install'] as const : ['welcome', 'how', 'done'] as const
@@ -66,8 +70,19 @@ export function OnboardingScreen() {
   const next = () => (step < steps.length - 1 ? setStep(step + 1) : finish())
 
   const startInstall = async () => {
-    if (install.mode === 'ios') { setShowIOS(true); return }
-    await install.install()
+    if (install.mode === 'ios') {
+      if (install.iosBrowser === 'safari') {
+        triggerIOSProfileInstall()
+        setAutoProfile(true)
+      }
+      setShowIOS(true)
+      return
+    }
+    const accepted = await install.install()
+    if (!accepted && (install.mode === 'macos' || install.mode === 'manual')) {
+      setShowBrowser(true)
+      return
+    }
     finish()
   }
 
@@ -123,9 +138,10 @@ export function OnboardingScreen() {
         )}
 
         {current === 'install' && (
-          <div style={{ textAlign: 'center' }}>
-            <img src="/icons/icon-192.png" alt="" width={96} height={96} style={{ borderRadius: 22, boxShadow: '0 12px 30px rgba(13,30,66,0.18)' }} />
-            <h1 style={{ margin: '28px 0 10px', fontSize: 26, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>Add GG’APP to your home screen</h1>
+          <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <img src={MARK_LIGHT} alt="" aria-hidden style={{ width: 92, height: 'auto', display: 'block' }} />
+            <img src={WORDMARK_LIGHT} alt="GG'APP" style={{ height: 21, width: 'auto', display: 'block', marginTop: 14 }} />
+            <h1 style={{ margin: '24px 0 10px', fontSize: 26, fontWeight: 800, color: C.text, lineHeight: 1.2 }}>Add GG’APP to your home screen</h1>
             <p style={{ margin: 0, fontSize: 16, color: C.textSub, lineHeight: 1.6 }}>
               Open it like any other app. It loads faster, works on a weak connection, and needs no app store.
             </p>
@@ -158,7 +174,8 @@ export function OnboardingScreen() {
         )}
       </div>
 
-      {showIOS && <IOSInstallSheet onClose={() => { setShowIOS(false); finish() }} />}
+      {showIOS && <IOSInstallSheet autoTriggeredProfile={autoProfile} onClose={() => { setShowIOS(false); finish() }} />}
+      {showBrowser && <BrowserInstallSheet onClose={() => { setShowBrowser(false); finish() }} />}
     </div>
   )
 }

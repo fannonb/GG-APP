@@ -310,6 +310,27 @@ export function useCreatePrescriptionRequestMutation() {
   })
 }
 
+export function useSelectPrescriptionOfferMutation() {
+  const queryClient = useQueryClient()
+  const userMode = useAuthStore(s => s.userMode)
+
+  return useMutation({
+    mutationFn: ({ id, offerId }: { id: string; offerId: string }) =>
+      patientService.selectPrescriptionOffer(id, offerId),
+    onSuccess: (request) => {
+      queryClient.setQueryData(
+        queryKeys.patient.prescriptionRequests(userMode),
+        (current: import('@/types/prescription.types').PrescriptionRequest[] | undefined) =>
+          current?.map(item => (item.id === request.id ? request : item)),
+      )
+      void queryClient.invalidateQueries({ queryKey: queryKeys.patient.prescriptionRequests(userMode) })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.sp.prescriptionRequests(useAuthStore.getState().spMode),
+      })
+    },
+  })
+}
+
 export function useMarkPrescriptionQuoteReviewedMutation() {
   const queryClient = useQueryClient()
   const userMode = useAuthStore(s => s.userMode)

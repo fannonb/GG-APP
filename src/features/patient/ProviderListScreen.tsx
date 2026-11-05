@@ -7,6 +7,7 @@ import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useLocationStore } from '@/store/location.store'
 import { useDrivingDistances } from '@/hooks/useDrivingDistances'
 import { truncate } from '@/utils/format'
+import { Pager, usePaged } from '@/components/paging'
 
 function Spinner() {
   return (
@@ -125,6 +126,8 @@ export function ProviderListScreen() {
     return list
   }, [enrichedProviders, filter, position])
 
+  const { pageItems: pagedProviders, pager } = usePaged(filteredProviders, filter)
+
   const locationActive = locState === 'active'
 
   return (
@@ -182,7 +185,7 @@ export function ProviderListScreen() {
           </GGCard>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {filteredProviders.map(provider => (
+            {pagedProviders.map(provider => (
               <GGCard key={provider.id} padding="20px" onClick={() => navigate(`/app/services/provider/${provider.id}`, { state: { provider } })}>
                 <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
                   <div style={{ width: 56, height: 56, borderRadius: '14px', background: `linear-gradient(135deg, ${C.blue100}, ${C.bg})`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, border: `1px solid ${C.border}`, overflow: 'hidden' }}>
@@ -224,6 +227,7 @@ export function ProviderListScreen() {
                 </div>
               </GGCard>
             ))}
+            <Pager {...pager} />
           </div>
         )}
       </div>

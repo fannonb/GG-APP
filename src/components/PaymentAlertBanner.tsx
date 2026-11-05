@@ -56,7 +56,7 @@ export function PaymentAlertBanner({ audience, items, onAction }: PaymentAlertBa
   const copy = getAudienceCopy(audience, items.length, primary)
   const amountLabel =
     primary.amount !== undefined
-      ? formatCurrency(primary.amount, primary.currency ?? 'Z$')
+      ? formatCurrency(primary.amount, primary.currency ?? '')
       : null
 
   return (

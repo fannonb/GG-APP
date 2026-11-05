@@ -26,6 +26,7 @@ import { NotificationsScreen }    from '@/features/patient/NotificationsScreen'
 import { PrescriptionRequestsScreen } from '@/features/patient/PrescriptionRequestsScreen'
 import { PrescriptionConfirmScreen } from '@/features/patient/PrescriptionConfirmScreen'
 import { PrescriptionDetailScreen } from '@/features/patient/PrescriptionDetailScreen'
+import { PharmacyRequestScreen } from '@/features/patient/PharmacyRequestScreen'
 import { NotFoundPage } from '@/components/errors/NotFoundPage'
 
 export function PatientRouter() {
@@ -34,7 +35,10 @@ export function PatientRouter() {
       <Route index element={<Navigate to="dashboard" replace />} />
       <Route path="dashboard"              element={<DashboardScreen />} />
       <Route path="services"               element={<FindServiceScreen />} />
+      {/* Pharmacies are not browsed one by one: a prescription goes to every pharmacy nearby. */}
+      <Route path="services/pharmacy"      element={<Navigate to="/app/pharmacy" replace />} />
       <Route path="services/:category"     element={<ProviderListScreen />} />
+      <Route path="pharmacy"               element={<PharmacyRequestScreen />} />
       <Route path="services/provider/:id"  element={<ProviderProfileScreen />} />
       <Route path="booking"                element={<EngageFormScreen />} />
       <Route path="booking/confirm"        element={<BookingConfirmScreen />} />

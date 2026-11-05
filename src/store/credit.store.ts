@@ -19,7 +19,7 @@ function pushCreditApprovalNotification(app: CreditApplication, amount: number) 
       title: isIncrease ? 'Limit Increase Approved' : 'Credit Application Approved',
       body: isIncrease
         ? `Your limit increase of ${amount} was approved. Your updated balance is ready to use.`
-        : `Your credit application ${app.reference} was approved. ${amount} has been loaded to your wallet.`,
+        : `Your credit application ${app.reference} was approved. ${amount} has been loaded to your allocation.`,
       time: new Date().toISOString(),
       read: false,
       screen: '/app/credit',

@@ -10,12 +10,3 @@ export function isCreditRunningLow(available: number, countryCode: string): bool
   if (available <= 0) return false
   return available <= getLowCreditThreshold(countryCode)
 }
-
-export function wouldBeLowAfterPayment(
-  available: number,
-  paymentAmount: number,
-  countryCode: string,
-): boolean {
-  const remaining = available - paymentAmount
-  return remaining > 0 && remaining <= getLowCreditThreshold(countryCode)
-}

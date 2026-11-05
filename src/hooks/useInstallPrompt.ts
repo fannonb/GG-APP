@@ -10,7 +10,7 @@ import {
 /** Install availability for the current device, plus the actions the install UI needs. */
 export function useInstallPrompt() {
   const state = useSyncExternalStore(subscribeInstall, getInstallState, getInstallState)
-  const canInstall = state.mode === 'native' || state.mode === 'ios'
+  const canInstall = state.mode !== 'installed' && state.mode !== 'unsupported'
   return {
     ...state,
     canInstall,

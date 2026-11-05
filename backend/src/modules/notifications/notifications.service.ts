@@ -5,6 +5,7 @@ import webpush from 'web-push'
 import { Expo, type ExpoPushMessage } from 'expo-server-sdk'
 import { PrismaService, type CreatedNotification } from '../../prisma/prisma.service'
 import type { PushSubscribeDto } from './dto/push-subscribe.dto'
+import { validatePushDestination, validatePushKeys } from './push-destination'
 
 export interface PushPayload {
   title: string
@@ -77,6 +78,11 @@ export class NotificationsService implements OnModuleInit {
     }
     if (!isExpo && (!subscription.keys?.p256dh || !subscription.keys?.auth)) {
       return { success: false, message: 'Web push subscription keys are required' }
+    }
+
+    if (!isExpo) {
+      validatePushDestination(address)
+      validatePushKeys(subscription.keys)
     }
 
     const data = {
@@ -162,9 +168,13 @@ export class NotificationsService implements OnModuleInit {
   private async sendWebPush(deviceId: string, endpoint: string, keys: unknown, payload: PushPayload) {
     if (!this.vapidConfigured) return
     try {
+      // Revalidate legacy records too; rejecting new subscriptions alone is insufficient.
+      validatePushDestination(endpoint)
+      validatePushKeys(keys as Record<string, string>)
       await webpush.sendNotification(
         { endpoint, keys: keys as { p256dh: string; auth: string } },
         JSON.stringify({ title: payload.title, body: payload.body ?? '', data: payload.data ?? {} }),
+        { timeout: 10_000, TTL: 60 * 60 },
       )
     } catch (error) {
       const statusCode = (error as { statusCode?: number }).statusCode

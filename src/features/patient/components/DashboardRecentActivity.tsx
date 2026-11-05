@@ -47,7 +47,7 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
             Recent activity
           </div>
           <div style={{ fontSize: 12, color: C.textSub, marginTop: 2, fontFamily: font.family }}>
-            Last payments from your healthcare credit
+            Last payments from your healthcare allocation
           </div>
         </div>
         <button
@@ -80,7 +80,7 @@ export function DashboardRecentActivity({ transactions, currency, style }: Dashb
             No transactions yet
           </div>
           <div style={{ fontSize: 12, color: C.textSub, marginTop: 4, fontFamily: font.family, maxWidth: '240px', lineHeight: 1.4 }}>
-            Payments made with your healthcare credit will appear here.
+            Payments made with your healthcare allocation will appear here.
           </div>
         </div>
       ) : (

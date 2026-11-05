@@ -10,6 +10,7 @@ import { formatCurrency } from '@/utils/format'
 import { MOCK_INVOICE, MOCK_PROVIDERS } from '@/mock/patient.mock'
 import { ProviderReviewForm } from '@/features/patient/components/ProviderReviewForm'
 import { generateRef } from '@/utils/refgen'
+import { usePatientCurrency } from '@/hooks/useCurrency'
 
 type PaymentSuccessState = {
   walletAmountPaid?: number
@@ -18,6 +19,7 @@ type PaymentSuccessState = {
 }
 
 export function PaymentSuccessScreen() {
+  const currency = usePatientCurrency()
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams<{ id: string }>()
@@ -92,10 +94,10 @@ export function PaymentSuccessScreen() {
           <div style={{ fontSize: '26px', fontWeight: 800, color: C.text, letterSpacing: '-0.02em', marginBottom: '8px' }}>
             {isPartialPay ? 'Partial Payment Confirmed' : 'Payment Confirmed'}
           </div>
-          <div style={{ fontSize: '40px', fontWeight: 800, color: C.success, letterSpacing: '-0.02em', marginBottom: '4px' }}>{formatCurrency(walletPaid)}</div>
+          <div style={{ fontSize: '40px', fontWeight: 800, color: C.success, letterSpacing: '-0.02em', marginBottom: '4px' }}>{formatCurrency(walletPaid, currency)}</div>
           <div style={{ fontSize: '14px', color: C.textSub, marginBottom: '32px' }}>
             {isPartialPay
-              ? `Paid from your GG'APP allocation. Please settle the remaining ${formatCurrency(offAppDue)} directly with ${inv.provider.name}.`
+              ? `Paid from your GG'APP allocation. Please settle the remaining ${formatCurrency(offAppDue, currency)} directly with ${inv.provider.name}.`
               : 'Your provider has been notified. This payment is recorded on your balance.'}
           </div>
 
@@ -105,12 +107,12 @@ export function PaymentSuccessScreen() {
               { label: 'Payment Ref', val: authRef },
               { label: 'Invoice',           val: inv.id },
               { label: 'Service Provider',  val: inv.provider.name },
-              { label: 'Invoice Total',     val: formatCurrency(invoiceAmount) },
-              { label: 'Paid via GG\'APP',  val: formatCurrency(walletPaid) },
+              { label: 'Invoice Total',     val: formatCurrency(invoiceAmount, currency) },
+              { label: 'Paid via GG\'APP',  val: formatCurrency(walletPaid, currency) },
               ...(isPartialPay
-                ? [{ label: 'Off-app due', val: formatCurrency(offAppDue) }]
+                ? [{ label: 'Off-app due', val: formatCurrency(offAppDue, currency) }]
                 : []),
-              { label: 'Payment Method',    val: "GG'APP healthcare credit" },
+              { label: 'Payment Method',    val: "GG'APP healthcare allocation" },
               { label: 'Status',            val: isPartialPay ? 'Partially Paid' : 'Paid' },
               { label: 'Timestamp',         val: new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) },
             ].map(item => (
@@ -123,7 +125,7 @@ export function PaymentSuccessScreen() {
 
           {isPartialPay && (
             <div style={{ padding: '12px 14px', background: C.warningBg, borderRadius: radius.sm, marginBottom: '16px', fontSize: '12px', color: '#8A4D00', lineHeight: 1.6, textAlign: 'left' }}>
-              <strong>Off-app balance:</strong> Settle {formatCurrency(offAppDue)} with {inv.provider.name} outside the app (cash, M-Pesa, card, etc.).
+              <strong>Off-app balance:</strong> Settle {formatCurrency(offAppDue, currency)} with {inv.provider.name} outside the app (cash, M-Pesa, card, etc.).
             </div>
           )}
 

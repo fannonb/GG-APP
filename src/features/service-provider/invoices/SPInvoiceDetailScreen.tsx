@@ -11,6 +11,7 @@ import { formatCurrency, formatDate, formatPhone } from '@/utils/format'
 import { downloadInvoiceAttachment, isImageAttachmentUrl } from '@/utils/invoice-attachment'
 import { useAttachmentPreviewUrl } from '@/hooks/useAttachmentPreviewUrl'
 import type { SPInvoice } from '@/types/invoice.types'
+import { useSPCurrency } from '@/hooks/useCurrency'
 
 type SPInvStatus = 'paid' | 'pending' | 'authorized' | 'rejected'
 
@@ -129,6 +130,7 @@ function AttachmentModal({
 }
 
 export function SPInvoiceDetailScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams<{ id: string }>()
@@ -309,13 +311,13 @@ export function SPInvoiceDetailScreen() {
                 <span style={{ fontSize: '13px', color: C.text, fontFamily: font.family }}>{svc.name}</span>
               </div>
               <span style={{ fontSize: '13px', fontWeight: 700, color: C.text, fontFamily: font.family, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                {formatCurrency(svc.amount)}
+                {formatCurrency(svc.amount, currency)}
               </span>
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '12px', marginTop: '4px', borderTop: `2px solid ${C.navy800}` }}>
             <span style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>Total</span>
-            <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.01em', fontFamily: font.family }}>{formatCurrency(inv.amount)}</span>
+            <span style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, letterSpacing: '-0.01em', fontFamily: font.family }}>{formatCurrency(inv.amount, currency)}</span>
           </div>
         </div>
       </GGCard>
@@ -351,7 +353,7 @@ export function SPInvoiceDetailScreen() {
           </div>
           <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family }}>
             {(inv.offAppAmountDue ?? 0) > 0
-              ? `Patient paid ${formatCurrency(inv.walletAmountPaid ?? 0)} via GG'APP. Collect the remaining ${formatCurrency(inv.offAppAmountDue ?? 0)} off-app.`
+              ? `Patient paid ${formatCurrency(inv.walletAmountPaid ?? 0, currency)} via GG'APP. Collect the remaining ${formatCurrency(inv.offAppAmountDue ?? 0, currency)} off-app.`
               : 'The patient has confirmed this invoice. Settlement will be completed later through the finance partner.'}
           </div>
         </GGCard>
@@ -368,17 +370,17 @@ export function SPInvoiceDetailScreen() {
         <InfoRow label="Appointment"  val={inv.appointmentId ?? '—'} />
         <InfoRow label="Date Issued"  val={formatDate(inv.issueDate)} />
         <InfoRow label="Submitted"    val={formatDate(inv.submittedAt)} />
-        <InfoRow label="Amount"       val={<span style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, fontFamily: font.family }}>{formatCurrency(inv.amount)}</span>} />
+        <InfoRow label="Amount"       val={<span style={{ fontSize: '16px', fontWeight: 800, color: C.navy800, fontFamily: font.family }}>{formatCurrency(inv.amount, currency)}</span>} />
         {(inv.walletAmountPaid != null || inv.offAppAmountDue != null) && (
           <>
             <InfoRow
               label="Paid via GG'APP"
-              val={<span style={{ fontSize: '13px', fontWeight: 700, color: C.success, fontFamily: font.family }}>{formatCurrency(inv.walletAmountPaid ?? 0)}</span>}
+              val={<span style={{ fontSize: '13px', fontWeight: 700, color: C.success, fontFamily: font.family }}>{formatCurrency(inv.walletAmountPaid ?? 0, currency)}</span>}
             />
             {(inv.offAppAmountDue ?? 0) > 0 && (
               <InfoRow
                 label="Off-app due"
-                val={<span style={{ fontSize: '13px', fontWeight: 700, color: C.warning, fontFamily: font.family }}>{formatCurrency(inv.offAppAmountDue ?? 0)}</span>}
+                val={<span style={{ fontSize: '13px', fontWeight: 700, color: C.warning, fontFamily: font.family }}>{formatCurrency(inv.offAppAmountDue ?? 0, currency)}</span>}
               />
             )}
           </>
@@ -517,7 +519,7 @@ export function SPInvoiceDetailScreen() {
           </div>
           <div style={{ fontSize: '12px', color: C.text, lineHeight: 1.6, fontFamily: font.family }}>
             {(inv.offAppAmountDue ?? 0) > 0
-              ? `Patient paid ${formatCurrency(inv.walletAmountPaid ?? 0)} via GG'APP. Collect the remaining ${formatCurrency(inv.offAppAmountDue ?? 0)} off-app.`
+              ? `Patient paid ${formatCurrency(inv.walletAmountPaid ?? 0, currency)} via GG'APP. Collect the remaining ${formatCurrency(inv.offAppAmountDue ?? 0, currency)} off-app.`
               : 'The patient has confirmed this invoice. Finance partner settlement is pending integration.'}
           </div>
         </GGCard>

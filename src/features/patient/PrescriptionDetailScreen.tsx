@@ -7,6 +7,7 @@ import {
   useDeclinePrescriptionQuoteMutation,
   useMarkPrescriptionQuoteReviewedMutation,
   usePatientPrescriptionRequests,
+  useSelectPrescriptionOfferMutation,
 } from '@/hooks/api'
 import { getCountryByCode } from '@/config/countries'
 import { useUserStore } from '@/store/user.store'
@@ -17,9 +18,11 @@ import { formatAmount, formatDate } from '@/utils/format'
 import { downloadInvoiceAttachment } from '@/utils/invoice-attachment'
 import { useAttachmentPreviewUrl } from '@/hooks/useAttachmentPreviewUrl'
 import { ProgressSteps, type ProgressStep } from '@/components/ProgressSteps'
-import type { PrescriptionRequest } from '@/types/prescription.types'
+import type { PrescriptionOffer, PrescriptionRequest } from '@/types/prescription.types'
 import {
+  isChoosingPharmacy,
   isPrescriptionPaid,
+  prescriptionPharmacyLabel,
   prescriptionMedicineSummary,
   prescriptionProgress,
   prescriptionStage,
@@ -132,6 +135,58 @@ function FilePreview({ request, onClose }: { request: PrescriptionRequest; onClo
   )
 }
 
+function OfferCard({
+  offer,
+  delivery,
+  money,
+  choosing,
+  disabled,
+  onChoose,
+}: {
+  offer: PrescriptionOffer
+  delivery: boolean
+  money: (value: number) => string
+  choosing: boolean
+  disabled: boolean
+  onChoose: () => void
+}) {
+  const { isMobile } = useResponsive()
+  const items = offer.quotedItems ?? []
+  const total = (offer.quotedAmount ?? 0) + (delivery ? offer.deliveryFee ?? 0 : 0)
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: radius.md, padding: isMobile ? 14 : 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{offer.provider}</div>
+          <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>
+            {offer.distanceKm.toFixed(1)} km away{offer.rating ? ` · ★ ${offer.rating.toFixed(1)}` : ''}{offer.address ? ` · ${offer.address}` : ''}
+          </div>
+        </div>
+        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{money(total)}</div>
+          {delivery && <div style={{ fontSize: 11, color: C.textSub }}>incl. {money(offer.deliveryFee ?? 0)} delivery</div>}
+        </div>
+      </div>
+      {items.length > 0 && (
+        <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.55 }}>
+          {items.map((item, index) => (
+            <div key={`${offer.id}-${index}`} style={{ display: 'flex', justifyContent: 'space-between', gap: 10 }}>
+              <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {item.name}{item.quantity ? ` × ${item.quantity}` : ''}{item.substitute ? ` (substitute: ${item.substitute})` : ''}
+              </span>
+              <span style={{ color: C.text, fontWeight: 600, whiteSpace: 'nowrap' }}>{money(item.unitPrice * (Number.parseFloat(item.quantity || '1') || 1))}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {offer.pharmacyNotes && <div style={{ fontSize: 12, color: C.textSub, fontStyle: 'italic' }}>“{offer.pharmacyNotes}”</div>}
+      <GGButton variant="primary" size="md" fullWidth loading={choosing} disabled={disabled} onClick={onChoose}>
+        Choose {offer.provider} · {money(total)}
+      </GGButton>
+    </div>
+  )
+}
+
 export function PrescriptionDetailScreen() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -141,6 +196,8 @@ export function PrescriptionDetailScreen() {
   const markReviewed = useMarkPrescriptionQuoteReviewedMutation()
   const acceptQuote = useAcceptPrescriptionQuoteMutation()
   const declineQuote = useDeclinePrescriptionQuoteMutation()
+  const selectOffer = useSelectPrescriptionOfferMutation()
+  const [choosingOfferId, setChoosingOfferId] = useState<string | null>(null)
   const request = (data as PrescriptionRequest[]).find(item => item.id === id)
 
   const [showDecline, setShowDecline] = useState(false)
@@ -170,14 +227,22 @@ export function PrescriptionDetailScreen() {
     )
   }
 
-  const currency = getCountryByCode(request.countryCode ?? '')?.currencySymbol ?? getCountryByCode(u.countryCode)?.currencySymbol ?? '$'
+  const currency = getCountryByCode(request.countryCode ?? '')?.currencySymbol ?? getCountryByCode(u.countryCode)?.currencySymbol ?? ''
   const money = (value: number) => formatAmount(value, currency)
   const stage = prescriptionStage(request)
+  const choosingPharmacy = isChoosingPharmacy(request)
+  const offers = request.offers?.filter(offer => offer.status === 'quoted') ?? []
   const status = stage === 'closed'
-    ? { ...STATUS.closed, label: request.status === 'rejected' ? 'Declined' : 'Cancelled' }
-    : STATUS[stage]
+    ? { ...STATUS.closed, label: request.status === 'rejected' ? 'Declined' : request.status === 'expired' ? 'No pharmacies' : 'Cancelled' }
+    : choosingPharmacy && stage === 'reviewQuote'
+      ? { ...STATUS.reviewQuote, label: 'Choose a pharmacy' }
+      : choosingPharmacy
+        ? { ...STATUS.awaitQuote, label: 'Waiting for prices' }
+        : STATUS[stage]
   const delivery = request.fulfillmentMode === 'delivery'
   const pharmacy = request.provider ?? 'The pharmacy'
+  const radiusKm = request.searchRadiusKm ?? 2
+  const stillWaiting = request.pharmaciesPending ?? 0
   const items = request.quotedItems ?? []
   const hasQuote = request.quotedAmount != null || items.length > 0
   const total = (request.quotedAmount ?? 0) + (request.deliveryFee ?? 0)
@@ -194,7 +259,7 @@ export function PrescriptionDetailScreen() {
   if (stage === 'closed') {
     // Show where the order stopped rather than a misleading "next" step.
     const stopAt = Math.max(currentIndex, 1)
-    steps[stopAt] = { label: request.status === 'rejected' ? 'Declined' : 'Cancelled', state: 'stopped' }
+    steps[stopAt] = { label: request.status === 'rejected' ? 'Declined' : request.status === 'expired' ? 'No pharmacies' : 'Cancelled', state: 'stopped' }
   }
 
   const handleAcceptQuote = async () => {
@@ -205,6 +270,49 @@ export function PrescriptionDetailScreen() {
       setActionError(error instanceof Error ? error.message : 'Unable to accept this quote.')
     }
   }
+
+  const handleChooseOffer = async (offerId: string) => {
+    setActionError(null)
+    setChoosingOfferId(offerId)
+    try {
+      await selectOffer.mutateAsync({ id: request.id, offerId })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to choose this pharmacy.')
+    } finally {
+      setChoosingOfferId(null)
+    }
+  }
+
+  const handleCancelRequest = async () => {
+    setActionError(null)
+    try {
+      await declineQuote.mutateAsync({ id: request.id, reason: declineReason.trim() || undefined })
+      setShowDecline(false)
+      setDeclineReason('')
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to cancel this request.')
+    }
+  }
+
+  const cancelControls = showDecline ? (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <GGTextarea
+        label="Reason (optional)"
+        value={declineReason}
+        onChange={event => setDeclineReason(event.target.value)}
+        rows={2}
+        placeholder="e.g. I got it elsewhere"
+      />
+      <div style={{ display: 'flex', gap: 10 }}>
+        <GGButton variant="secondary" size="md" fullWidth onClick={() => { setShowDecline(false); setDeclineReason(''); setActionError(null) }}>Keep request</GGButton>
+        <GGButton variant="danger" size="md" fullWidth loading={declineQuote.isPending} onClick={() => void handleCancelRequest()}>Cancel request</GGButton>
+      </div>
+    </div>
+  ) : (
+    <button type="button" onClick={() => { setShowDecline(true); setActionError(null) }} style={{ ...linkBtn, alignSelf: 'flex-start', padding: '4px 0', color: C.textSub, fontWeight: 600, fontSize: 13 }}>
+      Cancel this request
+    </button>
+  )
 
   const handleDeclineQuote = async () => {
     if (declineReason.trim().length < 3) {
@@ -223,7 +331,24 @@ export function PrescriptionDetailScreen() {
 
   // ── Next step: one message and at most one main action for the current stage ──
   let next: { title: string; body: ReactNode; actions?: ReactNode }
-  switch (stage) {
+  const view = choosingPharmacy && (stage === 'reviewQuote' || stage === 'awaitQuote')
+    ? (`choose:${stage}` as const)
+    : stage
+  switch (view) {
+    case 'choose:reviewQuote':
+      next = {
+        title: `${offers.length} ${offers.length === 1 ? 'pharmacy has' : 'pharmacies have'} sent a price`,
+        body: `Compare them below and choose one. The pharmacy you choose sends an invoice for you to approve. Nothing is charged until then.${stillWaiting > 0 ? ` ${stillWaiting} more may still reply.` : ''}`,
+        actions: cancelControls,
+      }
+      break
+    case 'choose:awaitQuote':
+      next = {
+        title: `Waiting for pharmacies within ${radiusKm} km`,
+        body: `Your prescription went to ${request.pharmaciesContacted ?? 'nearby'} registered ${request.pharmaciesContacted === 1 ? 'pharmacy' : 'pharmacies'}${request.widenedAt ? ' after nobody within 2 km could fill it' : ''}. They check stock and send a price${delivery ? ', including delivery' : ''}. We’ll notify you as prices arrive.${request.pharmaciesDeclined ? ` ${request.pharmaciesDeclined} declined so far.` : ''}`,
+        actions: cancelControls,
+      }
+      break
     case 'reviewQuote':
       next = {
         title: `${pharmacy} sent a price`,
@@ -255,7 +380,7 @@ export function PrescriptionDetailScreen() {
     case 'approvePayment':
       next = {
         title: 'Approve the invoice',
-        body: `${pharmacy} sent an invoice${total > 0 ? ` for ${money(total)}` : ''}. Approve it to pay with your GG'APP credit.`,
+        body: `${pharmacy} sent an invoice${total > 0 ? ` for ${money(total)}` : ''}. Approve it to pay with your GG'APP allocation.`,
         actions: (
           <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(route.patientInvoice(request.invoiceId!))}>
             Review &amp; approve{total > 0 ? ` ${money(total)}` : ''}
@@ -288,21 +413,25 @@ export function PrescriptionDetailScreen() {
     case 'done':
       next = {
         title: `${delivery ? 'Delivered' : 'Collected'}${request.fulfilledAt ? ` on ${formatDate(request.fulfilledAt, { month: 'short', day: 'numeric', year: 'numeric' })}` : ''}`,
-        body: paid ? `Paid${total > 0 ? ` ${money(total)}` : ''} with your GG'APP credit.` : 'This order is complete.',
-        actions: request.providerId != null ? (
-          <GGButton variant="secondary" size="md" fullWidth={isMobile} onClick={() => navigate(route.providerProfile(request.providerId!))}>
-            Order again from {pharmacy}
+        body: paid ? `Paid${total > 0 ? ` ${money(total)}` : ''} with your GG'APP allocation.` : 'This order is complete.',
+        actions: (
+          <GGButton variant="secondary" size="md" fullWidth={isMobile} onClick={() => navigate(ROUTES.PHARMACY)}>
+            Send another prescription
           </GGButton>
-        ) : undefined,
+        ),
       }
       break
     case 'closed':
       next = {
-        title: request.status === 'rejected' ? `${pharmacy} couldn’t fill this` : 'This order was cancelled',
-        body: request.declineReason ? `Reason: ${request.declineReason}` : 'You can send the same prescription to another pharmacy.',
+        title: request.status === 'expired'
+          ? 'No available pharmacies'
+          : request.status === 'rejected' ? `${pharmacy} couldn’t fill this` : 'This order was cancelled',
+        body: request.status === 'expired'
+          ? `No registered pharmacy within ${radiusKm} km could fill this prescription. Try a different pin, or try again later.`
+          : request.declineReason ? `Reason: ${request.declineReason}` : 'You can send the same prescription again.',
         actions: (
-          <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(route.providerList('pharmacy'))}>
-            Try another pharmacy
+          <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(ROUTES.PHARMACY)}>
+            Send it again
           </GGButton>
         ),
       }
@@ -323,6 +452,30 @@ export function PrescriptionDetailScreen() {
         {actionError && <div role="alert" style={{ padding: '10px 12px', borderRadius: radius.sm, background: C.errorBg, color: C.error, fontSize: 13 }}>{actionError}</div>}
       </div>
     </div>
+  )
+
+  const offersCard = choosingPharmacy && offers.length > 0 && (
+    <GGCard padding={isMobile ? '16px' : '20px'}>
+      <div style={{ ...cardTitle, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8 }}>
+        <span>Prices from nearby pharmacies</span>
+        <span style={{ fontSize: 12, fontWeight: 500, color: C.textSub }}>Within {radiusKm} km</span>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        {[...offers]
+          .sort((a, b) => ((a.quotedAmount ?? 0) + (a.deliveryFee ?? 0)) - ((b.quotedAmount ?? 0) + (b.deliveryFee ?? 0)))
+          .map(offer => (
+            <OfferCard
+              key={offer.id}
+              offer={offer}
+              delivery={delivery}
+              money={money}
+              choosing={choosingOfferId === offer.id}
+              disabled={selectOffer.isPending}
+              onChoose={() => void handleChooseOffer(offer.id)}
+            />
+          ))}
+      </div>
+    </GGCard>
   )
 
   const priceCard = hasQuote && (
@@ -377,7 +530,8 @@ export function PrescriptionDetailScreen() {
       <div style={{ ...cardTitle, marginBottom: 2 }}>Order details</div>
       <DetailRow label="Sent">{formatDate(request.submittedAt, { month: 'short', day: 'numeric', year: 'numeric' })}</DetailRow>
       <DetailRow label="For">{request.forSelf ? 'You' : request.for}</DetailRow>
-      <DetailRow label={delivery ? 'Delivery to' : 'Pick up at'}>{delivery ? request.deliveryAddress ?? '—' : pharmacy}</DetailRow>
+      <DetailRow label={delivery ? 'Delivery to' : 'Pick up at'}>{delivery ? request.deliveryAddress ?? '—' : choosingPharmacy ? 'The pharmacy you choose' : pharmacy}</DetailRow>
+      {choosingPharmacy && <DetailRow label="Sent to">{prescriptionPharmacyLabel({ ...request, offers: [] })} within {radiusKm} km</DetailRow>}
       {request.patientNotes && <DetailRow label="Your note">{request.patientNotes}</DetailRow>}
       {request.pharmacyNotes && <DetailRow label={`Note from ${pharmacy}`}>{request.pharmacyNotes}</DetailRow>}
 
@@ -411,7 +565,7 @@ export function PrescriptionDetailScreen() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? 18 : 21, fontWeight: 800, color: C.text, lineHeight: 1.25 }}>{prescriptionMedicineSummary(request)}</div>
               <div style={{ fontSize: 13, color: C.textSub, marginTop: 4 }}>
-                {pharmacy} · {request.forSelf ? 'For you' : `For ${request.for}`} · {delivery ? 'Delivery' : 'Pick up'}
+                {prescriptionPharmacyLabel(request)} · {request.forSelf ? 'For you' : `For ${request.for}`} · {delivery ? 'Delivery' : 'Pick up'}
               </div>
               <div style={{ fontSize: 12, color: C.textLight, marginTop: 2 }}>{request.id}</div>
             </div>
@@ -424,6 +578,7 @@ export function PrescriptionDetailScreen() {
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'minmax(0, 1.5fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>
             {nextCard}
+            {offersCard}
             {priceCard}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16, minWidth: 0 }}>

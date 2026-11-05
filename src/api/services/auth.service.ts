@@ -130,7 +130,12 @@ export const authService = {
     return data
   },
 
-  async getSPApplicationStatus(applicationId: string): Promise<SPApplicationStatusResponse> {
+  async getApplicationAccess(applicationId: string, credentials: { email: string; password: string }): Promise<{ accessToken: string; expiresAt: number }> {
+    const { data } = await apiClient.post<{ accessToken: string; expiresAt: number }>(`/auth/register/sp/${encodeURIComponent(applicationId)}/access`, credentials)
+    return data
+  },
+
+  async getSPApplicationStatus(applicationId: string, applicationToken?: string): Promise<SPApplicationStatusResponse> {
     if (isMockApi) {
       await mockDelay(400)
       return {
@@ -144,6 +149,7 @@ export const authService = {
 
     const { data } = await apiClient.get<SPApplicationStatusResponse>(
       `/auth/register/sp/${applicationId}/status`,
+      { headers: { 'X-Application-Token': applicationToken } },
     )
     return data
   },
@@ -321,9 +327,9 @@ export const authService = {
     return data
   },
 
-  async getApplicationMessages(applicationId: string): Promise<Array<{ id: string; author: 'admin' | 'provider'; kind: string; body: string; at: string }>> {
+  async getApplicationMessages(applicationId: string, applicationToken?: string): Promise<Array<{ id: string; author: 'admin' | 'provider'; kind: string; body: string; at: string }>> {
     if (isMockApi) return []
-    const { data } = await apiClient.get(`/auth/register/sp/${applicationId}/messages`)
+    const { data } = await apiClient.get(`/auth/register/sp/${applicationId}/messages`, { headers: { 'X-Application-Token': applicationToken } })
     return data
   },
 

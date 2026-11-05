@@ -6,6 +6,7 @@ import { RedisService } from '../../../redis/redis.service'
 import type { AuthenticatedUser } from '../../../common/types/authenticated-user.type'
 
 interface JwtPayload {
+  typ?: string
   sub: string
   email: string
   role: 'patient' | 'sp' | 'admin'
@@ -34,11 +35,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
+      algorithms: ['HS256'],
       secretOrKey: configService.getOrThrow<string>('auth.accessSecret'),
     })
   }
 
   async validate(payload: JwtPayload): Promise<AuthenticatedUser> {
+    if (payload.typ || typeof payload.sub !== 'string' || !payload.sub ||
+        typeof payload.email !== 'string' || !['patient', 'sp', 'admin'].includes(payload.role)) {
+      throw new UnauthorizedException('Invalid access token')
+    }
     const now = Date.now()
     const sessionState = payload.jti
       ? this.sessionState(payload.jti, now)

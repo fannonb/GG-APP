@@ -59,7 +59,7 @@ export function FinancePartnerSelector({
           </div>
           <div style={{ fontSize: '12px', color: C.textSub, marginTop: '1px', fontFamily: font.family }}>
             {single
-              ? `Healthcare credit${countryName ? ` in ${countryName}` : ''} is provided by ${partners[0].name}`
+              ? `Healthcare allocation${countryName ? ` in ${countryName}` : ''} is provided by ${partners[0].name}`
               : "Select the lender you'd like to apply with"}
           </div>
         </div>

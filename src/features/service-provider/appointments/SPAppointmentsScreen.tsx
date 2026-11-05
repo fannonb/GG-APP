@@ -12,6 +12,7 @@ import { SPWeekCalendar } from './SPWeekCalendar'
 import { formatTime12h } from '@/utils/format'
 import { appointmentHasRecordedVisit, getAppointmentDisplayStatus, getDaysUntilAppointment } from '@/utils/appointments'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { Pager, usePaged } from '@/components/paging'
 
 type TabId = 'action' | 'upcoming' | 'calendar' | 'past'
 type Kind = 'new' | 'unrecorded' | 'uninvoiced' | 'rejected' | 'upcoming' | 'awaiting' | 'paid' | 'done' | 'cancelled'
@@ -262,6 +263,30 @@ function groupBy(list: Appointment[], keyOf: (apt: Appointment) => string) {
   return groups
 }
 
+/** One tab's appointments: ten per page, grouped under headings within each page. */
+function PagedGroups({ items, heading, resetKey, kindOf, invoiceByAppointment }: {
+  items: { apt: Appointment }[]
+  heading: (apt: Appointment) => string
+  resetKey: string
+  kindOf: Map<string, Kind>
+  invoiceByAppointment: Map<string, SPInvoice>
+}) {
+  const { pageItems, pager } = usePaged(items, resetKey)
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {groupBy(pageItems.map(i => i.apt), heading).map(group => (
+        <section key={group.key} aria-label={group.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <GroupHeading>{group.key}</GroupHeading>
+          {group.items.map(apt => (
+            <AppointmentCard key={apt.id} apt={apt} kind={kindOf.get(apt.id)!} invoice={invoiceByAppointment.get(apt.id)} />
+          ))}
+        </section>
+      ))}
+      <Pager {...pager} />
+    </div>
+  )
+}
+
 const EMPTY: Record<TabId, { title: string; sub: string }> = {
   action: { title: "You're all caught up", sub: 'New requests, visits to record and invoices to send will show up here.' },
   upcoming: { title: 'No upcoming visits', sub: 'Confirmed appointments will appear here in date order.' },
@@ -310,16 +335,7 @@ export function SPAppointmentsScreen() {
   const kindOf = new Map(classified.map(i => [i.apt.id, i.kind]))
 
   const renderGroups = (items: { apt: Appointment }[], heading: (apt: Appointment) => string) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {groupBy(items.map(i => i.apt), heading).map(group => (
-        <section key={group.key} aria-label={group.key} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <GroupHeading>{group.key}</GroupHeading>
-          {group.items.map(apt => (
-            <AppointmentCard key={apt.id} apt={apt} kind={kindOf.get(apt.id)!} invoice={invoiceByAppointment.get(apt.id)} />
-          ))}
-        </section>
-      ))}
-    </div>
+    <PagedGroups items={items} heading={heading} resetKey={`${tab}|${q}`} kindOf={kindOf} invoiceByAppointment={invoiceByAppointment} />
   )
 
   if (isLoading) {

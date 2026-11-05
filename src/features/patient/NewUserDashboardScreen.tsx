@@ -9,6 +9,7 @@ import { AdBannerStrip } from '@/components/AdBanner'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
 import { CountryFlag } from '@/features/admin/AdminShared'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
+import { useAttentionDismissals } from '@/utils/attention-dismissals'
 import { DashboardWalletCard } from '@/features/patient/components/DashboardWalletCard'
 import { DashboardNextAppointmentCard } from '@/features/patient/components/DashboardNextAppointmentCard'
 import { DashboardFindCareCard } from '@/features/patient/components/DashboardFindCareCard'
@@ -25,7 +26,6 @@ import {
 } from '@/utils/prescription-notifications'
 import { getAppointmentDisplayStatus } from '@/utils/appointments'
 import type { Appointment, Patient } from '@/types/user.types'
-import { InstallAppPrompt } from '@/components/InstallApp'
 
 const SEEN_PRESCRIPTION_QUOTE_KEY = 'ggapp.seenPrescriptionQuoteNotifications'
 const CYAN_DEEP = '#0B7BC0'
@@ -59,7 +59,7 @@ const STEP_LABEL: Record<number, string> = {
   1: 'Account created',
   2: 'Email verified',
   3: 'Set payment PIN',
-  4: 'Apply for credit',
+  4: 'Apply for an allocation',
   5: 'Book first visit',
 }
 
@@ -75,9 +75,10 @@ export function NewUserDashboardScreen({
   const navigate = useNavigate()
   const { isMobile, isDesktop } = useResponsive()
   const adVersion = useAdsStore(s => s.version)
+  const attention = useAttentionDismissals()
   const u = user
   const country = getCountryByCode(u.countryCode)
-  const currency = country?.currencySymbol ?? 'Z$'
+  const currency = country?.currencySymbol ?? ''
   const partnerId = getFinancePartnerIdForCountry(u.countryCode)
   const partnerName = getFinancePartnerSummary(partnerId)?.name ?? 'your finance partner'
   const patientNotifs = useNotificationsStore(s => s.patientNotifs)
@@ -171,9 +172,9 @@ export function NewUserDashboardScreen({
 
   const nextStepContent: Record<number, { title: string; body: string; cta: string; go: () => void }> = {
     4: {
-      title: 'Apply for healthcare credit',
+      title: 'Apply for a healthcare allocation',
       body: `${partnerName} reviews your application. Once approved, you can pay verified providers without paying at the counter.`,
-      cta: 'Apply for credit',
+      cta: 'Apply for an allocation',
       go: () => navigate(ROUTES.CREDIT_DISCLAIMER),
     },
     3: {
@@ -279,7 +280,11 @@ export function NewUserDashboardScreen({
   )
 
   return (
-    <AppLayout title={isDesktop ? greetingLine : 'Home'} titleIcon={isDesktop ? countryFlag(22) : undefined}>
+    <AppLayout
+      title={isDesktop ? getPatientFirstName(u) : 'Home'}
+      eyebrow={isDesktop ? greeting : undefined}
+      titleIcon={isDesktop ? countryFlag(22) : undefined}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 20, fontFamily: font.family }}>
         {!isDesktop && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.02em' }}>
@@ -302,9 +307,8 @@ export function NewUserDashboardScreen({
           <DashboardRecentActivity transactions={[]} currency={currency} />
         </div>
 
-        {attentionItems.length === 0 && <AdBannerStrip key={adVersion} countryName={country?.name} />}
+        {attention.filterVisible(attentionItems).length === 0 && <AdBannerStrip key={adVersion} countryName={country?.name} />}
 
-        <InstallAppPrompt variant="card" />
         <HealthNewsSection />
       </div>
     </AppLayout>

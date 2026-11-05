@@ -1,0 +1,12 @@
+.git
+.codegraph
+.trail
+.agents
+.codex
+node_modules
+dist
+backend
+.env*
+security-audit-*.json
+npm-debug.log*
+*.log

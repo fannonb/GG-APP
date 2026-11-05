@@ -12,6 +12,14 @@ import { useAdminCreditApplications } from '@/hooks/api/useAdminQueries'
 import { formatCurrency, formatDate } from '@/utils/format'
 import { getFinancePartnerSummary } from '@/features/patient/credit/credit.constants'
 import type { AdminCreditApplication } from '@/types/credit.types'
+import { currencySymbolFor } from '@/hooks/useCurrency'
+import { Initials, PlainHeader, SearchBox, SidePanel, SortHeader, StatusTabs, type SortDir } from '@/features/admin/accounts/AccountListKit'
+import { CountryBadge, countryCode } from '@/features/admin/AdminShared'
+
+type SortKey = 'name' | 'requested' | 'submitted'
+
+/** Credit is granted in the application's market currency. */
+const currencyOf = (app: AdminCreditApplication) => currencySymbolFor(app.marketCountryCode ?? app.country)
 
 function StatusBadge({ status }: { status: AdminCreditApplication['status'] }) {
   const map = {
@@ -58,11 +66,22 @@ export function AdminCreditAppsScreen() {
   const [filter, setFilter] = useState<'all' | 'submitted' | 'approved' | 'rejected'>('submitted')
   const [approvedAmount, setApprovedAmount] = useState('')
   const [rejectNote, setRejectNote] = useState('')
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  // Oldest first, so the longest wait is decided first.
+  const [sort, setSort] = useState<{ key: SortKey; dir: SortDir }>({ key: 'submitted', dir: 'asc' })
 
-  const filtered = useMemo(
-    () => applications.filter(app => filter === 'all' || app.status === filter),
-    [applications, filter],
-  )
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    const dir = sort.dir === 'asc' ? 1 : -1
+    const value = (app: AdminCreditApplication): string | number =>
+      sort.key === 'name' ? app.patientName.toLowerCase() : sort.key === 'requested' ? app.requestedAmount : new Date(app.submittedAt).getTime()
+    return applications
+      .filter(app => filter === 'all' || app.status === filter)
+      .filter(app => !q || app.patientName.toLowerCase().includes(q) || app.reference.toLowerCase().includes(q) || (app.patientEmail ?? '').toLowerCase().includes(q))
+      .sort((a, b) => (value(a) > value(b) ? dir : value(a) < value(b) ? -dir : 0))
+  }, [applications, filter, search, sort])
+  const onSort = (key: SortKey) => setSort(s => ({ key, dir: s.key === key && s.dir === 'asc' ? 'desc' : 'asc' }))
 
   const selected = filtered.find(app => app.id === selectedId)
     ?? applications.find(app => app.id === selectedId)
@@ -72,6 +91,7 @@ export function AdminCreditAppsScreen() {
     setSelectedId(app.id)
     setApprovedAmount(String(app.requestedAmount))
     setRejectNote('')
+    setPanelOpen(true)
   }
 
   const handleApprove = async () => {
@@ -97,7 +117,9 @@ export function AdminCreditAppsScreen() {
     [applications],
   )
 
-  const { pageItems, pager } = usePaged(filtered, filter)
+  const { pageItems, pager } = usePaged(filtered, `${filter}|${search}|${sort.key}|${sort.dir}`)
+  const cell: React.CSSProperties = { padding: '12px', borderTop: `1px solid ${C.border}`, verticalAlign: 'middle' }
+  const countOf = (status: typeof filter) => applications.filter(app => status === 'all' || app.status === status).length
 
   return (
     <AdminLayout title="Credit Applications" status={pendingCount > 0 ? `${pendingCount} pending` : undefined}>
@@ -113,84 +135,93 @@ export function AdminCreditAppsScreen() {
         </GGCard>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '360px 1fr', gap: '20px', fontFamily: font.family }}>
-        <GGCard padding="0" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: '18px 20px', borderBottom: `1px solid ${C.border}` }}>
-            <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, marginBottom: '12px' }}>Applications</div>
-            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-              {(['submitted', 'approved', 'rejected', 'all'] as const).map(item => (
-                <button
-                  key={item}
-                  onClick={() => setFilter(item)}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: radius.full,
-                    border: `1px solid ${filter === item ? C.blue500 : C.border}`,
-                    background: filter === item ? C.blue100 : '#fff',
-                    color: filter === item ? C.navy800 : C.textSub,
-                    fontSize: '11px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                    fontFamily: font.family,
-                    textTransform: 'capitalize',
-                  }}
-                >
-                  {item === 'submitted' ? 'Pending' : item}
-                </button>
-              ))}
-            </div>
-          </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, fontFamily: font.family }}>
+        <StatusTabs<typeof filter>
+          tabs={[
+            { id: 'submitted', label: 'Pending', count: countOf('submitted') },
+            { id: 'approved', label: 'Approved', count: countOf('approved') },
+            { id: 'rejected', label: 'Rejected', count: countOf('rejected') },
+            { id: 'all', label: 'All', count: countOf('all') },
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+          <SearchBox value={search} onChange={setSearch} placeholder="Search patient, reference or email" />
+        </div>
 
-          <div style={{ maxHeight: isMobile ? undefined : '70vh', overflowY: 'auto' }}>
-            {isLoading ? (
-              <div style={{ padding: '24px', fontSize: '13px', color: C.textSub }}>Loading applications…</div>
-            ) : filtered.length === 0 ? (
-              <div style={{ padding: '24px', fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>
-                {applications.length === 0
-                  ? 'No credit applications have been submitted yet.'
-                  : `No ${filter === 'submitted' ? 'pending' : filter} applications in this view.`}
-              </div>
-            ) : pageItems.map(app => (
-              <button
-                key={app.id}
-                onClick={() => handleSelect(app)}
-                style={{
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '16px 20px',
-                  border: 'none',
-                  borderBottom: `1px solid ${C.border}`,
-                  background: selectedId === app.id ? C.blue100 : '#fff',
-                  cursor: 'pointer',
-                  fontFamily: font.family,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start' }}>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>{app.patientName}</div>
-                    <div style={{ fontSize: '12px', color: C.textSub, marginTop: '4px' }}>
-                      {app.type === 'increase' ? 'Limit increase' : 'New application'} · {app.reference}
-                      {app.residesAbroad ? ' · Abroad' : ''}
+        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg, padding: isMobile ? 0 : '14px 6px 10px' }}>
+          {isLoading ? (
+            <div style={{ padding: 24, fontSize: 14, color: C.textSub }}>Loading applications…</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '36px 16px', textAlign: 'center', fontSize: 14, color: C.textSub }}>
+              {applications.length === 0 ? 'No credit applications have been submitted yet.' : 'No applications match.'}
+            </div>
+          ) : isMobile ? (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {pageItems.map((app, i) => (
+                <li key={app.id}>
+                  <button type="button" onClick={() => handleSelect(app)} style={{ all: 'unset', boxSizing: 'border-box', width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderTop: i > 0 ? `1px solid ${C.border}` : 'none', cursor: 'pointer', fontFamily: font.family }}>
+                    <Initials name={app.patientName} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14.5, fontWeight: 700, color: C.text }}>{app.patientName}</div>
+                      <div style={{ fontSize: 12.5, color: C.textSub }}>{formatCurrency(app.requestedAmount, currencyOf(app))} · {formatDate(app.submittedAt)}</div>
                     </div>
-                  </div>
-                  <StatusBadge status={app.status} />
-                </div>
-                <div style={{ fontSize: '12px', color: C.textSub, marginTop: '8px' }}>
-                  Requested {formatCurrency(app.requestedAmount)} · {formatDate(app.submittedAt)}
-                </div>
-              </button>
-            ))}
-            <div style={{ padding: '0 16px 12px' }}><Pager {...pager} /></div>
-          </div>
-        </GGCard>
-
-        <GGCard padding="28px">
-          {!selected ? (
-            <div style={{ fontSize: '14px', color: C.textSub, lineHeight: 1.6 }}>
-              Select an application to review applicant details and approve or decline the requested amount.
-            </div>
+                    <StatusBadge status={app.status} />
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            <div className="hide-scrollbar" style={{ overflowX: 'auto', overflowY: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14, minWidth: 860 }}>
+                <thead>
+                  <tr>
+                    <SortHeader label="Applicant" sortKey="name" sort={sort} onSort={onSort} />
+                    <PlainHeader label="Type" />
+                    <PlainHeader label="Country" />
+                    <SortHeader label="Requested" sortKey="requested" sort={sort} onSort={onSort} align="right" />
+                    <SortHeader label="Submitted" sortKey="submitted" sort={sort} onSort={onSort} />
+                    <PlainHeader label="Status" align="right" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageItems.map(app => {
+                    const market = app.marketCountryCode ?? app.country
+                    return (
+                      <tr key={app.id} onClick={() => handleSelect(app)} className="credit-row" style={{ cursor: 'pointer', background: panelOpen && selectedId === app.id ? C.blue100 : undefined }}>
+                        <td style={cell}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                            <Initials name={app.patientName} />
+                            <div style={{ minWidth: 0 }}>
+                              <button type="button" onClick={e => { e.stopPropagation(); handleSelect(app) }} style={{ all: 'unset', fontWeight: 700, color: C.text, cursor: 'pointer' }}>{app.patientName}</button>
+                              <div style={{ fontSize: 12.5, color: C.textSub }}>{app.reference}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ ...cell, fontSize: 13.5, color: C.textSub, whiteSpace: 'nowrap' }}>{app.type === 'increase' ? 'Limit increase' : 'New application'}</td>
+                        <td style={cell}>
+                          {market ? <CountryBadge code={countryCode(market)} showName name={app.country ?? market} size={14} /> : '—'}
+                          {app.residesAbroad && <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>Lives abroad</div>}
+                        </td>
+                        <td style={{ ...cell, textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{formatCurrency(app.requestedAmount, currencyOf(app))}</td>
+                        <td style={{ ...cell, fontSize: 13.5, color: C.textSub, whiteSpace: 'nowrap' }}>{formatDate(app.submittedAt)}</td>
+                        <td style={{ ...cell, textAlign: 'right' }}><StatusBadge status={app.status} /></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{ padding: isMobile ? '0 14px 12px' : '0 8px' }}><Pager {...pager} /></div>
+        </div>
+        <style>{'.credit-row:hover { background: #F5F9FD; }'}</style>
+      </div>
+
+      <SidePanel open={panelOpen && !!selected} onClose={() => setPanelOpen(false)} label={selected ? selected.patientName : 'Credit application'}>
+        {selected && (
+          <div style={{ padding: isMobile ? '20px 14px 28px' : '24px 26px 32px', display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap', alignItems: 'flex-start' }}>
                 <div>
                   <div style={{ fontSize: '20px', fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>{selected.patientName}</div>
@@ -215,12 +246,12 @@ export function AdminCreditAppsScreen() {
                 )}
                 <InfoRow label="Finance partner" value={getFinancePartnerSummary(selected.financePartnerId)?.name ?? selected.financePartnerId} />
                 <InfoRow label="Employment" value={selected.employment.replace(/-/g, ' ')} />
-                <InfoRow label="Monthly income" value={formatCurrency(selected.monthlyIncome)} />
-                <InfoRow label="Requested amount" value={formatCurrency(selected.requestedAmount)} />
+                <InfoRow label="Monthly income" value={formatCurrency(selected.monthlyIncome, currencyOf(selected))} />
+                <InfoRow label="Requested amount" value={formatCurrency(selected.requestedAmount, currencyOf(selected))} />
                 {selected.type === 'increase' && (
                   <>
-                    <InfoRow label="Current limit" value={formatCurrency(selected.currentCreditLimit)} />
-                    <InfoRow label="Current available" value={formatCurrency(selected.currentCreditAvailable)} />
+                    <InfoRow label="Current limit" value={formatCurrency(selected.currentCreditLimit, currencyOf(selected))} />
+                    <InfoRow label="Current available" value={formatCurrency(selected.currentCreditAvailable, currencyOf(selected))} />
                     {selected.reason && <InfoRow label="Reason" value={selected.reason.replace(/-/g, ' ')} />}
                   </>
                 )}
@@ -235,7 +266,7 @@ export function AdminCreditAppsScreen() {
                     type="number"
                     value={approvedAmount}
                     onChange={event => setApprovedAmount(event.target.value)}
-                    hint="Amount loaded to the patient's wallet if approved"
+                    hint="Amount loaded to the patient's allocation if approved"
                   />
                   <GGInput
                     label="Decline reason (optional)"
@@ -267,14 +298,13 @@ export function AdminCreditAppsScreen() {
               ) : (
                 <div style={{ padding: '16px 18px', background: C.bg, borderRadius: radius.sm, border: `1px solid ${C.border}`, fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>
                   {selected.status === 'approved'
-                    ? `Approved for ${formatCurrency(selected.approvedAmount ?? selected.requestedAmount)}${selected.reviewedAt ? ` on ${formatDate(selected.reviewedAt)}` : ''}.`
+                    ? `Approved for ${formatCurrency(selected.approvedAmount ?? selected.requestedAmount, currencyOf(selected))}${selected.reviewedAt ? ` on ${formatDate(selected.reviewedAt)}` : ''}.`
                     : selected.declineReason ?? 'This application was declined.'}
                 </div>
               )}
             </div>
-          )}
-        </GGCard>
-      </div>
+        )}
+      </SidePanel>
     </AdminLayout>
   )
 }

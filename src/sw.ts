@@ -75,6 +75,31 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url)
   const sameOrigin = url.origin === self.location.origin
 
+  // Apple Web Clip profile: rewrite the target URL to the current origin and
+  // serve with `application/x-apple-aspen-config` so iOS Safari opens the
+  // native profile installer instead of caching it in the HTML shell cache.
+  if (sameOrigin && url.pathname === '/gg-app.mobileconfig') {
+    event.respondWith(
+      fetch('/gg-app.mobileconfig', { cache: 'no-store' })
+        .then(async response => {
+          const text = await response.text()
+          const body = text.replace(
+            'https://app.gatewayglobal.africa/?source=pwa',
+            `${self.location.origin}/?source=pwa`,
+          )
+          return new Response(body, {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/x-apple-aspen-config',
+              'Content-Disposition': 'attachment; filename="gg-app.mobileconfig"',
+              'Cache-Control': 'no-store',
+            },
+          })
+        }),
+    )
+    return
+  }
+
   // SPA navigations: network-first so new deploys land immediately,
   // falling back to the precached shell when offline.
   if (request.mode === 'navigate') {

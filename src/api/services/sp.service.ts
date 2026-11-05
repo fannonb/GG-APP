@@ -42,7 +42,7 @@ function prepareInvoicePayload(payload: UpsertSPInvoicePayload): Omit<UpsertSPIn
   }
 }
 import type { Appointment, SPPatient } from '@/types/appointment.types'
-import type { Payment, SPInvoice, InvoiceAttachment } from '@/types/invoice.types'
+import type { Payment, PaymentType, SPInvoice, InvoiceAttachment } from '@/types/invoice.types'
 import type { Notification } from '@/types/user.types'
 import {
   MOCK_SP,
@@ -548,16 +548,21 @@ export const spService = {
       if (mode === 'new') return []
       return MOCK_SP_INVOICES.filter(
         invoice => invoice.status === 'authorized' || invoice.status === 'paid',
-      ).map(invoice => ({
-        id: invoice.paymentRef ?? `PAY-${invoice.id}`,
-        patient: invoice.patient,
-        amount: invoice.walletAmountPaid ?? invoice.amount,
-        date: invoice.paidAt ?? invoice.adminApprovedAt ?? invoice.submittedAt,
-        status: 'authorized' as const,
-        ref: invoice.paymentRef ?? invoice.id,
-        invoiceId: invoice.id,
-        isPrescription: invoice.isPrescription,
-      }))
+      ).map(invoice => {
+        const type: PaymentType = invoice.isPrescription ? 'prescription' : 'appointment'
+        return {
+          id: invoice.paymentRef ?? `PAY-${invoice.id}`,
+          patient: invoice.patient,
+          amount: invoice.walletAmountPaid ?? invoice.amount,
+          date: invoice.paidAt ?? invoice.adminApprovedAt ?? invoice.submittedAt,
+          status: 'authorized' as const,
+          ref: invoice.paymentRef ?? invoice.id,
+          invoiceId: invoice.id,
+          isPrescription: invoice.isPrescription,
+          type,
+          service: invoice.services[0]?.name ?? null,
+        }
+      })
     }
     const { data } = await apiClient.get<Payment[]>('/sp/payments')
     return data

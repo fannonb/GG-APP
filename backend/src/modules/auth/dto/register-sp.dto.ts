@@ -93,7 +93,7 @@ class OpeningHoursEntryDto {
   @IsIn(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
   day!: 'Mon' | 'Tue' | 'Wed' | 'Thu' | 'Fri' | 'Sat' | 'Sun'
 
-  @IsString()
+  @IsIn(['open', 'closed'])
   status!: 'open' | 'closed'
 
   @IsOptional()

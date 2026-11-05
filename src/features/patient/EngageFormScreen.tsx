@@ -8,7 +8,7 @@ import { useProvider } from '@/hooks/api/usePatientQueries'
 import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { MOCK_PROVIDERS } from '@/mock/patient.mock'
-import { providerHasCategory, type Provider } from '@/types/provider.types'
+import type { Provider } from '@/types/provider.types'
 import { useUserStore } from '@/store/user.store'
 import { getPatientDisplayName, isBeneficiariesActive } from './patientAccount'
 import type { AppointmentAttachmentPayload } from '@/api/types'
@@ -17,13 +17,6 @@ import { useDrivingDistance } from '@/hooks/useDrivingDistance'
 import { toGeoCoord } from '@/services/driving-distance'
 import type { AppointmentRebookNavigationState } from '@/utils/rebook'
 import { ROUTES } from '@/router/routes'
-import { PharmacyPrescriptionUpload } from './components/PharmacyPrescriptionUpload'
-
-function providerIsPharmacyOnly(provider: Provider): boolean {
-  if (provider.category !== 'pharmacy') return false
-  const extras = provider.categories?.filter(c => c !== 'pharmacy') ?? []
-  return extras.length === 0
-}
 
 const TIMES = ['08:00', '08:30', '09:00', '09:30', '10:00', '10:30', '11:00', '11:30', '14:00', '14:30', '15:00', '15:30', '16:00']
 
@@ -73,8 +66,6 @@ export function EngageFormScreen() {
       provider?: Provider
       providerId?: number
       rebook?: AppointmentRebookNavigationState['rebook']
-      /** Set when the patient already chose on the provider page, so the service picker is skipped. */
-      intent?: 'appointment' | 'prescription'
     }
   }
   const providerId = state?.providerId ?? state?.provider?.id
@@ -88,16 +79,6 @@ export function EngageFormScreen() {
   const createAppointmentMutation = useCreateAppointmentMutation()
   const attachmentInputRef = useRef<HTMLInputElement>(null)
   const rebook = state?.rebook
-
-  // Service mode: null = not yet chosen (picker shown), 'appointment' = standard form, 'prescription' = pharmacy flow
-  const hasPharmacy = providerHasCategory(p, 'pharmacy')
-  const isPharmacyOnly = providerIsPharmacyOnly(p)
-  const intent = state?.intent
-  const [serviceMode, setServiceMode] = useState<'appointment' | 'prescription' | null>(
-    isPharmacyOnly ? 'prescription' : intent ?? (hasPharmacy ? null : 'appointment'),
-  )
-  // Only offer "back to service selection" when the patient actually came through the picker.
-  const cameThroughPicker = hasPharmacy && !isPharmacyOnly && !intent
 
   const [form, setForm] = useState({
     description: rebook?.description ?? '',
@@ -273,149 +254,12 @@ export function EngageFormScreen() {
     </div>
   )
 
-  // ── Prescription-only mode (pure pharmacy or user chose prescription) ────────
-  if (serviceMode === 'prescription') {
-    return (
-      <AppLayout title="Send a prescription" back notifCount={1}>
-        <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
-          <GGCard padding="36px">
-            {ProviderHeader}
-            {cameThroughPicker && (
-              <button
-                type="button"
-                onClick={() => setServiceMode(null)}
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '20px', background: 'none', border: 'none', cursor: 'pointer', color: C.blue500, fontSize: '13px', fontWeight: 600, padding: 0, fontFamily: font.family }}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-                Back to service selection
-              </button>
-            )}
-            <PharmacyPrescriptionUpload provider={p} />
-          </GGCard>
-        </div>
-      </AppLayout>
-    )
-  }
-
-  // ── Service mode picker (multi-category provider with pharmacy) ──────────────
-  if (serviceMode === null && hasPharmacy) {
-    const appointmentCategories = [p.category, ...(p.categories ?? [])].filter(c => c !== 'pharmacy')
-    const appointmentLabel = appointmentCategories.length > 0
-      ? appointmentCategories.map(c => c.charAt(0).toUpperCase() + c.slice(1)).join(' / ')
-      : 'Consultation'
-
-    return (
-      <AppLayout title="Engagement Request" back notifCount={1}>
-        <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
-          <GGCard padding="36px">
-            {ProviderHeader}
-            <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '6px' }}>
-              What do you need from this provider?
-            </div>
-            <div style={{ fontSize: '13px', color: C.textSub, marginBottom: '20px', lineHeight: 1.6 }}>
-              {p.name} offers multiple services. Select which type of engagement you need.
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {appointmentCategories.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setServiceMode('appointment')}
-                  style={{
-                    textAlign: 'left',
-                    padding: '18px 20px',
-                    borderRadius: radius.lg,
-                    border: `1.5px solid ${C.border}`,
-                    background: C.surface,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '16px',
-                    fontFamily: font.family,
-                    transition: 'border-color 0.14s, box-shadow 0.14s',
-                  }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(56,182,255,0.45)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(56,182,255,0.12)' }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none' }}
-                >
-                  <div style={{ width: 46, height: 46, borderRadius: '12px', background: C.blue100, border: '1px solid rgba(56,182,255,0.20)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                      <rect x="2" y="3.5" width="18" height="16" rx="2.5" stroke={C.blue500} strokeWidth="1.4"/>
-                      <path d="M2 8.5h18M7 2v3M15 2v3" stroke={C.blue500} strokeWidth="1.3" strokeLinecap="round"/>
-                      <circle cx="11" cy="13.5" r="1.8" fill={C.blue500}/>
-                    </svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>Book an Appointment</div>
-                    <div style={{ fontSize: '12px', color: C.textSub, marginTop: '3px' }}>
-                      Request a consultation, visit, or procedure · {appointmentLabel}
-                    </div>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 'auto', flexShrink: 0, color: C.textLight }}>
-                    <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setServiceMode('prescription')}
-                style={{
-                  textAlign: 'left',
-                  padding: '18px 20px',
-                  borderRadius: radius.lg,
-                  border: `1.5px solid ${C.border}`,
-                  background: C.surface,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '16px',
-                  fontFamily: font.family,
-                  transition: 'border-color 0.14s, box-shadow 0.14s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(56,182,255,0.45)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(56,182,255,0.12)' }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.boxShadow = 'none' }}
-              >
-                <div style={{ width: 46, height: 46, borderRadius: '12px', background: 'rgba(34,201,138,0.08)', border: '1px solid rgba(34,201,138,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                  <svg width="22" height="22" viewBox="0 0 22 22" fill="none">
-                    <rect x="4" y="2" width="14" height="18" rx="2.5" stroke={C.success} strokeWidth="1.4"/>
-                    <path d="M8 8h6M8 12h6M8 16h4" stroke={C.success} strokeWidth="1.3" strokeLinecap="round"/>
-                    <circle cx="16" cy="16" r="4" fill={C.successBg} stroke={C.success} strokeWidth="1.3"/>
-                    <path d="M14.5 16h3M16 14.5v3" stroke={C.success} strokeWidth="1.3" strokeLinecap="round"/>
-                  </svg>
-                </div>
-                <div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: C.text }}>Upload a Prescription</div>
-                  <div style={{ fontSize: '12px', color: C.textSub, marginTop: '3px' }}>
-                    Submit a prescription for medication · Pharmacy · Pay after pickup or delivery
-                  </div>
-                </div>
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 'auto', flexShrink: 0, color: C.textLight }}>
-                  <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              </button>
-            </div>
-          </GGCard>
-        </div>
-      </AppLayout>
-    )
-  }
-
   // ── Standard appointment form ────────────────────────────────────────────────
   return (
     <AppLayout title="Book a visit" back notifCount={1}>
       <div style={{ maxWidth: 640, margin: '0 auto', fontFamily: font.family }}>
         <GGCard padding="36px">
           {ProviderHeader}
-
-          {cameThroughPicker && (
-            <button
-              type="button"
-              onClick={() => setServiceMode(null)}
-              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginBottom: '20px', background: 'none', border: 'none', cursor: 'pointer', color: C.blue500, fontSize: '13px', fontWeight: 600, padding: 0, fontFamily: font.family }}
-            >
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M9 2L4 7l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-              Back to service selection
-            </button>
-          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
             <div>

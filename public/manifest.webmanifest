@@ -55,11 +55,11 @@
       "label": "Your credit, visits and invoices in one place"
     },
     {
-      "src": "/screenshots/mobile-ledger.png",
+      "src": "/screenshots/mobile-services.png",
       "sizes": "780x1688",
       "type": "image/png",
       "form_factor": "narrow",
-      "label": "Your health record, shared only with your PIN"
+      "label": "Book verified hospitals, clinics, pharmacies and labs near you"
     },
     {
       "src": "/screenshots/desktop-dashboard.png",

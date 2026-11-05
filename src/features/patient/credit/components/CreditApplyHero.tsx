@@ -44,7 +44,7 @@ export function CreditApplyHero({ onStartApplication }: CreditApplyHeroProps) {
         }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: C.blue500, display: 'inline-block' }} />
           <span style={{ fontSize: '11px', fontWeight: 700, color: C.blue400, letterSpacing: '0.06em', textTransform: 'uppercase', fontFamily: font.family }}>
-            Healthcare Credit
+            Healthcare Allocation
           </span>
         </div>
 

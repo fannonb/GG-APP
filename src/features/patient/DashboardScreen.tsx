@@ -16,6 +16,7 @@ import { getCountryByCode } from '@/config/countries'
 import { CountryFlag } from '@/features/admin/AdminShared'
 import { NewUserDashboardScreen } from './NewUserDashboardScreen'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
+import { useAttentionDismissals } from '@/utils/attention-dismissals'
 import { DashboardWalletCard } from '@/features/patient/components/DashboardWalletCard'
 import { DashboardNextAppointmentCard } from '@/features/patient/components/DashboardNextAppointmentCard'
 import { DashboardRecentActivity } from '@/features/patient/components/DashboardRecentActivity'
@@ -36,7 +37,6 @@ import {
 } from '@/utils/credit-notifications'
 import { buildPrescriptionQuoteBannerItems, getUnreadPrescriptionReadyItems, getUnreadPrescriptionInvoiceItems, isSyntheticPrescriptionBannerId } from '@/utils/prescription-notifications'
 import { useLedgerStatus } from '@/hooks/api'
-import { InstallAppPrompt } from '@/components/InstallApp'
 
 const SEEN_CREDIT_APPROVALS_KEY = 'ggapp.seenCreditApprovalNotifications'
 const SEEN_APPT_CONFIRMED_KEY = 'ggapp.seenConfirmedAppointmentNotifications'
@@ -179,6 +179,9 @@ export function DashboardScreen() {
   // Remount the banner strip every time the admin saves — version increments on every updateBanner call.
   const adVersion = useAdsStore(s => s.version)
 
+  // Must run before the early returns below; dismissed attention items count as absent for the ad-strip gate.
+  const attention = useAttentionDismissals()
+
   const dashboardLoading = (isLoading || isPending) && !data
   const accountContextLoading = dashboardLoading || invoicesLoading
 
@@ -222,7 +225,7 @@ export function DashboardScreen() {
     return <NewUserDashboardScreen user={u} appointments={dashboard.appointments} />
   }
 
-  const currency = country?.currencySymbol ?? 'Z$'
+  const currency = country?.currencySymbol ?? ''
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const rescheduledAppointment = appointments.find(
@@ -448,16 +451,6 @@ export function DashboardScreen() {
     navigate(items[0]?.screen ?? ROUTES.FIND_SERVICE)
   }
 
-  const hasUnresolvedAction = Boolean(
-    pendingInvoice ||
-    rescheduledAppointment ||
-    pendingAppointment ||
-    prescriptionQuoteItems.length ||
-    prescriptionInvoiceItems.length ||
-    prescriptionReadyItems.length ||
-    creditUnderReview,
-  )
-
   const attentionItems: AttentionItem[] = []
   if (pendingInvoice) {
     attentionItems.push({
@@ -498,7 +491,7 @@ export function DashboardScreen() {
       id: 'credit-review',
       tone: 'info',
       icon: 'credit',
-      title: pendingIncrease ? 'Limit increase under review' : 'Credit application under review',
+      title: pendingIncrease ? 'Limit increase under review' : 'Allocation application under review',
       detail: `${creditPartnerName} is reviewing your request. We'll notify you as soon as there's a decision.`,
       actionLabel: 'View status',
       onAction: () => navigate(`${ROUTES.CREDIT_STATUS}${pendingIncrease ? '?type=increase' : ''}`),
@@ -509,7 +502,7 @@ export function DashboardScreen() {
       id: 'credit-low',
       tone: 'info',
       icon: 'payment',
-      title: 'Your credit is running low',
+      title: 'Your allocation is running low',
       detail: `${formatAmount(u.creditAvailable, currency)} left, below the ${formatAmount(getLowCreditThreshold(u.countryCode), currency)} buffer we recommend.`,
       actionLabel: 'Request increase',
       onAction: () => navigate(ROUTES.CREDIT_INCREASE),
@@ -607,14 +600,27 @@ export function DashboardScreen() {
       id: 'credit-approved',
       tone: 'success',
       icon: 'credit',
-      title: /increase/i.test(primary.headline) ? 'Your limit increase was approved' : 'Your healthcare credit was approved',
+      title: /increase/i.test(primary.headline) ? 'Your limit increase was approved' : 'Your healthcare allocation was approved',
       detail: primary.detail,
       meta: approvedAmountLabel,
-      actionLabel: 'View credit',
+      actionLabel: 'View allocation',
       onAction: () => handleCreditApprovalAction(creditApprovalItems),
       onDismiss: () => handleCreditApprovalDismiss(creditApprovalItems),
     })
   }
+
+  // The ad strip shows only when nothing needing action is visible, so a dismissed card counts as absent.
+  // A condition blocks only while its card is visible; conditions with no card keep their original meaning.
+  const visibleAttentionIds = new Set(attention.filterVisible(attentionItems).map(item => item.id))
+  const hasUnresolvedAction = Boolean(
+    (pendingInvoice && visibleAttentionIds.has(`invoice-${pendingInvoice.id}`)) ||
+    (rescheduledAppointment && (!rescheduledAppointmentDate || visibleAttentionIds.has(`reschedule-${rescheduledAppointment.id}`))) ||
+    (pendingAppointment && (!pendingAppointmentDate || visibleAttentionIds.has(`pending-${pendingAppointment.id}`))) ||
+    (prescriptionQuoteItems.length > 0 && visibleAttentionIds.has('rx-quote')) ||
+    (prescriptionInvoiceItems.length > 0 && visibleAttentionIds.has('rx-invoice')) ||
+    (prescriptionReadyItems.length > 0 && visibleAttentionIds.has('rx-ready')) ||
+    (creditUnderReview && visibleAttentionIds.has('credit-review')),
+  )
 
   const greetingLine = `${greeting}, ${getPatientFirstName(u)}`
   const countryFlag = (size: number) =>
@@ -625,7 +631,11 @@ export function DashboardScreen() {
     )
 
   return (
-    <AppLayout title={isDesktop ? greetingLine : 'Home'} titleIcon={isDesktop ? countryFlag(22) : undefined}>
+    <AppLayout
+      title={isDesktop ? getPatientFirstName(u) : 'Home'}
+      eyebrow={isDesktop ? greeting : undefined}
+      titleIcon={isDesktop ? countryFlag(22) : undefined}
+    >
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? '16px' : '20px', fontFamily: font.family }}>
 
         {/* On desktop the greeting is the page title in the top bar */}
@@ -638,7 +648,7 @@ export function DashboardScreen() {
 
         <DashboardAttention items={attentionItems} />
 
-        {/* Wallet + next appointment */}
+        {/* Allocation + next appointment */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: isMobile ? '12px' : '20px' }}>
           <DashboardWalletCard user={u} currency={currency} partnerId={getFinancePartnerIdForCountry(u.countryCode)} partnerName={creditPartnerName} />
           <DashboardNextAppointmentCard appointments={appointments} />
@@ -661,7 +671,6 @@ export function DashboardScreen() {
 
         {!hasUnresolvedAction && <AdBannerStrip key={adVersion} countryName={country?.name} />}
 
-        <InstallAppPrompt variant="card" />
         <HealthNewsSection articles={healthNews ?? dashboard.news} />
       </div>
     </AppLayout>

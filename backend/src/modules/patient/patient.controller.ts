@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
 import { UserRole } from '@prisma/client'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { Roles } from '../../common/decorators/roles.decorator'
@@ -17,7 +17,10 @@ import { RejectInvoiceDto } from './dto/reject-invoice.dto'
 import { SubmitReviewDto } from './dto/submit-review.dto'
 import { ApplyCreditDto } from './dto/apply-credit.dto'
 import { IncreaseCreditDto } from './dto/increase-credit.dto'
-import { CreatePrescriptionRequestDto } from './dto/create-prescription-request.dto'
+import {
+  CreatePrescriptionRequestDto,
+  NearbyPharmaciesQueryDto,
+} from './dto/create-prescription-request.dto'
 import { DeclinePrescriptionRequestDto } from './dto/decline-prescription-request.dto'
 import { PatientService } from './patient.service'
 
@@ -238,6 +241,20 @@ export class PatientController {
   @Get('prescription-requests')
   getPrescriptionRequests(@CurrentUser() user: AuthenticatedUser) {
     return this.patientService.getPrescriptionRequests(user.sub)
+  }
+
+  @Get('prescription-requests/nearby-pharmacies')
+  getNearbyPharmacies(@Query() query: NearbyPharmaciesQueryDto) {
+    return this.patientService.getNearbyPharmacies(query.lat, query.lng)
+  }
+
+  @Patch('prescription-requests/:id/offers/:offerId/select')
+  selectPrescriptionOffer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('offerId') offerId: string,
+  ) {
+    return this.patientService.selectPrescriptionOffer(user.sub, id, offerId)
   }
 
   @Patch('prescription-requests/:id/review')

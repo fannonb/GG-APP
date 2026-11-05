@@ -5,11 +5,12 @@ import { ReferenceService } from './services/reference.service'
 import { MailService } from './services/mail.service'
 import { StorageService } from './services/storage.service'
 import { ProviderCredentialsService } from './services/provider-credentials.service'
+import { PrescriptionDispatchService } from './services/prescription-dispatch.service'
 
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService],
-  exports: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService],
+  providers: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService],
+  exports: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService],
 })
 export class CommonModule {}

@@ -10,6 +10,8 @@ import { ROUTES } from '@/router/routes'
 
 interface AppTopBarProps {
   title: string
+  /** Small muted line shown above the title (e.g. "Good evening"). Enables a wrapping, 2-line title. */
+  eyebrow?: string
   titleIcon?: React.ReactNode
   status?: string
   back?: boolean
@@ -28,14 +30,14 @@ const SEARCHABLE_CATEGORIES = [
 
 const SEARCHABLE_PAGES = [
   { label: 'Appointments', desc: 'View and manage your bookings', keywords: ['appointment', 'appointments', 'booking', 'bookings', 'schedule', 'doctor'], path: ROUTES.APPOINTMENTS },
-  { label: 'Healthcare Credit Wallet', desc: 'Check credit balance & limits', keywords: ['credit', 'wallet', 'balance', 'loan', 'limit', 'funds'], path: ROUTES.CREDIT_WALLET },
+  { label: 'Healthcare Allocation', desc: 'Check allocation balance & limits', keywords: ['credit', 'allocation', 'balance', 'loan', 'limit', 'funds'], path: ROUTES.CREDIT_WALLET },
   { label: 'Invoices & Claims', desc: 'Review provider invoices & claims', keywords: ['invoice', 'invoices', 'bill', 'bills', 'claim'], path: ROUTES.INVOICE_LIST },
   { label: 'Transactions & Payments', desc: 'View payment history', keywords: ['transaction', 'transactions', 'payment', 'payments', 'spent'], path: ROUTES.TRANSACTIONS },
   { label: 'Profile & Settings', desc: 'Manage your profile and account', keywords: ['profile', 'setting', 'settings', 'account', 'password', 'security'], path: ROUTES.PROFILE },
   { label: 'Find a Service', desc: 'Browse all healthcare providers', keywords: ['find', 'service', 'services', 'provider', 'providers', 'specialty'], path: ROUTES.FIND_SERVICE },
 ]
 
-export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 'Back' }: AppTopBarProps) {
+export function AppTopBar({ title, eyebrow, titleIcon, status, back = false, backLabel = 'Back' }: AppTopBarProps) {
   const navigate = useNavigate()
   const { patientNotifs, openPanel } = useNotificationsStore()
   const unreadCount = patientNotifs.filter(n => !n.read).length
@@ -44,7 +46,6 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
   const { data: providers = [] } = useProviders()
   const user = profile?.user ?? storedUser ?? EMPTY_PATIENT
   const displayName = getPatientDisplayName(user)
-  const firstName = displayName.split(' ')[0] || displayName
   const initials = getPatientInitials(user)
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -113,6 +114,37 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
     setSearchQuery('')
   }
 
+  // With an eyebrow the title is a greeting + name: let it wrap and clamp to two lines.
+  // Without one, keep the single-line ellipsis used by every other page title.
+  const titleStyle: React.CSSProperties = eyebrow
+    ? {
+        fontSize: '28px',
+        fontWeight: 800,
+        color: C.navy800,
+        fontFamily: font.family,
+        letterSpacing: '-0.015em',
+        lineHeight: 1.15,
+        margin: 0,
+        whiteSpace: 'normal',
+        overflowWrap: 'anywhere',
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+        overflow: 'hidden',
+      }
+    : {
+        fontSize: '28px',
+        fontWeight: 800,
+        color: C.navy800,
+        fontFamily: font.family,
+        letterSpacing: '-0.015em',
+        lineHeight: 1.15,
+        margin: 0,
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        whiteSpace: 'nowrap',
+      }
+
   return (
     <>
       <div
@@ -126,8 +158,8 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
           flexWrap: 'nowrap',
         }}
       >
-        {/* Left Side: Back button + Page Title + Status Badge */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', minWidth: 0 }}>
+        {/* Left Side: Back button + Page Title + Status Badge. Basis 0 so the title takes whatever the search bar and profile leave free. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flex: '1 1 0', minWidth: 0 }}>
           {back && (
             <button
               onClick={() => navigate(-1)}
@@ -158,51 +190,57 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
             </button>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
-            {titleIcon}
-            <h1
-              style={{
-                fontSize: '28px',
-                fontWeight: 800,
-                color: C.navy800,
-                fontFamily: font.family,
-                letterSpacing: '-0.015em',
-                lineHeight: 1.15,
-                margin: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {title}
-            </h1>
-
-            {status && (
-              <span
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            {eyebrow && (
+              <div
                 style={{
-                  flexShrink: 0,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  padding: '4px 12px',
-                  borderRadius: '9999px',
-                  background: C.blue100,
-                  color: C.blue500,
-                  fontSize: '11.5px',
-                  fontWeight: 700,
+                  fontSize: '14px',
+                  fontWeight: 600,
+                  color: C.textSub,
                   fontFamily: font.family,
-                  letterSpacing: '0.01em',
+                  lineHeight: 1.3,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {status}
-              </span>
+                {eyebrow}
+              </div>
             )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+              {titleIcon}
+              <h1 title={eyebrow ? title : undefined} style={titleStyle}>
+                {title}
+              </h1>
+
+              {status && (
+                <span
+                  style={{
+                    flexShrink: 0,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: '4px 12px',
+                    borderRadius: '9999px',
+                    background: C.blue100,
+                    color: C.blue500,
+                    fontSize: '11.5px',
+                    fontWeight: 700,
+                    fontFamily: font.family,
+                    letterSpacing: '0.01em',
+                  }}
+                >
+                  {status}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Right Side: Search bar, Language, Settings, Bell, Profile */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flex: '0 1 auto', minWidth: 0 }}>
           {/* Working Pill Search Bar with Autocomplete Dropdown */}
-          <div ref={searchContainerRef} style={{ position: 'relative' }}>
+          <div ref={searchContainerRef} style={{ position: 'relative', flex: '0 1 360px', minWidth: '180px', maxWidth: '360px' }}>
             <form
               onSubmit={handleSearchSubmit}
               style={{
@@ -213,7 +251,7 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
                 alignItems: 'center',
                 padding: '0 14px 0 16px',
                 gap: '10px',
-                width: '280px',
+                width: '100%',
                 border: isSearchFocused ? `1.5px solid ${C.blue500}` : '1.5px solid transparent',
                 boxShadow: isSearchFocused ? '0 4px 16px rgba(56, 182, 255, 0.16)' : 'none',
                 transition: 'all 0.18s ease',
@@ -497,6 +535,7 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
             title="Notifications"
             style={{
               position: 'relative',
+              flexShrink: 0,
               width: 38,
               height: 38,
               borderRadius: '50%',
@@ -548,9 +587,19 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
             )}
           </button>
 
-          {/* User Profile Pill: Avatar + Name + Dropdown Chevron */}
+          {/* User Profile Pill: Avatar + Dropdown Chevron. The full name is the tooltip and accessible name. */}
           <div
+            role="button"
+            tabIndex={0}
+            title={displayName}
+            aria-label={displayName}
             onClick={() => navigate(ROUTES.PROFILE)}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                navigate(ROUTES.PROFILE)
+              }
+            }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -559,6 +608,7 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
               borderRadius: '24px',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
+              flexShrink: 0,
             }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(0,0,0,0.03)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
@@ -580,20 +630,6 @@ export function AppTopBar({ title, titleIcon, status, back = false, backLabel = 
                 {initials}
               </span>
             </div>
-            <span
-              style={{
-                fontSize: '13.5px',
-                fontWeight: 700,
-                color: C.navy800,
-                fontFamily: font.family,
-                maxWidth: '120px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {firstName}
-            </span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="m6 9 6 6 6-6" />
             </svg>

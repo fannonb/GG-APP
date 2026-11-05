@@ -13,6 +13,7 @@ import {
 } from '@/store/auth.store'
 import { useSpOnboardingProgress } from '@/hooks/useSpOnboardingProgress'
 import { ROUTES } from '@/router/routes'
+import { useSPCurrency } from '@/hooks/useCurrency'
 
 const SETUP_STEP_DEFS = [
   { n: 1, label: 'Create Account',           desc: 'Your provider account has been registered.',                          cta: null,                    ctaPath: null },
@@ -23,10 +24,11 @@ const SETUP_STEP_DEFS = [
 ] as const
 
 export function SPNewDashboardScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
   const { isMobile, isTablet } = useResponsive()
   const isNarrow = isMobile || isTablet
-  const { data: dashboard, isLoading } = useSPDashboard()
+  const { data: dashboard, isLoading, error: dashboardError, refetch: refetchDashboard } = useSPDashboard()
   const { data: healthNews } = useHealthNews()
   const {
     buildSetupSteps,
@@ -59,6 +61,18 @@ export function SPNewDashboardScreen() {
     navigate(ctaPath)
   }
 
+  if (dashboardError && !sp) {
+    return (
+      <SPLayout title="Dashboard">
+        <GGCard padding="24px">
+          <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>We couldn’t load your dashboard</div>
+          <div style={{ fontSize: '13px', color: C.textSub, marginTop: 6, lineHeight: 1.5, fontFamily: font.family }}>Something went wrong on our side. Your data is safe. Try again in a moment.</div>
+          <button type="button" onClick={() => void refetchDashboard()} style={{ marginTop: 14, padding: '9px 16px', borderRadius: 10, border: 'none', background: C.blue500, color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: font.family }}>Try again</button>
+        </GGCard>
+      </SPLayout>
+    )
+  }
+
   if (isLoading || !sp) {
     return (
       <SPLayout title="Dashboard">
@@ -75,10 +89,10 @@ export function SPNewDashboardScreen() {
   const countryCode = countryConfig?.code ?? 'ZW'
 
   const stats = [
-    { label: 'Total Earnings',  val: formatCurrency(sp.totalEarnings),  sub: 'All time', color: C.textLight },
+    { label: 'Total Earnings',  val: formatCurrency(sp.totalEarnings, currency),  sub: 'All time', color: C.textLight },
     {
       label: 'This Month',
-      val: formatCurrency(sp.monthlyEarnings),
+      val: formatCurrency(sp.monthlyEarnings, currency),
       sub: sp.monthlyEarnings > 0 ? 'Authorized this month' : 'No earnings yet',
       color: C.textLight,
     },

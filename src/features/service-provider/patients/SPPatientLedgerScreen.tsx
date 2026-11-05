@@ -4,6 +4,7 @@ import { GGButton, GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { LedgerTimeline } from '@/components/LedgerTimeline'
+import { LedgerOverview } from '@/components/LedgerOverview'
 import { useSPPatient, useSPPatientLedger } from '@/hooks/api'
 import { useResponsive } from '@/hooks/useResponsive'
 import { ApiError } from '@/api/types'
@@ -50,7 +51,7 @@ export function SPPatientLedgerScreen() {
 
   return (
     <SPLayout title="Health history" back>
-      <div style={{ maxWidth: 1120, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: 1240, margin: '0 auto', fontFamily: font.family, display: 'flex', flexDirection: 'column', gap: 16 }}>
         {ledgerQuery.isLoading && (
           <GGCard padding="24px"><div style={{ textAlign: 'center', color: C.textSub, fontSize: 14 }}>Loading history…</div></GGCard>
         )}
@@ -103,6 +104,8 @@ export function SPPatientLedgerScreen() {
                 </GGButton>
               </div>
             </GGCard>
+
+            <LedgerOverview entries={entries} now={now} />
 
             <LedgerTimeline
               entries={entries}

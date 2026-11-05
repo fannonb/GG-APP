@@ -537,13 +537,17 @@ export const patientService = {
   ): Promise<import('@/types/prescription.types').PrescriptionRequest> {
     if (isMockApi) {
       await mockDelay(400)
-      const provider = MOCK_PROVIDERS.find(item => item.id === payload.providerId)
       const { addMockPrescriptionRequest } = await import('@/mock/prescription.mock')
       return addMockPrescriptionRequest({
         id: `RX-2026-${String(Math.floor(Math.random() * 9000) + 1000)}`,
-        providerId: payload.providerId,
-        provider: provider?.name ?? 'Pharmacy',
         status: 'submitted',
+        searchLat: payload.searchLat,
+        searchLng: payload.searchLng,
+        searchRadiusKm: 2,
+        pharmaciesContacted: 3,
+        pharmaciesPending: 3,
+        pharmaciesDeclined: 0,
+        offers: [],
         fulfillmentMode: payload.fulfillmentMode ?? 'pickup',
         deliveryAddress: payload.deliveryAddress,
         patientNotes: payload.patientNotes,
@@ -570,6 +574,49 @@ export const patientService = {
     }
 
     const { data } = await apiClient.get('/patient/prescription-requests')
+    return data
+  },
+
+  async getNearbyPharmacies(
+    lat: number,
+    lng: number,
+  ): Promise<import('@/types/prescription.types').NearbyPharmaciesResult> {
+    if (isMockApi) {
+      await mockDelay(200)
+      return { radiusKm: 2, count: 3, maxRadiusKm: 6 }
+    }
+
+    const { data } = await apiClient.get('/patient/prescription-requests/nearby-pharmacies', {
+      params: { lat, lng },
+    })
+    return data
+  },
+
+  async selectPrescriptionOffer(
+    id: string,
+    offerId: string,
+  ): Promise<import('@/types/prescription.types').PrescriptionRequest> {
+    if (isMockApi) {
+      await mockDelay(200)
+      const { getMockPrescriptionRequestsForPatient, updateMockPrescriptionRequest } = await import('@/mock/prescription.mock')
+      const offer = getMockPrescriptionRequestsForPatient().find(item => item.id === id)?.offers?.find(item => item.id === offerId)
+      if (!offer) throw new Error('Quote not found')
+      const updated = updateMockPrescriptionRequest(id, {
+        status: 'accepted',
+        providerId: offer.providerId,
+        provider: offer.provider,
+        quotedItems: offer.quotedItems,
+        quotedAmount: offer.quotedAmount,
+        deliveryFee: offer.deliveryFee,
+        pharmacyNotes: offer.pharmacyNotes,
+        acceptedAt: new Date().toISOString(),
+        offers: [{ ...offer, status: 'selected' }],
+      })
+      if (!updated) throw new Error('Prescription request not found')
+      return updated
+    }
+
+    const { data } = await apiClient.patch(`/patient/prescription-requests/${id}/offers/${offerId}/select`)
     return data
   },
 

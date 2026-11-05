@@ -10,6 +10,11 @@ import { getCountryByCode } from '@/config/countries'
 import { useAuthStore } from '@/store/auth.store'
 import { ROUTES, route } from '@/router/routes'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
+import { InvoiceTable, type InvoiceTableColumn } from '@/components/InvoiceTable'
+import type { PatientInvoice } from '@/types/invoice.types'
+import type { Transaction } from '@/types/user.types'
+import { PAGE_SIZE } from '@/components/paging'
+import { SimplePager } from '@/components/SimplePager'
 import { PARTNER_MARKS } from './partnerMarks'
 import { CreditEmptyState } from './components/CreditEmptyState'
 import { RepaymentCard, RepaymentSchedule } from './components/RepaymentSection'
@@ -18,7 +23,6 @@ import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from './credi
 import { useUserStore } from '@/store/user.store'
 import { getLowCreditThreshold, isCreditRunningLow } from '@/utils/credit-threshold'
 
-const RECENT_TX_LIMIT = 5
 const CYAN_DEEP = '#0B7BC0'
 const CYAN_MID = '#1A9BE6'
 
@@ -76,6 +80,84 @@ function SummaryCard({ label, action, children }: { label: string; action?: Reac
   )
 }
 
+// Same pill styles as the SP payments table (SPPaymentsScreen PAYMENT_TYPE_PILL).
+const PAYMENT_TYPE_PILL: Record<'appointment' | 'prescription', { label: string; background: string; color: string; border: string }> = {
+  prescription: { label: 'Prescription', background: C.blue100, color: '#1A5D8A', border: C.blue300 },
+  appointment: { label: 'Appointment', background: C.navy800, color: '#fff', border: C.navy800 },
+}
+
+type RecentPaymentRow = { tx: Transaction; invoice?: PatientInvoice }
+
+const RECENT_PAYMENT_COLUMNS = (currency: string): InvoiceTableColumn<RecentPaymentRow>[] => [
+  {
+    key: 'service',
+    header: 'Service',
+    render: ({ tx, invoice }) => {
+      const forWhom = invoice?.serviceFor?.type === 'beneficiary' ? invoice.serviceFor : null
+      return (
+        <div>
+          <div style={{ fontWeight: 700, color: C.text, whiteSpace: 'nowrap' }}>{tx.service}</div>
+          {forWhom && (
+            <div style={{ fontSize: 12, color: C.textSub, marginTop: 3, whiteSpace: 'nowrap' }}>
+              For {forWhom.name}{forWhom.relation ? ` · ${forWhom.relation}` : ''}
+            </div>
+          )}
+        </div>
+      )
+    },
+  },
+  { key: 'provider', header: 'Provider', render: ({ tx }) => <span style={{ color: C.textSub }}>{tx.provider}</span> },
+  {
+    key: 'date',
+    header: 'Date',
+    render: ({ tx }) => <span style={{ whiteSpace: 'nowrap', color: C.textSub }}>{formatDate(tx.date, { month: 'short', day: 'numeric' })}</span>,
+  },
+  {
+    key: 'type',
+    header: 'Type',
+    render: ({ invoice }) => {
+      const pill = PAYMENT_TYPE_PILL[invoice?.isPrescription ? 'prescription' : 'appointment']
+      return (
+        <span style={{ padding: '3px 8px', borderRadius: radius.full, background: pill.background, color: pill.color, border: `1px solid ${pill.border}`, fontSize: '11px', fontWeight: 700, fontFamily: font.family, whiteSpace: 'nowrap' }}>
+          {pill.label}
+        </span>
+      )
+    },
+  },
+  {
+    key: 'amount',
+    header: 'Amount',
+    align: 'right',
+    render: ({ tx }) => {
+      const failed = tx.status === 'failed'
+      const pending = tx.status === 'pending'
+      return (
+        <div>
+          <div style={{ fontWeight: 800, whiteSpace: 'nowrap', color: failed ? C.error : C.text }}>
+            {formatAmount(tx.amount, currency)}
+          </div>
+          {(failed || pending) && (
+            <div style={{ fontSize: 11, fontWeight: 700, marginTop: 3, color: failed ? C.error : '#B45309' }}>
+              {failed ? 'Failed' : 'Processing'}
+            </div>
+          )}
+        </div>
+      )
+    },
+  },
+  {
+    key: 'chevron',
+    header: '',
+    align: 'right',
+    width: 40,
+    render: () => (
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden style={{ color: C.textLight, verticalAlign: 'middle' }}>
+        <path d="M6 4l4 4-4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+]
+
 export function CreditWalletScreen() {
   const navigate = useNavigate()
   const { isMobile } = useResponsive()
@@ -86,12 +168,13 @@ export function CreditWalletScreen() {
   const { data: invoiceData } = usePatientInvoices()
   const [howOpen, setHowOpen] = useState(false)
   const [scheduleOpen, setScheduleOpen] = useState(false)
+  const [recentPage, setRecentPage] = useState(1)
 
   const isNew = isMockApi
     ? userMode === 'new'
     : u.creditStatus === 'not_applied' && u.creditLimit === 0
   const country = getCountryByCode(u.countryCode)
-  const currency = country?.currencySymbol ?? 'Z$'
+  const currency = country?.currencySymbol ?? ''
   const partnerId = getFinancePartnerIdForCountry(u.countryCode)
   const partner = getFinancePartnerSummary(partnerId)
   const partnerName = partner?.name ?? 'your finance partner'
@@ -99,10 +182,17 @@ export function CreditWalletScreen() {
   const accountRef = u.creditAccountRef?.trim() || null
 
   const transactions = isNew ? [] : liveTransactions
-  const recentTransactions = [...transactions]
+  const sortedTransactions = [...transactions]
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, RECENT_TX_LIMIT)
-  const lastPayment = recentTransactions.find(tx => tx.status !== 'failed')
+  const lastPayment = sortedTransactions.find(tx => tx.status !== 'failed')
+
+  // "Recent payments to providers": client-side pages of PAGE_SIZE, newest first.
+  const recentPageCount = Math.max(1, Math.ceil(sortedTransactions.length / PAGE_SIZE))
+  const recentPageInRange = recentPage <= recentPageCount ? recentPage : 1
+  const recentPageItems = sortedTransactions.slice((recentPageInRange - 1) * PAGE_SIZE, recentPageInRange * PAGE_SIZE)
+  const showRecentPager = sortedTransactions.length > PAGE_SIZE
+  // Back to page 1 when the list shrinks past the page the user was on.
+  if (recentPage > recentPageCount) setRecentPage(1)
 
   const beneficiariesActive = Boolean(u.beneficiariesEnabled) || beneficiaries.length > 0
   const activeBeneficiaries = isNew || !beneficiariesActive ? [] : beneficiaries
@@ -125,7 +215,7 @@ export function CreditWalletScreen() {
   const firstPending = pendingInvoices[0]
 
   if (isNew) return (
-    <AppLayout title="Healthcare credit" notifCount={0}>
+    <AppLayout title="Healthcare allocation" notifCount={0}>
       <CreditEmptyState />
     </AppLayout>
   )
@@ -147,7 +237,7 @@ export function CreditWalletScreen() {
       id: 'credit-low',
       tone: 'info',
       icon: 'payment',
-      title: 'Your credit is running low',
+      title: 'Your allocation is running low',
       detail: `${formatAmount(u.creditAvailable, currency)} left, below the ${formatAmount(getLowCreditThreshold(u.countryCode), currency)} buffer we recommend.`,
       actionLabel: 'Request increase',
       onAction: () => navigate(ROUTES.CREDIT_INCREASE),
@@ -165,8 +255,15 @@ export function CreditWalletScreen() {
   const valueStyle: React.CSSProperties = { fontSize: 15, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
   const subStyle: React.CSSProperties = { fontSize: 13, color: C.textSub, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
 
+  // Link each transaction to its invoice (same reference) for the Type pill and the "For" line.
+  const invoiceByRef = new Map((invoiceData ?? []).map(invoice => [invoice.id, invoice] as const))
+  const recentPaymentRows: RecentPaymentRow[] = recentPageItems.map(tx => ({
+    tx,
+    invoice: tx.invoiceId ? invoiceByRef.get(tx.invoiceId) : undefined,
+  }))
+
   return (
-    <AppLayout title="Healthcare credit" notifCount={pendingCount || 1}>
+    <AppLayout title="Healthcare allocation" notifCount={pendingCount || 1}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24, fontFamily: font.family }}>
 
         <DashboardAttention items={attentionItems} />
@@ -178,7 +275,7 @@ export function CreditWalletScreen() {
           alignItems: 'stretch',
         }}>
         <section
-          aria-label="Credit balance"
+          aria-label="Allocation balance"
           style={{
             position: 'relative',
             overflow: 'hidden',
@@ -210,7 +307,7 @@ export function CreditWalletScreen() {
               </div>
               {u.creditStatus === 'approved' && (
                 <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: radius.full, color: '#15803D', background: 'rgba(255,255,255,0.8)' }}>
-                  Active credit line
+                  Active allocation
                 </span>
               )}
             </div>
@@ -224,7 +321,7 @@ export function CreditWalletScreen() {
 
                 <div
                   role="progressbar"
-                  aria-label="Credit used"
+                  aria-label="Allocation used"
                   aria-valuenow={limitUsedPct}
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -296,12 +393,12 @@ export function CreditWalletScreen() {
             <div style={valueStyle}>{familyLabel}</div>
             <div style={subStyle}>
               {beneficiariesActive && activeBeneficiaries.length > 0
-                ? 'Can use this credit at verified providers'
+                ? 'Can use this allocation at verified providers'
                 : 'Enable beneficiaries in Profile'}
             </div>
           </SummaryCard>
 
-          <SummaryCard label="Credit line">
+          <SummaryCard label="Allocation">
             <div style={valueStyle}>{partnerName}</div>
             <div style={subStyle}>
               {[accountRef && `Ref ${accountRef}`, country?.currencyCode].filter(Boolean).join(' · ') || 'Issued through GG\'APP'}
@@ -321,16 +418,16 @@ export function CreditWalletScreen() {
             </button>
           </div>
           <div style={{ fontSize: 13, color: C.textSub, marginBottom: 8 }}>
-            Paid from your credit after you approved the invoice
+            Paid from your allocation after you approved the invoice
           </div>
 
-          {recentTransactions.length === 0 ? (
+          {sortedTransactions.length === 0 ? (
             <div style={{ padding: '20px 0', fontSize: 14, color: C.textSub, lineHeight: 1.55 }}>
               No payments yet. Find a verified provider, then approve their invoice with your PIN.
             </div>
-          ) : (
+          ) : isMobile ? (
             <div>
-              {recentTransactions.map((tx, i) => {
+              {recentPageItems.map((tx, i) => {
                 const failed = tx.status === 'failed'
                 const pending = tx.status === 'pending'
                 return (
@@ -376,6 +473,22 @@ export function CreditWalletScreen() {
                   </button>
                 )
               })}
+              {showRecentPager && (
+                <SimplePager page={recentPageInRange} total={sortedTransactions.length} pageSize={PAGE_SIZE} onPageChange={setRecentPage} padding="14px 4px" />
+              )}
+            </div>
+          ) : (
+            <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: radius.md, overflow: 'hidden' }}>
+              <InvoiceTable
+                label="Recent payments to providers"
+                columns={RECENT_PAYMENT_COLUMNS(currency)}
+                rows={recentPaymentRows}
+                getKey={row => row.tx.id}
+                onRowClick={({ tx }) => navigate(tx.invoiceId ? route.patientInvoice(tx.invoiceId) : ROUTES.TRANSACTIONS)}
+              />
+              {showRecentPager && (
+                <SimplePager page={recentPageInRange} total={sortedTransactions.length} pageSize={PAGE_SIZE} onPageChange={setRecentPage} />
+              )}
             </div>
           )}
         </section>

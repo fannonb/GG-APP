@@ -25,7 +25,7 @@ export function CreditIncreaseScreen() {
   const { isMobile } = useResponsive()
   const u = useUserStore(s => s.user)
   const country = getCountryByCode(u.countryCode)
-  const currency = country?.currencySymbol ?? 'Z$'
+  const currency = country?.currencySymbol ?? ''
   const partnerId = getFinancePartnerIdForCountry(u.countryCode)
   const partner = getFinancePartnerSummary(partnerId)
 
@@ -95,7 +95,7 @@ export function CreditIncreaseScreen() {
         {pendingReview && (
           <GGCard padding="22px" style={{ background: C.blue100, border: '1.5px solid rgba(56,182,255,0.28)' }}>
             <div style={{ fontSize: '14px', fontWeight: 700, color: C.navy800, marginBottom: '6px' }}>
-              {pendingIncrease ? 'Increase request under review' : 'Credit request under review'}
+              {pendingIncrease ? 'Increase request under review' : 'Allocation request under review'}
             </div>
             <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.55, marginBottom: '14px' }}>
               You already have a pending request with the {partner?.name ?? 'finance partner'} team. You can submit a new increase once a decision is made.
@@ -118,7 +118,7 @@ export function CreditIncreaseScreen() {
           padding: isMobile ? '20px 18px' : '24px 26px',
           boxShadow: shadow.sm,
         }}>
-          <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, marginBottom: '16px' }}>Your Current Credit</div>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, marginBottom: '16px' }}>Your Current Allocation</div>
           <div style={{
             display: 'grid',
             gridTemplateColumns: isMobile ? '1fr 1fr' : 'repeat(4, 1fr)',
@@ -227,7 +227,7 @@ export function CreditIncreaseScreen() {
               Platform Admin Fee
             </div>
             <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.65 }}>
-              By submitting this increase request, you acknowledge that a <strong style={{ color: C.text }}>2.5% platform administration fee</strong> will be deducted from any newly approved increase amount and remitted to GG&apos;APP. The remaining balance will be added to your wallet for use with verified healthcare providers. This fee is included in the total amount you repay to the finance partner.
+              By submitting this increase request, you acknowledge that a <strong style={{ color: C.text }}>2.5% platform administration fee</strong> will be deducted from any newly approved increase amount and remitted to GG&apos;APP. The remaining balance will be added to your allocation for use with verified healthcare providers. This fee is included in the total amount you repay to the finance partner.
             </div>
             {form.increaseAmount && !isNaN(increaseNum) && increaseNum > 0 && (
               <div style={{ marginTop: '12px', padding: '10px 12px', background: '#fff', borderRadius: radius.xs, border: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -241,7 +241,7 @@ export function CreditIncreaseScreen() {
                 </div>
                 <div style={{ height: 1, background: C.border, margin: '2px 0' }} />
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                  <span style={{ fontWeight: 700, color: C.text }}>Est. added to wallet</span>
+                  <span style={{ fontWeight: 700, color: C.text }}>Est. added to allocation</span>
                   <span style={{ fontWeight: 800, color: C.navy800 }}>{formatCurrency(increaseNum * 0.975, currency)}</span>
                 </div>
               </div>

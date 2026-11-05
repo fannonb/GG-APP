@@ -32,6 +32,12 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   )
+  // Clinical and authentication responses must never be stored by shared caches.
+  app.use((_req: express.Request, res: express.Response, next: express.NextFunction) => {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Pragma', 'no-cache')
+    next()
+  })
   app.use(
     express.json({
       limit: '25mb',
@@ -50,7 +56,7 @@ async function bootstrap() {
   // number of trusted hops (1 is correct for Railway's single edge hop); it
   // defaults to 1 only in production so local dev keeps raw sockets.
   if (config.app.trustProxy !== '') {
-    app.set('trust proxy', config.app.trustProxy as string)
+    app.set('trust proxy', config.app.trustProxy)
   }
 
   app.enableCors({

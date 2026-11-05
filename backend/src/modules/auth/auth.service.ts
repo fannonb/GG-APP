@@ -6,6 +6,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
   UnauthorizedException,
 } from '@nestjs/common'
 import { ThrottlerException } from '@nestjs/throttler'
@@ -22,7 +23,9 @@ import {
   UserStatus,
 } from '@prisma/client'
 import * as bcrypt from 'bcryptjs'
-import { randomUUID, createHash, timingSafeEqual } from 'node:crypto'
+import { randomUUID, randomBytes, createHash, timingSafeEqual } from 'node:crypto'
+import { applicationAccessKey } from './application-access.guard'
+import type { ProviderApplicationAccessDto } from './dto/account-requests.dto'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../../prisma/prisma.service'
 import { RedisService } from '../../redis/redis.service'
@@ -77,6 +80,7 @@ export class AuthService {
   }
 
   async registerPatient(dto: RegisterPatientDto, ctx: SessionContext = {}) {
+    if (!dto.googleIdToken) this.requireProductionMail()
     const email = dto.email.toLowerCase()
     const existing = await this.prisma.user.findUnique({ where: { email } })
 
@@ -296,6 +300,7 @@ export class AuthService {
   }
 
   async registerSp(dto: RegisterSpDto) {
+    this.requireProductionMail()
     const email = dto.email.toLowerCase()
     const existing = await this.prisma.user.findUnique({ where: { email } })
 
@@ -434,9 +439,24 @@ export class AuthService {
     }
   }
 
-  async getProviderApplicationStatus(applicationId: string) {
-    const application = await this.prisma.providerApplication.findUnique({
-      where: { id: applicationId },
+  async getProviderApplicationAccess(applicationId: string, dto: ProviderApplicationAccessDto) {
+    // Authenticate by account first: an application ID never acts as a credential.
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email.trim().toLowerCase() } })
+    const passwordMatches = await bcrypt.compare(dto.password, user?.passwordHash ?? '$2a$12$R9h/cIPz0gi.URNNX3kh2OPST9/PgBkqquzi.Ss7KIUgO2t0jWMUW')
+    if (!user || !passwordMatches || user.role !== UserRole.SP || user.status !== UserStatus.ACTIVE) {
+      throw new UnauthorizedException('Invalid application credentials')
+    }
+    const application = await this.prisma.providerApplication.findFirst({ where: { id: applicationId, userId: user.id } })
+    if (!application) throw new UnauthorizedException('Invalid application credentials')
+    const accessToken = randomBytes(32).toString('hex')
+    const expiresAt = Date.now() + 15 * 60 * 1000
+    await this.redis.set(applicationAccessKey(accessToken), JSON.stringify({ applicationId, userId: user.id, expiresAt }), 15 * 60)
+    return { accessToken, expiresAt }
+  }
+
+  async getProviderApplicationStatus(applicationId: string, userId: string) {
+    const application = await this.prisma.providerApplication.findFirst({
+      where: { id: applicationId, userId },
       select: {
         id: true,
         status: true,
@@ -660,6 +680,61 @@ export class AuthService {
     }
 
     return response
+  }
+
+  async inviteImportedProvider(actorUserId: string, applicationId: string) {
+    if (!this.mailService.isEnabled) throw new ServiceUnavailableException('Email delivery must be configured before sending invitations')
+    const application = await this.prisma.providerApplication.findUnique({ where: { id: applicationId } })
+    if (!application?.importedAt || application.status !== ProviderApplicationStatus.APPROVED || application.activatedAt) {
+      throw new BadRequestException('Approve an imported application after verifying its details before inviting it. Activated accounts use password reset.')
+    }
+    const token = randomBytes(32).toString('hex')
+    const digest = createHash('sha256').update(token).digest('hex')
+    await this.prisma.providerApplication.update({ where: { id: applicationId }, data: { activationTokenHash: digest, activationExpiresAt: new Date(Date.now() + 86400000) } })
+    const sent = await this.mailService.sendAccountNotice(application.email, {
+      subject: "Set up your GG'APP provider account",
+      paragraphs: [application.practiceName + ', your details have been reviewed. Choose your password, then sign in to review and update your profile. This one-time link expires in 24 hours.'],
+      cta: { label: 'Create your password', path: '/reset-password?role=sp&setup=1&token=' + token },
+    })
+    if (!sent) {
+      await this.prisma.providerApplication.updateMany({ where: { id: applicationId, activationTokenHash: digest }, data: { activationTokenHash: null, activationExpiresAt: null } })
+      throw new ServiceUnavailableException('Invitation email could not be sent. Retry when delivery is available.')
+    }
+    await this.prisma.providerApplication.update({ where: { id: applicationId }, data: { invitedAt: new Date() } })
+    await this.prisma.auditLog.create({ data: { actorUserId, action: 'admin.provider.invited', entityType: 'ProviderApplication', entityId: applicationId } })
+    return { message: 'Setup link sent to ' + application.email + '. It expires in 24 hours.' }
+  }
+
+  /** Sends setup links one after another and reports each outcome, so the admin sees one summary instead of one message per provider. */
+  async inviteImportedProviders(actorUserId: string, applicationIds: string[]) {
+    if (!this.mailService.isEnabled) throw new ServiceUnavailableException('Email delivery must be configured before sending invitations')
+    const results: Array<{ id: string; ok: boolean; message: string; invitedAt?: string }> = []
+    for (const id of applicationIds) {
+      try {
+        const { message } = await this.inviteImportedProvider(actorUserId, id)
+        results.push({ id, ok: true, message, invitedAt: new Date().toISOString() })
+      } catch (error) {
+        results.push({ id, ok: false, message: error instanceof Error ? error.message : 'Could not send the setup link' })
+      }
+    }
+    return { sent: results.filter(r => r.ok).length, failed: results.filter(r => !r.ok).length, results }
+  }
+
+  async activateImportedProvider(token: string, password: string) {
+    const digest = createHash('sha256').update(token).digest('hex')
+    const application = await this.prisma.providerApplication.findUnique({ where: { activationTokenHash: digest } })
+    if (!application?.importedAt || application.status !== ProviderApplicationStatus.APPROVED || application.activatedAt || !application.activationExpiresAt || application.activationExpiresAt <= new Date()) {
+      throw new BadRequestException('This setup link is invalid or expired. Ask the admin for a new invitation.')
+    }
+    const passwordHash = await bcrypt.hash(password, 12)
+    await this.prisma.$transaction(async tx => {
+      const claimed = await tx.providerApplication.updateMany({ where: { id: application.id, activationTokenHash: digest, activatedAt: null, status: ProviderApplicationStatus.APPROVED, activationExpiresAt: { gt: new Date() } }, data: { activatedAt: new Date(), activationTokenHash: null, activationExpiresAt: null } })
+      if (claimed.count !== 1) throw new BadRequestException('This setup link was already used or expired')
+      await tx.user.update({ where: { id: application.userId }, data: { passwordHash, status: UserStatus.ACTIVE, emailVerifiedAt: new Date() } })
+      await tx.provider.updateMany({ where: { applicationId: application.id }, data: { lifecycleStatus: ProviderLifecycleStatus.ACTIVE } })
+      await tx.auditLog.create({ data: { actorUserId: application.userId, action: 'auth.provider.activated', entityType: 'ProviderApplication', entityId: application.id } })
+    })
+    return { message: 'Password created. Sign in to review and update your provider profile.' }
   }
 
   async resetPassword(token: string, password: string) {
@@ -921,7 +996,7 @@ export class AuthService {
       },
       {
         secret: accessSecret,
-        expiresIn: accessTtl,
+        expiresIn: parseDurationToSeconds(accessTtl),
       },
     )
 
@@ -939,7 +1014,7 @@ export class AuthService {
       },
       {
         secret: refreshSecret,
-        expiresIn: refreshTtl,
+        expiresIn: parseDurationToSeconds(refreshTtl),
       },
     )
 
@@ -1246,10 +1321,14 @@ export class AuthService {
 
   private shouldExposeResetUrl() {
     const nodeEnv = this.configService.get<string>('app.nodeEnv') ?? 'development'
-    // Only expose the reset link in the API response outside production, or as
-    // a dev fallback when no mail provider is configured (the link is otherwise
-    // delivered by email only).
-    return nodeEnv !== 'production' || !this.mailService.isEnabled
+    // Mail outages must never turn password reset into account takeover.
+    return nodeEnv !== 'production'
+  }
+
+  private requireProductionMail() {
+    if (this.configService.get<string>('app.nodeEnv') === 'production' && !this.mailService.isEnabled) {
+      throw new ServiceUnavailableException('Email verification is temporarily unavailable. Please try again later.')
+    }
   }
 
   private buildPasswordResetUrl(token: string, role?: 'admin') {

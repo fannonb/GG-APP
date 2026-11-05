@@ -396,8 +396,8 @@ export function ProfileScreen() {
                   </select>
                   <div style={{ fontSize: '11px', color: C.textSub, lineHeight: 1.5 }}>
                     {isOperatingCountryCode(form.residenceCountryCode)
-                      ? 'You live in an operating market. Credit currency follows this country.'
-                      : `You live abroad. Credit market stays ${countryName}; beneficiaries must still be in Kenya, Zimbabwe, or Zambia.`}
+                      ? 'You live in an operating market. Allocation currency follows this country.'
+                      : `You live abroad. Allocation market stays ${countryName}; beneficiaries must still be in Kenya, Zimbabwe, or Zambia.`}
                   </div>
                 </div>
               </div>
@@ -411,7 +411,7 @@ export function ProfileScreen() {
                   [
                     { label: 'Phone number', value: phoneDisplay },
                     u.residesAbroad
-                      ? { label: 'Country', value: `${u.residenceCountry ?? u.country} (abroad) · credit in ${countryName}, ${country?.currencyCode ?? ''}` }
+                      ? { label: 'Country', value: `${u.residenceCountry ?? u.country} (abroad) · allocation in ${countryName}, ${country?.currencyCode ?? ''}` }
                       : { label: 'Country', value: [countryName, currencyLabel].filter(Boolean).join(' · ') },
                   ],
                   [
@@ -528,7 +528,7 @@ export function ProfileScreen() {
                 </div>
                 <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '6px' }}>Beneficiaries are locked</div>
                 <div style={{ fontSize: '13px', color: C.textSub, maxWidth: 420, margin: '0 auto 18px', lineHeight: 1.6 }}>
-                  Enable the toggle above to activate this section, or choose Self + beneficiaries during your credit application.
+                  Enable the toggle above to activate this section, or choose Self + beneficiaries during your allocation application.
                 </div>
                 <GGButton
                   variant="primary"

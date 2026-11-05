@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { C, font, radius, shadow } from '@/design-system'
 import { LOGO, ROUTES } from '@/router/routes'
+import { InstallAppHeroCTA } from '@/components/InstallApp'
 
 /** Installable Android APK, served from the web app's public/downloads/. */
 export const APK_DOWNLOAD_PATH = '/downloads/ggapp.apk'
@@ -71,13 +72,16 @@ export function DownloadScreen() {
         />
 
         <h1 style={{ margin: 0, color: C.text, fontSize: 26, fontWeight: 700, letterSpacing: '-0.01em' }}>
-          Get the GG&apos;APP mobile app
+          Get the GG&apos;APP app
         </h1>
         <p style={{ margin: '10px 0 26px', color: C.textSub, fontSize: 15, lineHeight: 1.55 }}>
-          Book healthcare services, track your ledger and invoices, and manage credit — right from your phone.
+          Book healthcare services, track your ledger and invoices, and manage credit — right from your home screen or desktop.
         </p>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 22 }}>
+        {/* Primary CTA: Instant PWA / iOS Web Clip install */}
+        <InstallAppHeroCTA />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 22 }}>
           <a
             href={APK_DOWNLOAD_PATH}
             download
@@ -86,31 +90,21 @@ export function DownloadScreen() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 10,
-              height: 54,
+              height: 46,
               borderRadius: radius.md,
-              background: C.blue500,
-              color: '#fff',
+              background: '#fff',
+              border: `1.5px solid ${C.border}`,
+              color: C.text,
               fontWeight: 700,
-              fontSize: 17,
+              fontSize: 14.5,
               textDecoration: 'none',
               transition: 'background 0.16s ease',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#3B9FD4')}
-            onMouseLeave={e => (e.currentTarget.style.background = C.blue500)}
           >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-              <path
-                d="M12 3v11m0 0 4-4m-4 4-4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-            Download for Android (APK)
+            Download Android Package (APK)
           </a>
-          <p style={{ margin: 0, fontSize: 12.5, color: C.textLight }}>
-            Android 8.0+ · ~50 MB · sideloading must be enabled on your device
+          <p style={{ margin: 0, fontSize: 12, color: C.textLight }}>
+            Android 8.0+ · ~50 MB · alternative standalone APK
           </p>
         </div>
 

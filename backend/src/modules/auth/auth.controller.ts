@@ -25,7 +25,8 @@ import {
 import { parseDurationToSeconds } from '../../common/utils/duration.util'
 import { AuthService, type SessionContext } from './auth.service'
 import { AccountRequestsService } from './account-requests.service'
-import { EmailChangeRequestDto, ProviderApplicationReplyDto } from './dto/account-requests.dto'
+import { EmailChangeRequestDto, ProviderApplicationAccessDto, ProviderApplicationReplyDto } from './dto/account-requests.dto'
+import { ApplicationAccessGuard } from './application-access.guard'
 import { ForgotPasswordDto } from './dto/forgot-password.dto'
 import { GoogleAuthDto } from './dto/google-auth.dto'
 import { LoginDto } from './dto/login.dto'
@@ -118,9 +119,16 @@ export class AuthController {
   }
 
   @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('register/sp/:applicationId/access')
+  getApplicationAccess(@Param('applicationId') applicationId: string, @Body() dto: ProviderApplicationAccessDto) {
+    return this.authService.getProviderApplicationAccess(applicationId, dto)
+  }
+
+  @UseGuards(ApplicationAccessGuard)
   @Get('register/sp/:applicationId/status')
-  getSpRegistrationStatus(@Param('applicationId') applicationId: string) {
-    return this.authService.getProviderApplicationStatus(applicationId)
+  getSpRegistrationStatus(@Param('applicationId') applicationId: string, @Req() req: Request & { applicationUserId: string }) {
+    return this.authService.getProviderApplicationStatus(applicationId, req.applicationUserId)
   }
 
   /** A provider answers "more information needed" while their application is under review. */
@@ -131,10 +139,10 @@ export class AuthController {
     return this.accountRequests.replyToApplication(applicationId, dto)
   }
 
-  @Public()
+  @UseGuards(ApplicationAccessGuard)
   @Get('register/sp/:applicationId/messages')
-  getApplicationMessages(@Param('applicationId') applicationId: string) {
-    return this.accountRequests.applicationThread(applicationId)
+  getApplicationMessages(@Param('applicationId') applicationId: string, @Req() req: Request & { applicationUserId: string }) {
+    return this.accountRequests.applicationThread(applicationId, req.applicationUserId)
   }
 
   // Changing the sign-in email is requested here and approved by an admin.
@@ -201,6 +209,13 @@ export class AuthController {
   @Post('forgot-password')
   forgotPassword(@Body() dto: ForgotPasswordDto) {
     return this.authService.forgotPassword(dto.email)
+  }
+
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  @Post('activate-provider')
+  activateProvider(@Body() dto: ResetPasswordDto) {
+    return this.authService.activateImportedProvider(dto.token, dto.password)
   }
 
   @Public()

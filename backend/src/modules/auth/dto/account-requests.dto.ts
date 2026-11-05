@@ -17,9 +17,12 @@ class ReplyDocumentDto {
   @IsString() @MinLength(1) storageKey!: string
 }
 
-export class ProviderApplicationReplyDto {
+export class ProviderApplicationAccessDto {
   @IsEmail() email!: string
-  @IsString() @MinLength(1) password!: string
+  @IsString() @MinLength(1) @MaxLength(128) password!: string
+}
+
+export class ProviderApplicationReplyDto extends ProviderApplicationAccessDto {
   @IsString() @MinLength(3) @MaxLength(2000) message!: string
   @IsOptional() @IsArray() @ValidateNested({ each: true }) @Type(() => ReplyDocumentDto) documents?: ReplyDocumentDto[]
 }

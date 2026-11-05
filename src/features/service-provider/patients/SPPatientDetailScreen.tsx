@@ -9,6 +9,8 @@ import { useResponsive } from '@/hooks/useResponsive'
 import { formatCurrency, formatDate, formatPhone } from '@/utils/format'
 import { ROUTES, route } from '@/router/routes'
 import type { SPPatient } from '@/types/appointment.types'
+import { useSPCurrency } from '@/hooks/useCurrency'
+import { Pager, usePaged } from '@/components/paging'
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -71,6 +73,7 @@ function filterChipStyle(active: boolean): React.CSSProperties {
 }
 
 export function SPPatientDetailScreen() {
+  const currency = useSPCurrency()
   const navigate = useNavigate()
   const location = useLocation()
   const { id } = useParams<{ id: string }>()
@@ -105,6 +108,7 @@ export function SPPatientDetailScreen() {
   }, [p?.visitHistory, filterStatus, search])
 
   const openEncounterId = expandedId === false ? null : expandedId ?? filteredEncounters[0]?.id ?? null
+  const { pageItems: pagedEncounters, pager: encounterPager } = usePaged(filteredEncounters, `${filterStatus}|${search}`)
 
   if (isLoading && !p) {
     return (
@@ -306,7 +310,7 @@ export function SPPatientDetailScreen() {
                 Total billed
               </div>
               <div style={{ fontSize: '18px', fontWeight: 800, color: C.navy800, marginTop: '2px', fontFamily: font.family }}>
-                {formatCurrency(p.totalSpent)}
+                {formatCurrency(p.totalSpent, currency)}
               </div>
             </div>
             <div>
@@ -381,7 +385,7 @@ export function SPPatientDetailScreen() {
               </GGCard>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {filteredEncounters.map((v, idx) => {
+                {pagedEncounters.map((v, idx) => {
                   const open = v.id === openEncounterId
                   return (
                   <div
@@ -417,7 +421,7 @@ export function SPPatientDetailScreen() {
                           <span style={{ fontSize: '15px', fontWeight: 800, color: C.navy800 }}>
                             {formatDate(v.date)}
                           </span>
-                          {idx === 0 && (
+                          {idx + encounterPager.page * encounterPager.pageSize === 0 && (
                             <span style={{ fontSize: '10px', fontWeight: 700, color: C.navy800, background: '#fff', padding: '2px 8px', borderRadius: radius.full, letterSpacing: '0.05em', border: `1px solid ${C.border}` }}>
                               Latest
                             </span>
@@ -431,7 +435,7 @@ export function SPPatientDetailScreen() {
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
                         {statusChip(v.status)}
                         <span style={{ fontSize: '15px', fontWeight: 800, color: C.navy800 }}>
-                          {formatCurrency(v.amount)}
+                          {formatCurrency(v.amount, currency)}
                         </span>
                         <svg
                           width="16"
@@ -556,6 +560,7 @@ export function SPPatientDetailScreen() {
                   </div>
                   )
                 })}
+                <Pager {...encounterPager} />
               </div>
             )}
 

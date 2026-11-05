@@ -31,7 +31,7 @@ export function DashboardNextAppointmentCard({ appointments }: DashboardNextAppo
     minHeight: isMobile ? 'auto' : 196,
   }
 
-  // Same header pattern as the wallet card so the pair reads as one row.
+  // Same header pattern as the allocation card so the pair reads as one row.
   const label = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
       <div

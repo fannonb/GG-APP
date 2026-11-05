@@ -162,7 +162,9 @@ export class AccountRequestsService {
     return { applicationId, status: 'pending', message: 'Thanks — your reply was sent for review.' }
   }
 
-  async applicationThread(applicationId: string) {
+  async applicationThread(applicationId: string, userId: string) {
+    const application = await this.prisma.providerApplication.findFirst({ where: { id: applicationId, userId }, select: { id: true } })
+    if (!application) throw new NotFoundException('Application not found')
     const messages = await this.prisma.providerApplicationMessage.findMany({ where: { applicationId }, orderBy: { createdAt: 'asc' } })
     return messages.map(m => ({ id: m.id, author: m.author.toLowerCase(), kind: m.kind, body: m.body, at: m.createdAt.toISOString() }))
   }

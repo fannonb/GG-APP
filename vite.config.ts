@@ -1,7 +1,48 @@
-import { defineConfig, loadEnv } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import fs from 'fs'
 import path from 'path'
+
+/**
+ * Serves `/gg-app.mobileconfig` with the `application/x-apple-aspen-config`
+ * MIME type iOS Safari requires to open the native Web Clip profile installer,
+ * rewriting the payload URL to match the active host.
+ */
+function iosMobileconfigPlugin(): Plugin {
+  const handler = (req: import('http').IncomingMessage, res: import('http').ServerResponse, next: () => void) => {
+    if (!req.url || !req.url.split('?')[0].endsWith('/gg-app.mobileconfig')) {
+      next()
+      return
+    }
+    try {
+      const filePath = path.resolve(__dirname, 'public/gg-app.mobileconfig')
+      const raw = fs.readFileSync(filePath, 'utf8')
+      const proto = (req.headers['x-forwarded-proto'] as string)?.split(',')[0]?.trim() || 'http'
+      const host = req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5173'
+      const body = raw.replace(
+        'https://app.gatewayglobal.africa/?source=pwa',
+        `${proto}://${host}/?source=pwa`,
+      )
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/x-apple-aspen-config')
+      res.setHeader('Content-Disposition', 'attachment; filename="gg-app.mobileconfig"')
+      res.setHeader('Cache-Control', 'no-store')
+      res.end(body)
+    } catch {
+      next()
+    }
+  }
+  return {
+    name: 'gg-ios-mobileconfig',
+    configureServer(server) {
+      server.middlewares.use(handler)
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use(handler)
+    },
+  }
+}
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -18,6 +59,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
+      iosMobileconfigPlugin(),
       react(),
       VitePWA({
         strategies: 'injectManifest',

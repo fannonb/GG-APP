@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -25,7 +25,7 @@ ENV VITE_ADMIN_PORTAL_PATH=$VITE_ADMIN_PORTAL_PATH
 RUN npm run build
 
 # ---- Serve stage ----
-FROM nginx:1.27-alpine
+FROM nginx:stable-alpine
 # Replace the stock default.conf (no SPA fallback, no security headers) and
 # mount the shared security-header include alongside it.
 COPY nginx.conf /etc/nginx/conf.d/default.conf

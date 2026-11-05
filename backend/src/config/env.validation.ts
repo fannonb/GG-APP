@@ -42,19 +42,17 @@ export function validateEnv(env: Record<string, unknown>) {
     )
   }
 
-  // Production posture checks. These do not block boot (an operator may
-  // consciously stage config mid-migration), but they surface misconfigurations
-  // in Railway logs at deploy time instead of silently degrading security.
+  // Reject shared signing keys; warn about other production configuration gaps.
   if (env.NODE_ENV === 'production') {
+    if (env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
+      throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be distinct in production')
+    }
     const prodWarnings: string[] = []
 
     if (!env.RESEND_API_KEY) {
-      // Registration auto-verifies accounts when mail delivery is disabled
-      // (auth.service guarded by mailService.isEnabled). That must be a
-      // conscious decision in production, never a silent default.
+      // AuthService refuses email/password registration while mail is disabled.
       prodWarnings.push(
-        'RESEND_API_KEY is empty: email delivery is OFF and new accounts are AUTO-VERIFIED ' +
-          '(standard register/login still allow unverified accounts to sign in!).',
+        'RESEND_API_KEY is empty: email/password registrations are unavailable until email verification is configured.',
       )
     }
     if (!env.GOOGLE_ALLOWED_REDIRECT_URIS) {

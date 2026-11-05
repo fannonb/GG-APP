@@ -15,9 +15,12 @@ import {
   isPrescriptionPaid as isPaid,
   prescriptionMedicineSummary as medicineSummary,
   prescriptionProgress,
+  isChoosingPharmacy,
+  prescriptionPharmacyLabel,
   prescriptionStage as stageOf,
   type PrescriptionStage,
 } from './prescriptionStatus'
+import { Pager, usePaged } from '@/components/paging'
 
 type TabId = 'active' | 'past'
 type Stage = PrescriptionStage
@@ -107,9 +110,15 @@ function MiniProgress({ request }: { request: PrescriptionRequest }) {
 
 function statusFor(stage: Stage, request: PrescriptionRequest, delivery: boolean): { text: string; tone: { fg: string; bg: string } } {
   switch (stage) {
-    case 'reviewQuote': return { text: 'The pharmacy sent a price', tone: AMBER }
+    case 'reviewQuote':
+      return isChoosingPharmacy(request)
+        ? { text: `${request.offers?.length ?? 0} ${(request.offers?.length ?? 0) === 1 ? 'price' : 'prices'} to compare`, tone: AMBER }
+        : { text: 'The pharmacy sent a price', tone: AMBER }
     case 'approvePayment': return { text: 'Invoice waiting for your approval', tone: AMBER }
-    case 'awaitQuote': return { text: 'Waiting for the pharmacy’s quote', tone: CYAN }
+    case 'awaitQuote':
+      return isChoosingPharmacy(request)
+        ? { text: `Waiting for prices from pharmacies within ${request.searchRadiusKm ?? 2} km`, tone: CYAN }
+        : { text: 'Waiting for the pharmacy’s quote', tone: CYAN }
     case 'awaitInvoice': return { text: 'Quote accepted · invoice on its way', tone: CYAN }
     case 'preparing': return { text: 'Being prepared', tone: CYAN }
     case 'ready':
@@ -123,7 +132,10 @@ function statusFor(stage: Stage, request: PrescriptionRequest, delivery: boolean
         tone: GREEN,
       }
     case 'closed':
-      return { text: request.status === 'rejected' ? 'Declined by the pharmacy' : 'Cancelled', tone: GREY }
+      return {
+        text: request.status === 'rejected' ? 'Declined by the pharmacy' : request.status === 'expired' ? 'No available pharmacies' : 'Cancelled',
+        tone: GREY,
+      }
   }
 }
 
@@ -136,7 +148,7 @@ function ActiveCard({ request, stage, fallbackCurrency }: { request: Prescriptio
 
   let action: ReactNode = null
   if (stage === 'reviewQuote') {
-    action = <button type="button" style={{ ...actionBtn, width: '100%' }} onClick={open}>Review quote{amount ? ` · ${amount}` : ''}</button>
+    action = <button type="button" style={{ ...actionBtn, width: '100%' }} onClick={open}>{isChoosingPharmacy(request) ? 'Compare prices' : `Review quote${amount ? ` · ${amount}` : ''}`}</button>
   } else if (stage === 'approvePayment') {
     action = (
       <button type="button" style={{ ...actionBtn, width: '100%' }} onClick={() => request.invoiceId && navigate(route.patientInvoice(request.invoiceId))}>
@@ -172,7 +184,7 @@ function ActiveCard({ request, stage, fallbackCurrency }: { request: Prescriptio
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: C.text, lineHeight: 1.3 }}>{medicineSummary(request)}</div>
           <div style={{ fontSize: 12, color: C.textSub, marginTop: 3 }}>
-            {request.provider ?? 'Pharmacy'} · {who} · {delivery ? 'Delivery' : 'Pick up'}
+            {prescriptionPharmacyLabel(request)} · {who} · {delivery ? 'Delivery' : 'Pick up'}
           </div>
         </div>
         {amount && (
@@ -218,7 +230,7 @@ function PastRow({ request, stage, fallbackCurrency, isLast }: { request: Prescr
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{medicineSummary(request)}</div>
         <div style={{ fontSize: 12, color: C.textSub, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {request.provider ?? 'Pharmacy'} · {request.id}
+          {prescriptionPharmacyLabel(request)} · {request.id}
           {isMobile ? '' : ` · ${request.forSelf ? 'for you' : `for ${request.for}`}`}
         </div>
       </div>
@@ -252,13 +264,14 @@ export function PrescriptionRequestsScreen() {
     .sort((a, b) => (b.request.fulfilledAt ?? b.request.submittedAt).localeCompare(a.request.fulfilledAt ?? a.request.submittedAt))
   const tab: TabId = chosenTab ?? (active.length > 0 ? 'active' : 'past')
   const items = tab === 'active' ? active : past
+  const { pageItems, pager } = usePaged(items, tab)
 
   const headingOf = ({ request, stage }: { request: PrescriptionRequest; stage: Stage }) =>
     GROUP[stage].heading
     || new Date(request.fulfilledAt ?? request.declinedAt ?? request.submittedAt).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   const groups: { heading: string; rows: typeof items }[] = []
-  for (const item of items) {
+  for (const item of pageItems) {
     const heading = headingOf(item)
     const last = groups[groups.length - 1]
     if (last && last.heading === heading) last.rows.push(item)
@@ -323,6 +336,7 @@ export function PrescriptionRequestsScreen() {
                     )}
                   </section>
                 ))}
+                <Pager {...pager} />
               </div>
             )}
           </>

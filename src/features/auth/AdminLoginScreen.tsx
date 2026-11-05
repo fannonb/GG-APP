@@ -3,14 +3,13 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Link } from 'react-router-dom'
 import { GGInput } from '@/design-system'
-import { font, radius } from '@/design-system/tokens'
-import { ROUTES, LOGO } from '@/router/routes'
+import { C, font, radius } from '@/design-system/tokens'
+import { ROUTES } from '@/router/routes'
 import { loginSchema, type LoginFormValues } from '@/schemas/auth.schema'
 import { useLoginMutation } from '@/hooks/api'
 import { ApiError } from '@/api/types'
 
-const ACCENT = '#F5A623'
-const DARK = '#0A1628'
+const LINK_BLUE = '#0B7BC0'
 
 export function AdminLoginScreen() {
   const [showPw, setShowPw] = useState(false)
@@ -27,8 +26,7 @@ export function AdminLoginScreen() {
   })
 
   const loading = loginMutation.isPending
-  const formError =
-    loginMutation.error instanceof ApiError ? loginMutation.error.message : null
+  const formError = loginMutation.error instanceof ApiError ? loginMutation.error.message : null
 
   const onSubmit = handleSubmit(values => {
     loginMutation.mutate({ ...values, role: 'admin' })
@@ -39,152 +37,69 @@ export function AdminLoginScreen() {
   const emailValue = watch('email') ?? ''
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: DARK,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '24px 16px',
-      fontFamily: font.family,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
-      {/* Background rings */}
-      {[300, 500, 700].map((r, i) => (
-        <div key={i} style={{
-          position: 'absolute',
-          width: r, height: r,
-          borderRadius: '50%',
-          border: `1px solid rgba(245,166,35,${0.06 - i * 0.015})`,
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-          pointerEvents: 'none',
-        }} />
-      ))}
+    <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px 20px', background: '#fff', fontFamily: font.family, boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', maxWidth: 360 }}>
+        <img src="/gg-wordmark-light.png" alt="GG'APP" style={{ height: 28, width: 'auto', display: 'block', marginBottom: 32 }} />
 
-      {/* Card */}
-      <div style={{
-        width: '100%',
-        maxWidth: 420,
-        background: '#ffffff',
-        borderRadius: radius.xl,
-        padding: '40px 36px',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.4)',
-        position: 'relative',
-        boxSizing: 'border-box',
-      }}>
-        {/* Header */}
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
-          <img src={LOGO} alt="GG'APP" width={72} height={72} style={{ objectFit: 'contain', borderRadius: '16px', marginBottom: '16px' }} />
-          <div style={{
-            display: 'inline-flex', alignItems: 'center', gap: '6px',
-            padding: '4px 14px', borderRadius: radius.full,
-            background: '#FFF8E6', border: `1px solid ${ACCENT}33`,
-            fontSize: '11px', fontWeight: 700, color: ACCENT,
-            letterSpacing: '0.08em', textTransform: 'uppercase',
-            marginBottom: '12px',
-          }}>
-            <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
-              <path d="M6 1L7.5 4.5H11L8.25 6.75L9.25 10.5L6 8.25L2.75 10.5L3.75 6.75L1 4.5H4.5L6 1Z" fill={ACCENT}/>
-            </svg>
-            Admin Console
-          </div>
-          <div style={{ fontSize: '22px', fontWeight: 800, color: DARK, letterSpacing: '-0.015em', marginBottom: '6px' }}>
-            Admin Sign In
-          </div>
-          <div style={{ fontSize: '13px', color: '#5E6E8C', textAlign: 'center', lineHeight: 1.5 }}>
-            Restricted access — authorised personnel only
-          </div>
-        </div>
+        <h1 style={{ margin: '0 0 24px', fontSize: 22, fontWeight: 700, color: C.navy800 }}>Admin sign in</h1>
 
-        {/* Form */}
-        <form onSubmit={onSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginBottom: '20px' }}>
+        <form onSubmit={onSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          <GGInput
+            label="Email"
+            type="email"
+            name={emailField.name}
+            onChange={emailField.onChange}
+            onBlur={emailField.onBlur}
+            inputRef={emailField.ref}
+            autoComplete="email"
+            error={errors.email?.message}
+          />
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <label htmlFor="admin-password" style={{ fontSize: 13, fontWeight: 600, color: C.navy800 }}>Password</label>
+              <Link to={`${ROUTES.FORGOT_PASSWORD}?role=admin&email=${encodeURIComponent(emailValue)}`} style={{ fontSize: 13, color: LINK_BLUE, textDecoration: 'none' }}>
+                Forgot?
+              </Link>
+            </div>
             <GGInput
-              label="Admin Email"
-              placeholder="admin@ggapp.health"
-              type="email"
-              name={emailField.name}
-              onChange={emailField.onChange}
-              onBlur={emailField.onBlur}
-              inputRef={emailField.ref}
-              autoComplete="email"
-              error={errors.email?.message}
-              required
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '13px', fontWeight: 600, color: DARK, letterSpacing: 0, fontFamily: font.family }}>
-                  Password <span style={{ color: '#E5474D' }}>*</span>
-                </label>
-                <Link
-                  to={`${ROUTES.FORGOT_PASSWORD}?role=admin&email=${encodeURIComponent(emailValue)}`}
-                  style={{ fontSize: '13px', color: ACCENT, fontWeight: 700, textDecoration: 'none', fontFamily: font.family }}
+              id="admin-password"
+              type={showPw ? 'text' : 'password'}
+              name={passwordField.name}
+              onChange={passwordField.onChange}
+              onBlur={passwordField.onBlur}
+              inputRef={passwordField.ref}
+              autoComplete="current-password"
+              error={errors.password?.message}
+              rightEl={
+                <button
+                  type="button"
+                  onClick={() => setShowPw(s => !s)}
+                  aria-label="Show password"
+                  aria-pressed={showPw}
+                  style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, color: LINK_BLUE, cursor: 'pointer', fontFamily: font.family }}
                 >
-                  Forgot password?
-                </Link>
-              </div>
-              <GGInput
-                placeholder="••••••••"
-                type={showPw ? 'text' : 'password'}
-                name={passwordField.name}
-                onChange={passwordField.onChange}
-                onBlur={passwordField.onBlur}
-                inputRef={passwordField.ref}
-                autoComplete="current-password"
-                error={errors.password?.message}
-                required
-                rightEl={
-                  <span onClick={() => setShowPw(s => !s)} style={{ fontSize: '12px', color: ACCENT, fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}>
-                    {showPw ? 'Hide' : 'Show'}
-                  </span>
-                }
-              />
-            </div>
+                  {showPw ? 'Hide' : 'Show'}
+                </button>
+              }
+            />
           </div>
 
-          {formError && (
-            <div style={{ marginBottom: '14px', padding: '10px 14px', background: 'rgba(229,71,77,0.08)', borderRadius: radius.sm, fontSize: '13px', color: '#C0292E', fontWeight: 500 }}>
-              {formError}
-            </div>
-          )}
+          {formError && <div role="alert" style={{ fontSize: 13, color: '#C0292E' }}>{formError}</div>}
 
           <button
             type="submit"
             disabled={loading}
-            style={{
-              width: '100%',
-              padding: '13px 20px',
-              background: loading ? '#C8861A' : ACCENT,
-              border: 'none',
-              borderRadius: radius.sm,
-              fontSize: '14px',
-              fontWeight: 700,
-              color: '#fff',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              fontFamily: font.family,
-              letterSpacing: 0,
-              transition: 'background 0.15s',
-            }}
+            style={{ height: 44, marginTop: 4, borderRadius: radius.sm, border: 'none', background: C.navy800, color: '#fff', fontSize: 14, fontWeight: 600, fontFamily: font.family, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.7 : 1 }}
           >
-            {loading ? 'Signing In…' : 'Sign In to Admin Portal →'}
+            {loading ? 'Signing in…' : 'Sign in'}
           </button>
         </form>
 
-        {/* Footer */}
-        <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #EAE6E5', textAlign: 'center' }}>
-          <Link to={ROUTES.LOGIN} style={{ fontSize: '13px', color: '#5E6E8C', textDecoration: 'none', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M10 3L5 8l5 5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Back to main login
-          </Link>
-        </div>
+        <Link to={ROUTES.LOGIN} style={{ display: 'inline-block', marginTop: 24, fontSize: 13, color: C.textSub, textDecoration: 'none' }}>
+          ← Back to main sign in
+        </Link>
       </div>
-
-      <div style={{ marginTop: '24px', fontSize: '11px', color: 'rgba(255,255,255,0.2)', textAlign: 'center' }}>
-        GG'APP Admin Console · Unauthorised access is prohibited
-      </div>
-    </div>
+    </main>
   )
 }

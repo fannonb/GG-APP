@@ -9,13 +9,14 @@ import { useUserStore } from '@/store/user.store'
 import type { BadgeType } from '@/design-system/GGBadge'
 import { useCreditStatus } from '@/hooks/api'
 import { formatCurrency, formatDate } from '@/utils/format'
+import { usePatientCurrency } from '@/hooks/useCurrency'
 
 type AppStatus = 'pending' | 'under-review' | 'approved' | 'declined'
 
 const STATUS_CONFIG: Record<AppStatus, { label: string; type: BadgeType; msg: string }> = {
   pending: { label: 'Pending', type: 'default', msg: 'Your application has been submitted and is queued for review.' },
   'under-review': { label: 'Under Review', type: 'warning', msg: 'The GG\'APP team is reviewing your application. You will be notified once a decision is made.' },
-  approved: { label: 'Approved', type: 'success', msg: 'Your application has been approved and your wallet balance is ready to use.' },
+  approved: { label: 'Approved', type: 'success', msg: 'Your application has been approved and your allocation balance is ready to use.' },
   declined: { label: 'Declined', type: 'error', msg: 'Your application was not approved at this time. You may re-apply after reviewing the reason below.' },
 }
 
@@ -34,6 +35,7 @@ function mapUiStatus(applicationStatus?: string, creditStatus?: string): AppStat
 }
 
 export function CreditStatusScreen() {
+  const currency = usePatientCurrency()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const isIncrease = searchParams.get('type') === 'increase'
@@ -69,14 +71,14 @@ export function CreditStatusScreen() {
       return [
         { step: 'Increase Request Submitted', done: !!application, active: false, date: submittedDate },
         { step: reviewStep, done: status === 'approved' || status === 'declined', active: status === 'under-review', date: status === 'under-review' ? 'In progress…' : application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
-        { step: 'Credit updated', done: status === 'approved', active: false, date: status === 'approved' && application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
+        { step: 'Allocation updated', done: status === 'approved', active: false, date: status === 'approved' && application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
       ]
     }
 
     return [
       { step: 'Application Submitted', done: !!application, active: false, date: submittedDate },
       { step: reviewStep, done: status === 'approved' || status === 'declined', active: status === 'under-review', date: status === 'under-review' ? 'In progress…' : application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
-      { step: 'Credit Decision', done: status === 'approved' || status === 'declined', active: false, date: application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
+      { step: 'Allocation Decision', done: status === 'approved' || status === 'declined', active: false, date: application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
       { step: 'Balance Loaded', done: status === 'approved', active: false, date: status === 'approved' && application?.reviewedAt ? formatDate(application.reviewedAt) : '' },
     ]
   }, [application, isIncrease, partnerName, status])
@@ -122,8 +124,8 @@ export function CreditStatusScreen() {
                   <div style={{ fontSize: '14px', color: C.text, marginTop: '8px', lineHeight: 1.6 }}>{sc.msg}</div>
                   {application && (
                     <div style={{ fontSize: '12px', color: C.textSub, marginTop: '8px' }}>
-                      Requested {formatCurrency(application.requestedAmount)}
-                      {application.approvedAmount != null ? ` · Approved ${formatCurrency(application.approvedAmount)}` : ''}
+                      Requested {formatCurrency(application.requestedAmount, currency)}
+                      {application.approvedAmount != null ? ` · Approved ${formatCurrency(application.approvedAmount, currency)}` : ''}
                       {partner ? ` · Partner ${partner.name}` : ''}
                     </div>
                   )}
@@ -162,7 +164,7 @@ export function CreditStatusScreen() {
 
         <div style={{ display: 'flex', gap: '12px' }}>
           <GGButton variant="secondary" size="md" onClick={() => navigate(ROUTES.DASHBOARD)} style={{ flex: 1 }}>Back to Dashboard</GGButton>
-          <GGButton variant="primary" size="md" onClick={() => navigate(ROUTES.CREDIT_WALLET)} style={{ flex: 2 }}>View credit →</GGButton>
+          <GGButton variant="primary" size="md" onClick={() => navigate(ROUTES.CREDIT_WALLET)} style={{ flex: 2 }}>View allocation →</GGButton>
         </div>
       </div>
     </AppLayout>

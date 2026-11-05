@@ -1,3 +1,4 @@
+import { ProviderLicencesEditor } from './components/ProviderLicencesEditor'
 import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { GGCard } from '@/design-system'
@@ -203,6 +204,8 @@ export function SPSettingsScreen() {
             saveError={profileError}
           />
         )}
+
+        {tab === 'profile' && <ProviderLicencesEditor />}
 
         {tab === 'payouts' && (
           <PayoutsTab

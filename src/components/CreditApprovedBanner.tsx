@@ -22,7 +22,7 @@ export function CreditApprovedBanner({ items, approvedAmountLabel, onAction, onD
 
   const primary = items[0]
   const isIncrease = /increase/i.test(primary.headline)
-  const title = isIncrease ? 'Your limit increase was approved' : 'Your healthcare credit was approved'
+  const title = isIncrease ? 'Your limit increase was approved' : 'Your healthcare allocation was approved'
 
   return (
     <div
@@ -75,7 +75,7 @@ export function CreditApprovedBanner({ items, approvedAmountLabel, onAction, onD
           size="sm"
           onClick={() => onAction(items)}
         >
-          View credit
+          View allocation
         </GGButton>
         <button
           type="button"

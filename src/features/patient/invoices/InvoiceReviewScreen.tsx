@@ -14,7 +14,6 @@ import { route, ROUTES } from '@/router/routes'
 import { getCountryByCode } from '@/config/countries'
 import { useUserStore } from '@/store/user.store'
 import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from '@/features/patient/credit/credit.constants'
-import { getLowCreditThreshold, wouldBeLowAfterPayment } from '@/utils/credit-threshold'
 import { getDaysUntilAppointment } from '@/utils/appointments'
 import { ProgressSteps, type StepState } from '@/components/ProgressSteps'
 
@@ -152,7 +151,7 @@ export function InvoiceReviewScreen() {
     isError: attachmentError,
   } = usePatientInvoiceAttachment(id, shouldLoadAttachment)
   const country = getCountryByCode(user.countryCode)
-  const currency = country?.currencySymbol ?? 'Z$'
+  const currency = country?.currencySymbol ?? ''
   const partnerName = getFinancePartnerSummary(getFinancePartnerIdForCountry(user.countryCode))?.name ?? 'your finance partner'
   const hasApprovedCredit = user.creditStatus === 'approved'
   const invoiceAmount = inv?.amount ?? 0
@@ -161,8 +160,6 @@ export function InvoiceReviewScreen() {
   const isPartialPay = walletPayAmount > 0 && offAppDue > 0
   const canAuthorize = hasApprovedCredit && walletPayAmount > 0
   const hasNoWalletBalance = hasApprovedCredit && walletPayAmount <= 0
-  const balanceLowAfterPayment = hasApprovedCredit && walletPayAmount > 0 && inv != null
-    && wouldBeLowAfterPayment(user.creditAvailable, walletPayAmount, user.countryCode)
   const [showReject, setShowReject] = useState(false)
   const [rejectReason, setRejectReason] = useState('')
   const [attachmentMsg, setAttachmentMsg] = useState('')
@@ -237,7 +234,7 @@ export function InvoiceReviewScreen() {
   const notices: { tone: 'warn' | 'error'; content: ReactNode }[] = []
   if (isPending) {
     if (!hasApprovedCredit) {
-      notices.push({ tone: 'warn', content: 'You need approved healthcare credit before you can pay this invoice.' })
+      notices.push({ tone: 'warn', content: 'You need an approved healthcare allocation before you can pay this invoice.' })
     } else if (hasNoWalletBalance) {
       notices.push({
         tone: 'error',
@@ -251,20 +248,7 @@ export function InvoiceReviewScreen() {
         ),
       })
     } else if (isPartialPay) {
-      notices.push({ tone: 'warn', content: `Your credit covers ${formatAmount(walletPayAmount, currency)}. Pay the remaining ${formatAmount(offAppDue, currency)} directly to ${inv.provider.name}.` })
-    }
-    if (balanceLowAfterPayment) {
-      notices.push({
-        tone: 'warn',
-        content: (
-          <>
-            This leaves you below the {formatAmount(getLowCreditThreshold(user.countryCode), currency)} buffer we recommend.{' '}
-            <button type="button" onClick={() => navigate(ROUTES.CREDIT_INCREASE)} style={{ ...linkBtn, fontSize: 12 }}>
-              Request increase
-            </button>
-          </>
-        ),
-      })
+      notices.push({ tone: 'warn', content: `Your allocation covers ${formatAmount(walletPayAmount, currency)}. Pay the remaining ${formatAmount(offAppDue, currency)} directly to ${inv.provider.name}.` })
     }
   }
 
@@ -286,7 +270,7 @@ export function InvoiceReviewScreen() {
           </div>
           <div style={{ fontSize: 30, fontWeight: 800, color: C.text, letterSpacing: '-0.03em' }}>{formatAmount(paidFromCredit + paidOffApp, currency)}</div>
           <div style={{ fontSize: 13, color: C.textSub, marginTop: 2, marginBottom: 14 }}>to {inv.provider.name}</div>
-          <SummaryRow label="Paid from your credit" value={formatAmount(paidFromCredit, currency)} />
+          <SummaryRow label="Paid from your allocation" value={formatAmount(paidFromCredit, currency)} />
           {paidOffApp > 0 && <SummaryRow label="Paid directly to provider" value={formatAmount(paidOffApp, currency)} />}
           <SummaryRow label="Paid by" value={partnerName} />
           <SummaryRow label="Invoice" value={inv.id} />
@@ -320,7 +304,7 @@ export function InvoiceReviewScreen() {
 
           {hasApprovedCredit && (
             <SummaryRow
-              label="Your credit"
+              label="Your allocation"
               value={(
                 <>
                   {formatAmount(user.creditAvailable, currency)}
@@ -448,8 +432,8 @@ export function InvoiceReviewScreen() {
                   </div>
                   <div style={{ fontSize: 12, color: C.textSub, marginTop: 1 }}>
                     {recipientIsBeneficiary
-                      ? `${inv.serviceFor.relation}${inv.serviceFor.age ? `, ${inv.serviceFor.age}` : ''} · paid from ${inv.billedTo.name}'s credit`
-                      : 'Paid from your healthcare credit'}
+                      ? `${inv.serviceFor.relation}${inv.serviceFor.age ? `, ${inv.serviceFor.age}` : ''} · paid from ${inv.billedTo.name}'s allocation`
+                      : 'Paid from your healthcare allocation'}
                   </div>
                 </div>
               </div>

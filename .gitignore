@@ -35,3 +35,6 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# graft's local repository settings — not committed.
+/.graft/
