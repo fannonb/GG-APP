@@ -20,6 +20,7 @@ import {
   PrescriptionFulfillmentMode,
   PrescriptionOfferStatus,
   PrescriptionRequestStatus,
+  Provider,
   ProviderCategory,
   TransactionStatus,
   UserRole,
@@ -43,6 +44,7 @@ import {
 } from '../../common/services/prescription-dispatch.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { formatMoney } from '../../common/utils/money.util'
+import { placeMapsUrl } from '../../common/utils/maps-link.util'
 import { RedisService } from '../../redis/redis.service'
 import { ProvidersService } from '../providers/providers.service'
 import type { AuthorizeInvoiceDto } from './dto/authorize-invoice.dto'
@@ -1673,10 +1675,29 @@ export class PatientService {
         if (invoice.prescriptionRequestId) {
           const rx = await tx.prescriptionRequest.findUnique({
             where: { id: invoice.prescriptionRequestId },
-            select: { id: true, status: true, fulfillmentMode: true, reference: true },
+            select: { id: true, status: true, fulfillmentMode: true, reference: true, acceptedAt: true },
           })
           if (rx) {
-            if (
+            const isPickup = rx.fulfillmentMode === PrescriptionFulfillmentMode.PICKUP
+
+            if (isPickup) {
+              // Pickup is paid at the counter, and that payment is the handover, so the order is complete.
+              if (
+                rx.status !== PrescriptionRequestStatus.FULFILLED &&
+                rx.status !== PrescriptionRequestStatus.CANCELLED &&
+                rx.status !== PrescriptionRequestStatus.REJECTED &&
+                rx.status !== PrescriptionRequestStatus.EXPIRED
+              ) {
+                await tx.prescriptionRequest.update({
+                  where: { id: rx.id },
+                  data: {
+                    status: PrescriptionRequestStatus.FULFILLED,
+                    fulfilledAt: new Date(),
+                    acceptedAt: rx.acceptedAt ?? new Date(),
+                  },
+                })
+              }
+            } else if (
               rx.status === PrescriptionRequestStatus.QUOTED ||
               rx.status === PrescriptionRequestStatus.SUBMITTED
             ) {
@@ -1690,17 +1711,14 @@ export class PatientService {
             }
 
             if (invoice.provider.authUserId) {
-              const isDelivery = rx.fulfillmentMode === 'DELIVERY'
               await tx.notification.create({
                 data: {
                   userId: invoice.provider.authUserId,
                   type: NotificationType.PRESCRIPTION,
-                  title: isDelivery
-                    ? 'Prescription Paid — Ready for Delivery'
-                    : 'Prescription Paid — Ready for Pickup',
-                  body: isDelivery
-                    ? `${invoice.billedToName} paid for ${rx.reference}. Prepare medication and mark it ready for delivery.`
-                    : `${invoice.billedToName} paid for ${rx.reference}. Prepare medication and mark it ready for pickup.`,
+                  title: isPickup ? 'Paid at Counter' : 'Delivery Invoice Paid',
+                  body: isPickup
+                    ? `${invoice.billedToName} paid for ${rx.reference} with their PIN. Hand over the medicine; the order is complete.`
+                    : `${invoice.billedToName} paid invoice ${invoice.reference} for ${rx.reference}.`,
                   screen: `/sp/prescriptions/${rx.reference}`,
                 },
               })
@@ -2699,17 +2717,12 @@ export class PatientService {
       return { updated, closedOffers }
     })
 
-    if (offer.provider.authUserId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: offer.provider.authUserId,
-          type: NotificationType.PRESCRIPTION,
-          title: 'Quote Accepted',
-          body: `The patient chose your quote for ${request.reference}. Upload the invoice so they can approve payment.`,
-          screen: `/sp/prescriptions/${request.reference}`,
-        },
-      })
-    }
+    await this.notifyPrescriptionChosen({
+      patientUserId: userId,
+      requestReference: request.reference,
+      fulfillmentMode: updated.fulfillmentMode,
+      provider: offer.provider,
+    })
 
     await this.notifyClosedOffers(closedOffers, request.reference, 'The patient went with another pharmacy.')
 
@@ -2728,6 +2741,100 @@ export class PatientService {
     })
 
     return this.mapPrescriptionRequest(updated)
+  }
+
+  /**
+   * The patient turns down one pharmacy's price and keeps the rest open. If no prices are left,
+   * the request goes back to waiting and the search widens (or ends) as it does for pharmacy declines.
+   */
+  async declinePrescriptionOffer(
+    userId: string,
+    requestReference: string,
+    offerId: string,
+    dto: DeclinePrescriptionRequestDto,
+  ) {
+    const request = await this.prisma.prescriptionRequest.findFirst({
+      where: {
+        patientUserId: userId,
+        OR: [{ id: requestReference }, { reference: requestReference }],
+      },
+      select: { id: true, reference: true, providerId: true, status: true },
+    })
+
+    if (!request) {
+      throw new NotFoundException('Prescription request not found')
+    }
+
+    if (request.providerId != null) {
+      throw new BadRequestException('You already chose a pharmacy for this prescription')
+    }
+
+    const offer = await this.prisma.prescriptionOffer.findFirst({
+      where: { id: offerId, requestId: request.id },
+      include: { provider: true },
+    })
+
+    if (!offer) {
+      throw new NotFoundException('Quote not found')
+    }
+
+    if (offer.status !== PrescriptionOfferStatus.QUOTED) {
+      throw new BadRequestException('This price is no longer open')
+    }
+
+    const reason = dto.reason?.trim() || 'Declined by the patient'
+
+    await this.prisma.$transaction(async tx => {
+      await tx.prescriptionOffer.update({
+        where: { id: offer.id },
+        data: {
+          status: PrescriptionOfferStatus.DECLINED,
+          declinedAt: new Date(),
+          declineReason: reason,
+        },
+      })
+
+      const livePrices = await tx.prescriptionOffer.count({
+        where: { requestId: request.id, status: PrescriptionOfferStatus.QUOTED },
+      })
+      if (livePrices === 0 && request.status === PrescriptionRequestStatus.QUOTED) {
+        await tx.prescriptionRequest.update({
+          where: { id: request.id },
+          data: { status: PrescriptionRequestStatus.SUBMITTED },
+        })
+      }
+    })
+
+    // If nobody else is still to answer, widen the search or end it.
+    await this.prescriptionDispatch.advanceAfterDecline(request.id)
+
+    if (offer.provider.authUserId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: offer.provider.authUserId,
+          type: NotificationType.PRESCRIPTION,
+          title: 'Price Declined',
+          body: `The patient declined your price for ${request.reference}.`,
+          screen: `/sp/prescriptions/${request.reference}`,
+        },
+      })
+    }
+
+    await this.prisma.auditLog.create({
+      data: {
+        actorUserId: userId,
+        action: 'patient.prescription.offer_declined',
+        entityType: 'PrescriptionRequest',
+        entityId: request.id,
+        metadata: { reference: request.reference, offerId: offer.id } as Prisma.JsonObject,
+      },
+    })
+
+    const refreshed = await this.prisma.prescriptionRequest.findUniqueOrThrow({
+      where: { id: request.id },
+      include: PATIENT_PRESCRIPTION_INCLUDE,
+    })
+    return this.mapPrescriptionRequest(refreshed)
   }
 
   /** Accepts the quote on a request that was sent to one pharmacy (orders made before nearby search). */
@@ -2762,17 +2869,12 @@ export class PatientService {
       include: PATIENT_PRESCRIPTION_INCLUDE,
     })
 
-    if (request.provider.authUserId) {
-      await this.prisma.notification.create({
-        data: {
-          userId: request.provider.authUserId,
-          type: NotificationType.PRESCRIPTION,
-          title: 'Quote Accepted',
-          body: `Patient accepted the quote for ${request.reference}. Upload the invoice so they can approve payment.`,
-          screen: `/sp/prescriptions/${request.reference}`,
-        },
-      })
-    }
+    await this.notifyPrescriptionChosen({
+      patientUserId: userId,
+      requestReference: request.reference,
+      fulfillmentMode: updated.fulfillmentMode,
+      provider: request.provider,
+    })
 
     return this.mapPrescriptionRequest(updated)
   }
@@ -2863,6 +2965,49 @@ export class PatientService {
     return this.mapPrescriptionRequest(updated)
   }
 
+  /**
+   * Runs once the patient has chosen a pharmacy's quote. No invoice is issued here: the pharmacy sends
+   * it when the patient arrives (pickup) or once the order is delivered (delivery).
+   */
+  private async notifyPrescriptionChosen(args: {
+    patientUserId: string
+    requestReference: string
+    fulfillmentMode: PrescriptionFulfillmentMode
+    provider: Provider
+  }) {
+    const { patientUserId, requestReference, fulfillmentMode, provider } = args
+    const isPickup = fulfillmentMode === PrescriptionFulfillmentMode.PICKUP
+
+    if (provider.authUserId) {
+      await this.prisma.notification.create({
+        data: {
+          userId: provider.authUserId,
+          type: NotificationType.PRESCRIPTION,
+          title: 'Quote Accepted',
+          body: isPickup
+            ? `The patient chose your quote for ${requestReference}. They will come to collect and pay. Send them the invoice when they arrive.`
+            : `The patient chose your quote for ${requestReference}. Prepare the order. Mark it delivered when it has arrived; the invoice goes to the patient then.`,
+          screen: `/sp/prescriptions/${requestReference}`,
+        },
+      })
+    }
+
+    const mapsUrl = isPickup ? placeMapsUrl(provider) : null
+    const patientBody = isPickup
+      ? `You chose ${provider.name}. Go to the pharmacy to collect your medicine. Your invoice is sent when you arrive, and you pay it there with your PIN.${mapsUrl ? ` Pharmacy location: ${mapsUrl}` : ''}${provider.directions ? ` How to get there: ${provider.directions}` : ''}`
+      : `You chose ${provider.name}. It will be delivered. You pay the invoice once it has been delivered.`
+
+    await this.prisma.notification.create({
+      data: {
+        userId: patientUserId,
+        type: NotificationType.PRESCRIPTION,
+        title: 'Pharmacy Chosen',
+        body: patientBody,
+        screen: `/app/prescriptions/${requestReference}`,
+      },
+    })
+  }
+
   private async notifyClosedOffers(
     offers: Array<{ provider: { authUserId: string | null } }>,
     reference: string,
@@ -2898,6 +3043,9 @@ export class PatientService {
       id: request.reference,
       providerId: request.provider?.id,
       provider: request.provider?.name,
+      providerMapUrl: request.provider ? placeMapsUrl(request.provider) ?? undefined : undefined,
+      providerAddressLine: joinAddressLine(request.provider?.building, request.provider?.road),
+      providerDirections: request.provider?.directions ?? undefined,
       category: 'pharmacy' as const,
       status: request.status.toLowerCase(),
       fulfillmentMode: request.fulfillmentMode.toLowerCase(),
@@ -2915,6 +3063,9 @@ export class PatientService {
         providerId: offer.provider.id,
         provider: offer.provider.name,
         address: offer.provider.address,
+        mapUrl: placeMapsUrl(offer.provider) ?? undefined,
+        addressLine: joinAddressLine(offer.provider.building, offer.provider.road),
+        directions: offer.provider.directions ?? undefined,
         rating: Number(offer.provider.rating),
         logoUrl: offer.provider.logoUrl ?? undefined,
         distanceKm: Number(offer.distanceKm),
@@ -2947,13 +3098,35 @@ export class PatientService {
   }
 }
 
+/** "Building, Road" for a pharmacy address line. Undefined when neither is set. */
+function joinAddressLine(building?: string | null, road?: string | null): string | undefined {
+  const line = [building, road]
+    .map(part => part?.trim())
+    .filter((part): part is string => !!part)
+    .join(', ')
+  return line || undefined
+}
+
 const PATIENT_PRESCRIPTION_INCLUDE = {
   provider: true,
   beneficiary: true,
   invoice: { select: { reference: true, status: true } },
   offers: {
     include: {
-      provider: { select: { id: true, name: true, address: true, rating: true, logoUrl: true } },
+      provider: {
+        select: {
+          id: true,
+          name: true,
+          address: true,
+          lat: true,
+          lng: true,
+          building: true,
+          road: true,
+          directions: true,
+          rating: true,
+          logoUrl: true,
+        },
+      },
     },
     orderBy: { distanceKm: 'asc' },
   },

@@ -322,6 +322,12 @@ model Provider {
   hoursJson              Json?
   phone                  String
   address                String
+  /// Building or complex name, shown to patients who come to collect.
+  building               String?
+  /// Road or street the building is on.
+  road                   String?
+  /// How to get there, in the pharmacy's own words (landmarks, entrance, parking).
+  directions             String?
   license                String?
   logoUrl                String?
   country                String?

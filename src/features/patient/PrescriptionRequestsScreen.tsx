@@ -114,12 +114,16 @@ function statusFor(stage: Stage, request: PrescriptionRequest, delivery: boolean
       return isChoosingPharmacy(request)
         ? { text: `${request.offers?.length ?? 0} ${(request.offers?.length ?? 0) === 1 ? 'price' : 'prices'} to compare`, tone: AMBER }
         : { text: 'The pharmacy sent a price', tone: AMBER }
-    case 'approvePayment': return { text: 'Invoice waiting for your approval', tone: AMBER }
+    case 'approvePayment':
+      return delivery
+        ? { text: "Pay the invoice now that it's delivered", tone: AMBER }
+        : { text: 'Pay with your PIN at the pharmacy', tone: AMBER }
     case 'awaitQuote':
       return isChoosingPharmacy(request)
         ? { text: `Waiting for prices from pharmacies within ${request.searchRadiusKm ?? 2} km`, tone: CYAN }
         : { text: 'Waiting for the pharmacy’s quote', tone: CYAN }
-    case 'awaitInvoice': return { text: 'Quote accepted · invoice on its way', tone: CYAN }
+    case 'awaitInvoice':
+      return { text: delivery ? 'Being prepared · pay after delivery' : 'Being prepared · invoice when you arrive', tone: CYAN }
     case 'preparing': return { text: 'Being prepared', tone: CYAN }
     case 'ready':
       return {
@@ -152,7 +156,7 @@ function ActiveCard({ request, stage, fallbackCurrency }: { request: Prescriptio
   } else if (stage === 'approvePayment') {
     action = (
       <button type="button" style={{ ...actionBtn, width: '100%' }} onClick={() => request.invoiceId && navigate(route.patientInvoice(request.invoiceId))}>
-        {amount ? `Approve ${amount}` : 'Approve payment'}
+        {delivery ? (amount ? `Approve ${amount}` : 'Approve payment') : 'View invoice'}
       </button>
     )
   }
@@ -295,7 +299,7 @@ export function PrescriptionRequestsScreen() {
           <div style={{ padding: '44px 24px', textAlign: 'center', background: '#fff', border: `1px solid ${C.border}`, borderRadius: radius.lg }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>No prescriptions yet</div>
             <div style={{ fontSize: 13, color: C.textSub, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
-              Send a prescription to a pharmacy and they&apos;ll reply with a price. You pay only after pickup or delivery.
+              Send a prescription to a pharmacy and they&apos;ll reply with a price. Pickup: you pay with your PIN at the pharmacy. Delivery: you pay after it arrives.
             </div>
             {sendButton}
           </div>

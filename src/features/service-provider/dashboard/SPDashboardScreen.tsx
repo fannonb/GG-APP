@@ -6,17 +6,15 @@ import { HealthNewsSection } from '@/components/HealthNewsSection'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
 import { FlagImg } from '@/components/FlagImg'
 import { getCountryByName } from '@/config/countries'
-import { useHealthNews, useMarkPrescriptionReadyMutation, useSPDashboard } from '@/hooks/api'
+import { useHealthNews, useSendPrescriptionInvoiceMutation, useSPDashboard } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
 import {
-  buildPrescriptionReadyForPickupBannerItems,
   getUnreadCancelledAppointmentItems,
   getUnreadPrescriptionAcceptedItems,
   getUnreadPrescriptionDeclinedItems,
   getUnreadRescheduleAcceptedItems,
   getUnreadNewReviewItems,
-  type PrescriptionReadyForPickupBannerItem,
 } from '@/utils/sp-notifications'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route, ROUTES } from '@/router/routes'
@@ -51,7 +49,6 @@ function saveSeenCancelledAppts(ids: Set<string>) {
 
 const SEEN_PRESCRIPTION_ACCEPTED_KEY = 'ggapp.spSeenPrescriptionAcceptedNotifications'
 const SEEN_PRESCRIPTION_DECLINED_KEY = 'ggapp.spSeenPrescriptionDeclinedNotifications'
-const SEEN_PRESCRIPTION_PAID_KEY = 'ggapp.spSeenPrescriptionPaidNotifications'
 const SEEN_RESCHEDULE_ACCEPTED_KEY = 'ggapp.spSeenRescheduleAcceptedNotifications'
 const SEEN_NEW_REVIEW_KEY = 'ggapp.spSeenNewReviewNotifications'
 
@@ -88,7 +85,7 @@ export function SPDashboardScreen() {
   const { data: healthNews } = useHealthNews()
   const { buildSetupSteps, onboardingComplete, profileSettingsTab } = useSpOnboardingProgress()
   const markNotificationRead = useMarkSPNotificationReadMutation()
-  const markPrescriptionReady = useMarkPrescriptionReadyMutation()
+  const sendInvoice = useSendPrescriptionInvoiceMutation()
   const [seenCancelledApptIds, setSeenCancelledApptIds] = useState<Set<string>>(
     () => loadSeenCancelledAppts(),
   )
@@ -97,9 +94,6 @@ export function SPDashboardScreen() {
   )
   const [seenPrescriptionDeclinedIds, setSeenPrescriptionDeclinedIds] = useState<Set<string>>(
     () => loadSeenIds(SEEN_PRESCRIPTION_DECLINED_KEY),
-  )
-  const [seenPrescriptionPaidIds, setSeenPrescriptionPaidIds] = useState<Set<string>>(
-    () => loadSeenIds(SEEN_PRESCRIPTION_PAID_KEY),
   )
   const [seenRescheduleAcceptedIds, setSeenRescheduleAcceptedIds] = useState<Set<string>>(
     () => loadSeenIds(SEEN_RESCHEDULE_ACCEPTED_KEY),
@@ -293,39 +287,6 @@ export function SPDashboardScreen() {
     navigate(target?.startsWith('/sp/') ? target : ROUTES.SP_INVOICES)
   }
 
-  const prescriptionReadyForPickupItems = buildPrescriptionReadyForPickupBannerItems(
-    data.notifications ?? [],
-    data.prescriptionRequests ?? [],
-    seenPrescriptionPaidIds,
-  )
-
-  const markPrescriptionPaidSeen = (id: string) => {
-    setSeenPrescriptionPaidIds(prev => {
-      if (prev.has(id)) return prev
-      const next = new Set(prev)
-      next.add(id)
-      saveSeenIds(SEEN_PRESCRIPTION_PAID_KEY, next)
-      return next
-    })
-    if (!id.startsWith('rx-')) {
-      markNotificationRead.mutate(id)
-    }
-  }
-
-  const handlePrescriptionReadyDismiss = (items: PrescriptionReadyForPickupBannerItem[]) => {
-    items.forEach(item => markPrescriptionPaidSeen(item.id))
-  }
-
-  const handleMarkPrescriptionReady = async (item: PrescriptionReadyForPickupBannerItem) => {
-    await markPrescriptionReady.mutateAsync(item.prescriptionId)
-    markPrescriptionPaidSeen(item.id)
-  }
-
-  const handleViewPrescriptionReady = (item: PrescriptionReadyForPickupBannerItem) => {
-    markPrescriptionPaidSeen(item.id)
-    navigate(item.screen || route.spPrescription(item.prescriptionId))
-  }
-
   const setupSteps = buildSetupSteps(SETUP_STEP_DEFS)
   const doneCount = setupSteps.filter(step => step.status === 'done').length
   const handleStepAction = (stepN: number, ctaPath: string | null) => {
@@ -429,22 +390,73 @@ export function SPDashboardScreen() {
     })
   }
 
-  if (prescriptionReadyForPickupItems.length > 0) {
-    const n = prescriptionReadyForPickupItems.length
-    const primary = prescriptionReadyForPickupItems[0]
-    const delivery = primary.fulfillmentMode === 'delivery'
+  // Pharmacy prescriptions, grouped by what the pharmacy has to do next.
+  const rxAwaitingInvoice = prescriptionRequests.filter(r => r.fulfillmentMode === 'pickup' && r.status === 'ready' && !r.invoiceId)
+  const rxPreparing = prescriptionRequests.filter(r => (r.status === 'accepted' || r.status === 'preparing') && !r.invoiceId)
+  const rxAtCounter = prescriptionRequests.filter(r => r.fulfillmentMode === 'pickup' && !!r.invoiceId && r.invoiceStatus === 'pending_auth' && (r.status === 'accepted' || r.status === 'preparing' || r.status === 'ready'))
+  const rxDeliveryOut = prescriptionRequests.filter(r => r.fulfillmentMode === 'delivery' && r.status === 'ready')
+
+  if (rxAwaitingInvoice.length > 0) {
+    const n = rxAwaitingInvoice.length
+    const primary = rxAwaitingInvoice[0]
     attentionItems.push({
-      id: 'rx-paid',
+      id: 'rx-send-invoice',
+      tone: 'action',
+      icon: 'invoice',
+      title: n > 1 ? `${n} orders ready · send invoices` : 'Order ready · send the invoice',
+      detail: andMore(`${primary.patient ?? 'Patient'} · ${primary.id}. Send the invoice when they arrive. They pay it with their PIN.`, n),
+      actionLabel: n > 1 ? 'View orders' : 'Send invoice',
+      onAction: async () => {
+        if (n > 1) { navigate(ROUTES.SP_PRESCRIPTIONS); return }
+        try {
+          await sendInvoice.mutateAsync(primary.id)
+        } catch {
+          navigate(route.spPrescription(primary.id))
+        }
+      },
+      secondaryAction: { label: 'View order', onAction: () => navigate(route.spPrescription(primary.id)) },
+    })
+  }
+
+  if (rxAtCounter.length > 0) {
+    const n = rxAtCounter.length
+    const primary = rxAtCounter[0]
+    attentionItems.push({
+      id: 'rx-at-counter',
+      tone: 'info',
+      icon: 'check',
+      title: n > 1 ? `${n} invoices waiting at the counter` : 'Invoice sent · waiting for payment at the counter',
+      detail: andMore(`${primary.patient ?? 'Patient'} · ${primary.id}. Hand over the medicine once they have paid with their PIN.`, n),
+      actionLabel: 'View order',
+      onAction: () => navigate(n > 1 ? ROUTES.SP_PRESCRIPTIONS : route.spPrescription(primary.id)),
+    })
+  }
+
+  if (rxPreparing.length > 0) {
+    const n = rxPreparing.length
+    const primary = rxPreparing[0]
+    attentionItems.push({
+      id: 'rx-prepare',
+      tone: 'info',
+      icon: 'prescription',
+      title: n > 1 ? `${n} prescriptions to prepare` : 'Prescription to prepare',
+      detail: andMore(`${primary.patient ?? 'Patient'} · ${primary.id}. Mark it ready once it is packed.`, n),
+      actionLabel: 'View order',
+      onAction: () => navigate(n > 1 ? ROUTES.SP_PRESCRIPTIONS : route.spPrescription(primary.id)),
+    })
+  }
+
+  if (rxDeliveryOut.length > 0) {
+    const n = rxDeliveryOut.length
+    const primary = rxDeliveryOut[0]
+    attentionItems.push({
+      id: 'rx-delivery-out',
       tone: 'action',
       icon: 'prescription',
-      title: n > 1
-        ? `${n} paid prescriptions ready to hand off`
-        : delivery ? 'Prescription paid · prepare for delivery' : 'Prescription paid · prepare for pickup',
-      detail: andMore(primary.detail, n),
-      actionLabel: delivery ? 'Mark ready for delivery' : 'Mark ready for pickup',
-      onAction: () => handleMarkPrescriptionReady(primary),
-      secondaryAction: { label: 'View order', onAction: () => handleViewPrescriptionReady(primary) },
-      onDismiss: () => handlePrescriptionReadyDismiss(prescriptionReadyForPickupItems),
+      title: n > 1 ? `${n} deliveries out · mark delivered` : 'Delivery out · mark it delivered',
+      detail: andMore(`${primary.patient ?? 'Patient'} · ${primary.id}. The invoice goes to the patient once you mark it delivered.`, n),
+      actionLabel: 'Mark delivered',
+      onAction: () => navigate(n > 1 ? ROUTES.SP_PRESCRIPTIONS : route.spPrescription(primary.id)),
     })
   }
 

@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
-import { useFulfillPrescriptionRequestMutation, useMarkPrescriptionReadyMutation, useSPPrescriptionRequests } from '@/hooks/api'
+import { useFulfillPrescriptionRequestMutation, useMarkPrescriptionReadyMutation, useSendPrescriptionInvoiceMutation, useSPPrescriptionRequests } from '@/hooks/api'
 import { useResponsive } from '@/hooks/useResponsive'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route } from '@/router/routes'
@@ -13,7 +13,7 @@ import { Pager, usePaged } from '@/components/paging'
 import type { PrescriptionFulfillmentMode, PrescriptionRequest } from '@/types/prescription.types'
 
 type TabId = 'todo' | 'waiting' | 'completed' | 'closed'
-type Stage = 'quote' | 'invoice' | 'prepare' | 'handoff' | 'awaitQuote' | 'awaitPayment' | 'fulfilled' | 'closed'
+type Stage = 'quote' | 'prepare' | 'handoff' | 'awaitQuote' | 'awaitPayment' | 'fulfilled' | 'closed'
 
 const CYAN_DEEP = '#0B7BC0'
 const CYAN_MID = '#1A9BE6'
@@ -47,9 +47,9 @@ function stageOf(r: PrescriptionRequest): Stage {
     case 'quoted': return 'awaitQuote'
     case 'accepted':
     case 'preparing':
-      if (isPaid(r)) return 'prepare'
-      return r.invoiceId ? 'awaitPayment' : 'invoice'
-    case 'ready': return 'handoff'
+      return r.fulfillmentMode === 'pickup' && !!r.invoiceId && !isPaid(r) ? 'awaitPayment' : 'prepare'
+    case 'ready':
+      return r.fulfillmentMode === 'pickup' && !!r.invoiceId && !isPaid(r) ? 'awaitPayment' : 'handoff'
     case 'fulfilled': return 'fulfilled'
     default: return 'closed'
   }
@@ -57,7 +57,6 @@ function stageOf(r: PrescriptionRequest): Stage {
 
 const TAB_OF: Record<Stage, TabId> = {
   quote: 'todo',
-  invoice: 'todo',
   prepare: 'todo',
   handoff: 'todo',
   awaitQuote: 'waiting',
@@ -66,15 +65,15 @@ const TAB_OF: Record<Stage, TabId> = {
   closed: 'closed',
 }
 
-const STAGE_ORDER: Stage[] = ['quote', 'invoice', 'prepare', 'handoff', 'awaitQuote', 'awaitPayment', 'fulfilled', 'closed']
+const STAGE_ORDER: Stage[] = ['quote', 'prepare', 'handoff', 'awaitQuote', 'awaitPayment', 'fulfilled', 'closed']
 
 const STAGE_HEADING: Partial<Record<Stage, string>> = {
   quote: 'To quote',
-  invoice: 'To invoice · patient accepted the quote',
-  prepare: 'To prepare · paid',
-  handoff: 'Ready to hand over',
+  prepare: 'To prepare',
+  handoff: 'Ready for handover',
   awaitQuote: 'Quote sent',
   awaitPayment: 'Invoice sent',
+  fulfilled: 'Completed',
 }
 
 function medicineSummary(r: PrescriptionRequest) {
@@ -114,12 +113,13 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
   const { isMobile } = useResponsive()
   const markReady = useMarkPrescriptionReadyMutation()
   const fulfill = useFulfillPrescriptionRequestMutation()
+  const sendInvoice = useSendPrescriptionInvoiceMutation()
   const [error, setError] = useState<string | null>(null)
   const currency = getCountryByCode(request.countryCode ?? '')?.currencySymbol ?? ''
   const total = (request.quotedAmount ?? 0) + (request.deliveryFee ?? 0)
   const delivery = request.fulfillmentMode === 'delivery'
   const open = () => navigate(route.spPrescription(request.id))
-  const busy = markReady.isPending || fulfill.isPending
+  const busy = markReady.isPending || fulfill.isPending || sendInvoice.isPending
 
   const run = async (fn: () => Promise<unknown>, failMsg: string) => {
     setError(null)
@@ -130,6 +130,17 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
     }
   }
 
+  const markReadyButton = (
+    <button
+      type="button"
+      style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
+      disabled={busy}
+      onClick={() => void run(() => markReady.mutateAsync(request.id), 'Could not mark this order ready.')}
+    >
+      {markReady.isPending ? 'Saving…' : 'Mark ready'}
+    </button>
+  )
+
   let status: ReactNode
   let action: ReactNode = null
   switch (stage) {
@@ -137,48 +148,57 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
       status = <Pill tone={AMBER}>{request.isNearbyRequest && request.distanceKm != null ? `${request.distanceKm.toFixed(1)} km away · ` : ''}Submitted {formatRelativeTime(request.submittedAt)}</Pill>
       action = <button type="button" style={actionBtn} onClick={open}>Send quote</button>
       break
-    case 'invoice':
-      status = <Pill tone={AMBER}>Quote accepted{request.acceptedAt ? ` ${formatRelativeTime(request.acceptedAt)}` : ''}</Pill>
-      action = <button type="button" style={actionBtn} onClick={open}>Send invoice</button>
-      break
     case 'prepare':
-      status = <Pill tone={GREEN}>Paid · prepare order</Pill>
-      action = (
-        <button
-          type="button"
-          style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
-          disabled={busy}
-          onClick={() => void run(() => markReady.mutateAsync(request.id), 'Could not mark this order ready.')}
-        >
-          {markReady.isPending ? 'Saving…' : 'Mark ready'}
-        </button>
-      )
+      status = <Pill tone={CYAN}>{delivery ? 'Preparing for delivery' : 'Preparing · pickup, invoice when they arrive'}</Pill>
+      action = markReadyButton
       break
     case 'handoff':
-      status = <Pill tone={AMBER}>Ready{request.readyAt ? ` since ${formatRelativeTime(request.readyAt)}` : ''}</Pill>
-      action = (
-        <button
-          type="button"
-          style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
-          disabled={busy}
-          onClick={() => {
-            const label = delivery ? 'delivered' : 'collected'
-            if (!window.confirm(`Mark ${request.id} as ${label}? The patient will be notified.`)) return
-            void run(() => fulfill.mutateAsync(request.id), `Could not mark this order ${label}.`)
-          }}
-        >
-          {fulfill.isPending ? 'Saving…' : delivery ? 'Mark delivered' : 'Mark collected'}
-        </button>
-      )
+      if (delivery) {
+        status = <Pill tone={AMBER}>Ready{request.readyAt ? ` since ${formatRelativeTime(request.readyAt)}` : ''}</Pill>
+        action = (
+          <button
+            type="button"
+            style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
+            disabled={busy}
+            onClick={() => {
+              if (!window.confirm(`Mark ${request.id} as delivered? The invoice will be sent to the patient.`)) return
+              void run(() => fulfill.mutateAsync(request.id), 'Could not mark this order delivered.')
+            }}
+          >
+            {fulfill.isPending ? 'Saving…' : 'Mark delivered'}
+          </button>
+        )
+      } else {
+        status = <Pill tone={AMBER}>Ready · waiting for patient</Pill>
+        if (!request.invoiceId) {
+          action = (
+            <button
+              type="button"
+              style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
+              disabled={busy}
+              onClick={() => void run(() => sendInvoice.mutateAsync(request.id), 'Could not send the invoice.')}
+            >
+              {sendInvoice.isPending ? 'Saving…' : 'Send invoice'}
+            </button>
+          )
+        }
+      }
       break
     case 'awaitQuote':
       status = <Pill tone={CYAN}>Quote sent{request.quotedAt ? ` ${formatRelativeTime(request.quotedAt)}` : ''}{request.isNearbyRequest ? ' · patient comparing' : ''}</Pill>
       break
     case 'awaitPayment':
-      status = <Pill tone={CYAN}>Invoice sent · waiting for payment</Pill>
+      status = delivery
+        ? <Pill tone={CYAN}>Invoice sent · waiting for payment</Pill>
+        : <Pill tone={CYAN}>Invoice sent · waiting for payment at counter</Pill>
       break
     case 'fulfilled':
-      status = <Pill tone={GREEN}>{delivery ? 'Delivered' : 'Collected'}{request.fulfilledAt ? ` ${formatDate(request.fulfilledAt, { month: 'short', day: 'numeric' })}` : ''}</Pill>
+      status = (
+        <>
+          <Pill tone={GREEN}>{delivery ? 'Delivered' : 'Collected'}{request.fulfilledAt ? ` ${formatDate(request.fulfilledAt, { month: 'short', day: 'numeric' })}` : ''}</Pill>
+          {request.invoiceStatus === 'pending_auth' && <Pill tone={CYAN}>Awaiting payment</Pill>}
+        </>
+      )
       break
     case 'closed':
       status = <Pill tone={GREY}>{request.status === 'rejected' ? 'Declined by you' : request.isNearbyRequest ? (request.declineReason ?? 'Closed') : 'Cancelled by patient'}</Pill>
@@ -186,7 +206,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
   }
 
   const showAmount = total > 0 && stage !== 'quote'
-  const amountLabel = stage === 'fulfilled' || stage === 'prepare' || stage === 'handoff' ? 'Paid' : 'Quoted'
+  const amountLabel = stage === 'fulfilled' && isPaid(request) ? 'Paid' : 'Quoted'
 
   return (
     <article
@@ -197,7 +217,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
         gap: 14,
         padding: isMobile ? 14 : '14px 18px',
         background: '#fff',
-        border: `1px solid ${stage === 'quote' || stage === 'invoice' || stage === 'handoff' ? 'rgba(245,166,35,0.45)' : stage === 'prepare' ? 'rgba(34,197,94,0.4)' : C.border}`,
+        border: `1px solid ${stage === 'quote' || stage === 'handoff' ? 'rgba(245,166,35,0.45)' : C.border}`,
         borderRadius: radius.lg,
         cursor: 'pointer',
         fontFamily: font.family,

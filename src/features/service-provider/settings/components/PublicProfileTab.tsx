@@ -234,7 +234,8 @@ export function PublicProfileTab({
                 <div style={{ fontSize: 12, color: C.textSub, marginBottom: 8, fontFamily: font.family }}>Address</div>
                 <LocationPicker
                   value={profileForm.address}
-                  onChange={({ address, lat, lng }) => patch({ address, lat, lng })}
+                  regions={regionsFor(profileForm.country)}
+                  onChange={({ address, lat, lng, region }) => patch({ address, lat, lng, ...(region !== undefined ? { region } : {}) })}
                 />
               </div>
               {regionsFor(profileForm.country).length > 0 && (
@@ -248,6 +249,30 @@ export function PublicProfileTab({
                   />
                 </div>
               )}
+              <GGInput
+                label="Building or complex"
+                value={profileForm.building}
+                onChange={event => patch({ building: event.target.value.slice(0, 120) })}
+                placeholder="e.g. Mukuru Plaza, Ground Floor"
+              />
+              <GGInput
+                label="Road or street"
+                value={profileForm.road}
+                onChange={event => patch({ road: event.target.value.slice(0, 160) })}
+                placeholder="e.g. Kenyatta Road"
+              />
+              <div style={{ gridColumn: isMobile ? undefined : '1 / -1', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <GGTextarea
+                  label="How to get there"
+                  value={profileForm.directions}
+                  onChange={event => patch({ directions: event.target.value.slice(0, 1000) })}
+                  rows={3}
+                  placeholder="e.g. Enter from Kenyatta Road, past the Total garage. We are on the left, next to the blue gate. Parking is at the back."
+                />
+                <div style={{ fontSize: 12, color: C.textSub, fontFamily: font.family }}>
+                  Shown to patients with your price and when they choose you.
+                </div>
+              </div>
             </>
           ) : (
             <>
@@ -271,6 +296,24 @@ export function PublicProfileTab({
                 <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>{regionLabel(profileForm.country)}</div>
                 <div style={{ fontSize: 15, fontWeight: 600, color: profileForm.region ? C.text : C.textSub, fontFamily: font.family }}>
                   {profileForm.region || 'Not set: edit your profile to add it'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>Building or complex</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font.family }}>
+                  {profileForm.building || '—'}
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>Road or street</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font.family }}>
+                  {profileForm.road || '—'}
+                </div>
+              </div>
+              <div style={{ gridColumn: isMobile ? undefined : '1 / -1' }}>
+                <div style={{ fontSize: 12, color: C.textSub, marginBottom: 6, fontFamily: font.family }}>How to get there</div>
+                <div style={{ fontSize: 15, fontWeight: 600, color: C.text, fontFamily: font.family, whiteSpace: 'pre-line' }}>
+                  {profileForm.directions || '—'}
                 </div>
               </div>
             </>

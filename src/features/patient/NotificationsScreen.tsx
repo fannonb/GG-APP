@@ -31,6 +31,15 @@ const FILTERS = [
   ['credit', 'Allocation'],
 ] as const
 
+/** Shows any web address in a message as a tappable "View on map"-style link. */
+function withLinks(text: string) {
+  return text.split(/(https?:\/\/\S+)/g).map((part, i) => (
+    /^https?:\/\//.test(part)
+      ? <a key={i} href={part} target="_blank" rel="noopener noreferrer" style={{ color: '#0B7BC0', fontWeight: 700, textDecoration: 'none' }}>View on map</a>
+      : <span key={i}>{part}</span>
+  ))
+}
+
 export function NotificationsScreen() {
   const navigate = useNavigate()
   const { data: fetchedNotifications = [], isLoading } = usePatientNotifications()
@@ -150,7 +159,7 @@ export function NotificationsScreen() {
                       </div>
                     </div>
                     <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.5, marginTop: '3px' }}>
-                      {notification.body}
+                      {withLinks(notification.body)}
                     </div>
                   </div>
                   {!notification.read && (

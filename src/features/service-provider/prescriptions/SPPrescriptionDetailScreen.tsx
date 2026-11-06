@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { GGButton, GGCard, GGBadge, GGInput, GGTextarea, GGAvatar } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -7,12 +7,13 @@ import {
   useMarkPrescriptionReadyMutation,
   useQuotePrescriptionRequestMutation,
   useRejectPrescriptionRequestMutation,
+  useSendPrescriptionInvoiceMutation,
   useSPPrescriptionRequest,
   useSPProfile,
 } from '@/hooks/api'
 import { getCountryByCode, getCountryByName } from '@/config/countries'
 import { SPLayout } from '@/layouts/sp/SPLayout'
-import { route, ROUTES } from '@/router/routes'
+import { route } from '@/router/routes'
 import { formatCurrency, formatDate, formatPhone } from '@/utils/format'
 import { downloadInvoiceAttachment } from '@/utils/invoice-attachment'
 import { useAttachmentPreviewUrl } from '@/hooks/useAttachmentPreviewUrl'
@@ -34,24 +35,21 @@ function FulfillmentBanner({ request }: { request: PrescriptionRequest }) {
   const isFulfilled = request.status === 'fulfilled'
 
   const distance = request.distanceKm != null ? `${request.distanceKm.toFixed(1)} km from your pharmacy` : null
+  const pickupText = request.invoiceId
+    ? 'The patient pays with their PIN at your counter.'
+    : 'The patient comes to collect. Send the invoice when they arrive.'
   let statusText = request.isNearbyRequest
     ? isDelivery
       ? `Delivery pin is ${distance ?? 'nearby'}. Include your delivery charge in the price. The exact address is shared if the patient chooses you.`
       : `Patient is ${distance ?? 'nearby'} and will collect from the pharmacy they choose.`
     : isDelivery
-      ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. Include delivery charges when accepting.`
-      : 'Patient will collect from your pharmacy after they approve preparation.'
+      ? `Deliver to: ${request.deliveryAddress ?? 'Address not provided'}. The invoice is sent once it has been delivered.`
+      : pickupText
 
   if (isFulfilled) {
     statusText = isDelivery ? 'Order successfully delivered.' : 'Order successfully collected by patient.'
   } else if (isReady) {
-    statusText = isDelivery
-      ? 'Order is out for delivery. Confirm once delivered.'
-      : 'Order is ready at pharmacy. Confirm once patient collects.'
-  } else if (isPaid) {
-    statusText = isDelivery
-      ? 'Payment authorized. Package order and mark ready for delivery.'
-      : 'Payment authorized. Prepare medication and mark ready for pickup.'
+    statusText = isDelivery ? 'Order is out for delivery. Mark it delivered to send the invoice.' : pickupText
   }
 
   return (
@@ -102,7 +100,7 @@ function ConfirmationModal({
       title: 'Pricing Sent',
       message: request.isNearbyRequest
         ? 'Your price was sent. The patient is comparing nearby pharmacies, and you will be notified if they choose you.'
-        : 'Your quote was sent to the patient. They can accept or decline before you upload an invoice.',
+        : 'Your quote was sent to the patient. They can accept or decline.',
       rows: [
         { label: 'Items total', val: request.quotedAmount != null ? formatCurrency(request.quotedAmount, currencySymbol) : '—' },
         {
@@ -132,7 +130,10 @@ function ConfirmationModal({
     },
     fulfill: {
       title: request.fulfillmentMode === 'delivery' ? 'Marked as Delivered!' : 'Marked as Collected!',
-      message: 'This prescription order is complete.',
+      message:
+        request.fulfillmentMode === 'delivery'
+          ? 'The invoice was sent to the patient. The order completes when they pay with their PIN.'
+          : 'This prescription order is complete.',
       rows: [{ label: 'Status', val: <GGBadge type="success">Fulfilled</GGBadge> }],
     },
   }[type]
@@ -176,6 +177,7 @@ export function SPPrescriptionDetailScreen() {
   const rejectMutation = useRejectPrescriptionRequestMutation()
   const readyMutation = useMarkPrescriptionReadyMutation()
   const fulfillMutation = useFulfillPrescriptionRequestMutation()
+  const sendInvoice = useSendPrescriptionInvoiceMutation()
 
   const [itemName, setItemName] = useState('')
   const [itemQty, setItemQty] = useState('1')
@@ -187,7 +189,6 @@ export function SPPrescriptionDetailScreen() {
   const [rejectReason, setRejectReason] = useState('')
   const [confirmation, setConfirmation] = useState<ConfirmationType | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
-  const uploadInvoiceRef = useRef<HTMLDivElement>(null)
 
   const quotedTotal = useMemo(
     () => items.reduce((sum, item) => sum + item.unitPrice * Number.parseFloat(item.quantity || '1'), 0),
@@ -217,15 +218,12 @@ export function SPPrescriptionDetailScreen() {
   const canPreview = !!attachment.dataUrl && !!previewUrl
   const canDecide = request.status === 'submitted'
   const awaitingPatientQuote = request.status === 'quoted' && !request.invoiceId
-  const canUploadInvoice = request.status === 'accepted' && !request.invoiceId
-  const awaitingPatientApproval =
-    request.status === 'accepted' && !!request.invoiceId && request.invoiceStatus === 'pending_auth'
-  const isPaid = request.invoiceStatus === 'paid' || request.invoiceStatus === 'authorized'
+  const awaitingPatientApproval = !!request.invoiceId && request.invoiceStatus === 'pending_auth'
   const canMarkReady = request.status === 'accepted' || request.status === 'preparing'
-  const isReadyForPickup = request.fulfillmentMode === 'pickup' && isPaid && canMarkReady
-  const isReadyForDelivery = request.fulfillmentMode === 'delivery' && isPaid && canMarkReady
   const canFulfill = request.status === 'ready'
   const isDelivery = request.fulfillmentMode === 'delivery'
+  const canSendPickupInvoice =
+    !isDelivery && !request.invoiceId && (request.status === 'accepted' || request.status === 'preparing' || request.status === 'ready')
   const patientCountry = getCountryByCode(request.countryCode ?? '')
   const patientPhone = formatPhone(
     request.patientPhone ?? '',
@@ -324,6 +322,15 @@ export function SPPrescriptionDetailScreen() {
     }
   }
 
+  const handleSendInvoice = async () => {
+    setActionError(null)
+    try {
+      await sendInvoice.mutateAsync(request.id)
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to send the invoice.')
+    }
+  }
+
   return (
     <SPLayout title={request.id} back>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: '20px', fontFamily: font.family }}>
@@ -372,135 +379,6 @@ export function SPPrescriptionDetailScreen() {
                 {request.isNearbyRequest && request.status === 'cancelled' ? 'closed' : request.status === 'rejected' && request.isNearbyRequest ? 'declined' : request.status}
               </GGBadge>
             </div>
-
-            {isReadyForPickup && (
-              <div
-                style={{
-                  padding: '16px 18px',
-                  borderRadius: radius.md,
-                  border: '1.5px solid rgba(16, 185, 129, 0.45)',
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 182, 255, 0.10) 100%)',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '14px',
-                  flexWrap: 'wrap',
-                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.12)',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: 200 }}>
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-                    }}
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
-                      <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                      <line x1="12" y1="22.08" x2="12" y2="12" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46', marginBottom: 2 }}>
-                      Prescription Paid · Ready for Pickup
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#047857', lineHeight: 1.5 }}>
-                      Payment has been confirmed. Prepare medication and mark it ready for pickup so the patient can collect it.
-                    </div>
-                  </div>
-                </div>
-                <GGButton
-                  variant="primary"
-                  size="sm"
-                  loading={readyMutation.isPending}
-                  onClick={() => void handleReady()}
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    border: 'none',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  Mark Ready for Pickup
-                </GGButton>
-              </div>
-            )}
-
-            {isReadyForDelivery && (
-              <div
-                style={{
-                  padding: '16px 18px',
-                  borderRadius: radius.md,
-                  border: '1.5px solid rgba(16, 185, 129, 0.45)',
-                  background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(56, 182, 255, 0.10) 100%)',
-                  marginBottom: '16px',
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  gap: '14px',
-                  flexWrap: 'wrap',
-                  boxShadow: '0 2px 10px rgba(16, 185, 129, 0.12)',
-                }}
-              >
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flex: 1, minWidth: 200 }}>
-                  <div
-                    style={{
-                      width: 42,
-                      height: 42,
-                      borderRadius: '10px',
-                      background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                      color: '#fff',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                      boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-                    }}
-                  >
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="1" y="3" width="15" height="13" rx="1" />
-                      <polygon points="16 8 20 8 23 11 23 16 16 16 16 8" />
-                      <circle cx="5.5" cy="18.5" r="2.5" />
-                      <circle cx="18.5" cy="18.5" r="2.5" />
-                    </svg>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: 800, color: '#065F46', marginBottom: 2 }}>
-                      Prescription Paid · Ready for Delivery
-                    </div>
-                    <div style={{ fontSize: '12px', color: '#047857', lineHeight: 1.5 }}>
-                      Payment has been confirmed. Prepare medication and mark it ready for delivery to dispatch.
-                    </div>
-                  </div>
-                </div>
-                <GGButton
-                  variant="primary"
-                  size="sm"
-                  loading={readyMutation.isPending}
-                  onClick={() => void handleReady()}
-                  style={{
-                    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                    border: 'none',
-                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-                    fontWeight: 700,
-                    flexShrink: 0,
-                  }}
-                >
-                  Mark Ready for Delivery
-                </GGButton>
-              </div>
-            )}
 
             <FulfillmentBanner request={request} />
             <InfoRow label="Submitted" val={formatDate(request.submittedAt)} />
@@ -593,6 +471,7 @@ export function SPPrescriptionDetailScreen() {
                     placeholder="0.00"
                     required
                   />
+                  <div style={{ fontSize: '12px', color: C.textSub, marginTop: 6 }}>Delivery orders are paid with GG&apos;APP credit after delivery.</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, fontWeight: 800, fontSize: 14 }}>
                     <span>Grand total</span>
                     <span>{formatCurrency(grandTotal, currencySymbol)}</span>
@@ -649,39 +528,31 @@ export function SPPrescriptionDetailScreen() {
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Waiting on Patient</div>
               <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>
                 {request.isNearbyRequest
-                  ? 'Your price was sent. The patient is comparing nearby pharmacies. If they choose you, you upload the invoice next.'
-                  : 'Your quote was sent. The patient can accept or decline before you upload an invoice.'}
+                  ? 'Your price was sent. The patient is comparing nearby pharmacies. If they choose you, the invoice is sent to them automatically.'
+                  : 'Your quote was sent. The patient can accept or decline.'}
               </div>
             </GGCard>
           )}
 
-          {canUploadInvoice && (
-            <div ref={uploadInvoiceRef}>
+          {canSendPickupInvoice && (
             <GGCard padding="24px">
-              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Upload Invoice</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Patient at the counter?</div>
               <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>
-                The patient accepted your quote
-                {request.quotedAmount != null ? ` (${formatCurrency((request.quotedAmount ?? 0) + (request.deliveryFee ?? 0), currencySymbol)})` : ''}.
-                Upload the invoice so they can {isDelivery ? 'approve delivery and payment' : 'approve preparation and payment'}.
-                {isDelivery ? ' Delivery charges are included in the invoice total.' : ''}
+                Send the invoice when they arrive. They pay it with their PIN, and the order completes then.
               </div>
-              <GGButton
-                variant="primary"
-                size="md"
-                fullWidth
-                onClick={() => navigate(ROUTES.SP_INVOICE_UPLOAD, { state: { prescriptionRequest: request } })}
-              >
-                Upload Invoice →
+              <GGButton variant="primary" size="md" fullWidth loading={sendInvoice.isPending} onClick={() => void handleSendInvoice()}>
+                Send invoice to patient
               </GGButton>
             </GGCard>
-            </div>
           )}
 
           {awaitingPatientApproval && (
             <GGCard padding="24px">
-              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Waiting on Patient</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Invoice sent</div>
               <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>
-                Invoice {request.invoiceId} was sent. Once the patient {isDelivery ? 'approves delivery and payment' : 'approves preparation and payment'}, you can prepare the order.
+                {isDelivery
+                  ? `Invoice ${request.invoiceId} was sent after delivery. Waiting for payment.`
+                  : `Invoice ${request.invoiceId} was sent. They pay it with their PIN at your counter.`}
               </div>
             </GGCard>
           )}
@@ -689,35 +560,26 @@ export function SPPrescriptionDetailScreen() {
           {(canMarkReady || canFulfill) && (
             <GGCard padding="24px">
               <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '12px' }}>Fulfillment</div>
-              <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>
-                Patient approved. Prepare the medication, mark ready, then confirm {isDelivery ? 'delivery' : 'pickup'}.
-              </div>
               {canMarkReady && (
-                <GGButton
-                  variant={isPaid ? 'primary' : 'secondary'}
-                  size="md"
-                  fullWidth
-                  loading={readyMutation.isPending}
-                  onClick={() => void handleReady()}
-                  style={{
-                    marginBottom: '10px',
-                    ...(isPaid
-                      ? {
-                          background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                          border: 'none',
-                          boxShadow: '0 2px 8px rgba(16, 185, 129, 0.35)',
-                          fontWeight: 700,
-                        }
-                      : {}),
-                  }}
-                >
-                  Mark Ready for {isDelivery ? 'Delivery' : 'Pickup'}
+                <>
+                  <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>
+                    Prepare the medication, then mark it ready.
+                  </div>
+                  <GGButton variant="primary" size="md" fullWidth loading={readyMutation.isPending} onClick={() => void handleReady()}>
+                    Mark ready for {isDelivery ? 'delivery' : 'pickup'}
+                  </GGButton>
+                </>
+              )}
+              {canFulfill && isDelivery && (
+                <GGButton variant="primary" size="md" fullWidth loading={fulfillMutation.isPending} onClick={() => void handleFulfill()}>
+                  Mark delivered and send invoice
                 </GGButton>
               )}
-              {canFulfill && (
-                <GGButton variant="success" size="md" fullWidth loading={fulfillMutation.isPending} onClick={() => void handleFulfill()}>
-                  Confirm {isDelivery ? 'Delivered' : 'Picked Up'}
-                </GGButton>
+              {canFulfill && !isDelivery && !!request.invoiceId && (
+                <>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, marginBottom: '6px' }}>Waiting at your counter</div>
+                  <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6 }}>The order completes when the patient pays with their PIN.</div>
+                </>
               )}
             </GGCard>
           )}

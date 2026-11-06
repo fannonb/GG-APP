@@ -297,6 +297,12 @@ export interface ProviderProfileResponse {
   country: string
   /** County / province from the standard list (config/dataCapture.ts). */
   region?: string | null
+  /** Building or complex name, e.g. "Mukuru Plaza, Ground Floor". Null when empty. */
+  building?: string | null
+  /** Road or street, e.g. "Kenyatta Road". Null when empty. */
+  road?: string | null
+  /** Free-text directions in the provider's words (landmarks, entrance, parking). Null when empty. */
+  directions?: string | null
   status: 'open' | 'closed'
   /** True when the provider account is active (approved and not suspended). */
   verified?: boolean
@@ -361,6 +367,9 @@ export interface UpdateProviderProfilePayload {
   tags?: string[]
   address?: string
   region?: string
+  building?: string | null
+  road?: string | null
+  directions?: string | null
   lat?: number
   lng?: number
   establishedYear?: number

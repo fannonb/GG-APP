@@ -56,9 +56,11 @@ import { StorageService } from '../../common/services/storage.service'
 import type { AttachmentMetadata } from '../../common/services/storage.service'
 import { ReferenceService } from '../../common/services/reference.service'
 import { PrescriptionDispatchService } from '../../common/services/prescription-dispatch.service'
+import { PrescriptionInvoiceService } from '../../common/services/prescription-invoice.service'
 import { MailService } from '../../common/services/mail.service'
 import { formatPatientFullName } from '../../common/utils/patient-name.util'
 import { formatMoney } from '../../common/utils/money.util'
+import { placeMapsUrl } from '../../common/utils/maps-link.util'
 import { AuthService } from '../auth/auth.service'
 
 @Injectable()
@@ -80,6 +82,7 @@ export class SpService {
     @Inject(StorageService) private readonly storage: StorageService,
     @Inject(ProviderCredentialsService) private readonly providerCredentials: ProviderCredentialsService,
     @Inject(PrescriptionDispatchService) private readonly prescriptionDispatch: PrescriptionDispatchService,
+    @Inject(PrescriptionInvoiceService) private readonly prescriptionInvoice: PrescriptionInvoiceService,
   ) {
     this.prisma = prisma
     this.redis = redis
@@ -247,6 +250,9 @@ export class SpService {
       }
 
       const firstQuote = request.status === PrescriptionRequestStatus.SUBMITTED
+      // Pickup patients need the pharmacy's location to find it. The mode never changes after creation.
+      const nearbyPickupMapsUrl =
+        request.fulfillmentMode === PrescriptionFulfillmentMode.PICKUP ? placeMapsUrl(provider) : null
       const updated = await this.prisma.$transaction(async tx => {
         const answered = await tx.prescriptionOffer.updateMany({
           where: {
@@ -278,7 +284,7 @@ export class SpService {
             userId: request.patientUserId,
             type: NotificationType.PRESCRIPTION,
             title: 'New Pharmacy Quote',
-            body: `${provider.name} sent a price for your prescription. Compare quotes and choose a pharmacy.`,
+            body: `${provider.name} sent a price for your prescription. Compare quotes and choose a pharmacy.${nearbyPickupMapsUrl ? ` Pharmacy location: ${nearbyPickupMapsUrl}` : ''}`,
             screen: `/app/prescriptions/${request.reference}`,
           },
         })
@@ -320,12 +326,15 @@ export class SpService {
       include: this.spPrescriptionInclude(provider.id),
     })
 
+    const pickupMapsUrl =
+      updated.fulfillmentMode === PrescriptionFulfillmentMode.PICKUP ? placeMapsUrl(provider) : null
+
     await this.prisma.notification.create({
       data: {
         userId: request.patientUserId,
         type: NotificationType.PRESCRIPTION,
         title: 'Quote Ready',
-        body: `${provider.name} sent pricing for your prescription. Review and accept or decline the quote to continue.`,
+        body: `${provider.name} sent pricing for your prescription. Review and accept or decline the quote to continue.${pickupMapsUrl ? ` Pharmacy location: ${pickupMapsUrl}` : ''}`,
         screen: `/app/prescriptions/${updated.reference}`,
       },
     })
@@ -484,6 +493,10 @@ export class SpService {
     const provider = await this.resolveProvider(userId)
     const request = await this.resolvePharmacyPrescriptionRequest(provider, requestReference)
 
+    if (request.fulfillmentMode === PrescriptionFulfillmentMode.PICKUP) {
+      throw new BadRequestException('Pickup orders complete when the patient pays at the counter')
+    }
+
     if (request.status !== PrescriptionRequestStatus.READY) {
       throw new BadRequestException('Only ready orders can be marked as fulfilled')
     }
@@ -497,10 +510,9 @@ export class SpService {
       throw new NotFoundException('Patient profile not found')
     }
 
-    const fulfillmentLabel = request.fulfillmentMode === 'DELIVERY' ? 'delivered' : 'collected'
-
-    const updated = await this.prisma.$transaction(async tx => {
-      const result = await tx.prescriptionRequest.update({
+    // The order has arrived, so the invoice goes out now and the patient approves it with their PIN.
+    const { updated, invoice } = await this.prisma.$transaction(async tx => {
+      const fulfilled = await tx.prescriptionRequest.update({
         where: { id: request.id },
         data: {
           status: PrescriptionRequestStatus.FULFILLED,
@@ -508,12 +520,14 @@ export class SpService {
         },
       })
 
+      const invoice = await this.prescriptionInvoice.createForPrescription(tx, request.id)
+
       await tx.notification.create({
         data: {
           userId: request.patientUserId,
           type: NotificationType.PRESCRIPTION,
-          title: 'Medication Collected',
-          body: `Your order from ${provider.name} has been ${fulfillmentLabel}.`,
+          title: 'Medication Delivered',
+          body: `Your order from ${provider.name} has been delivered. Approve invoice ${invoice.reference} with your PIN to pay.`,
           screen: `/app/prescriptions/${request.reference}`,
         },
       })
@@ -530,8 +544,10 @@ export class SpService {
         },
       })
 
-      return result
+      return { updated: fulfilled, invoice }
     })
+
+    this.sendPrescriptionInvoiceEmail(request.patient, provider.name, invoice)
 
     const refreshed = await this.prisma.prescriptionRequest.findUniqueOrThrow({
       where: { id: updated.id },
@@ -543,6 +559,98 @@ export class SpService {
     })
 
     return this.mapPrescriptionRequest(refreshed)
+  }
+
+  /**
+   * Pickup only. The pharmacy sends the invoice when the patient arrives; the patient approves it with
+   * their PIN at the counter, and that payment completes the order. Calling again returns the same invoice.
+   */
+  async sendPrescriptionInvoice(userId: string, requestReference: string) {
+    const provider = await this.resolveProvider(userId)
+    const request = await this.resolvePharmacyPrescriptionRequest(provider, requestReference)
+
+    if (request.fulfillmentMode !== PrescriptionFulfillmentMode.PICKUP) {
+      throw new BadRequestException('Delivery invoices are sent once the order has been delivered')
+    }
+
+    if (
+      request.status !== PrescriptionRequestStatus.ACCEPTED &&
+      request.status !== PrescriptionRequestStatus.PREPARING &&
+      request.status !== PrescriptionRequestStatus.READY
+    ) {
+      throw new BadRequestException('The invoice can only be sent once the patient has chosen your quote')
+    }
+
+    const { invoice, created } = await this.prisma.$transaction(async tx => {
+      const alreadyInvoiced = await tx.invoice.findFirst({
+        where: {
+          prescriptionRequestId: request.id,
+          status: { notIn: [InvoiceStatus.REJECTED, InvoiceStatus.DISPUTED] },
+        },
+        select: { id: true },
+      })
+
+      const invoice = await this.prescriptionInvoice.createForPrescription(tx, request.id)
+
+      // A repeat call returns the live invoice; only a newly issued one is logged and announced.
+      if (!alreadyInvoiced) {
+        await tx.auditLog.create({
+          data: {
+            actorUserId: userId,
+            action: 'sp.prescription.invoice_sent',
+            entityType: 'PrescriptionRequest',
+            entityId: request.id,
+            metadata: {
+              reference: request.reference,
+              invoiceReference: invoice.reference,
+            } as Prisma.JsonObject,
+          },
+        })
+      }
+
+      return { invoice, created: !alreadyInvoiced }
+    })
+
+    if (created) {
+      await this.prisma.notification.create({
+        data: {
+          userId: request.patientUserId,
+          type: NotificationType.PRESCRIPTION,
+          title: 'Invoice Ready',
+          body: `Your invoice ${invoice.reference} is ready. Pay it with your PIN at ${provider.name}.`,
+          screen: `/app/prescriptions/${request.reference}`,
+        },
+      })
+
+      this.sendPrescriptionInvoiceEmail(request.patient, provider.name, invoice)
+    }
+
+    const refreshed = await this.prisma.prescriptionRequest.findUniqueOrThrow({
+      where: { id: request.id },
+      include: {
+        patient: { include: { patientProfile: true } },
+        beneficiary: true,
+        invoice: { select: { reference: true, status: true } },
+      },
+    })
+
+    return this.mapPrescriptionRequest(refreshed)
+  }
+
+  private sendPrescriptionInvoiceEmail(
+    patient: {
+      email: string
+      patientProfile: { firstName?: string | null; lastName?: string | null; countryCode?: string | null } | null
+    },
+    providerName: string,
+    invoice: { reference: string; amount: number },
+  ) {
+    void this.mailService.sendInvoiceIssuedEmail(patient.email, {
+      patientName: formatPatientFullName(patient.patientProfile),
+      providerName,
+      reference: invoice.reference,
+      amount: formatMoney(invoice.amount, patient.patientProfile?.countryCode),
+    })
   }
 
   async getAppointments(userId: string) {
@@ -1086,6 +1194,7 @@ export class SpService {
         patient: { include: { patientProfile: true } },
         lineItems: true,
         appointment: true,
+        prescriptionRequest: { select: { reference: true, status: true, fulfillmentMode: true } },
         reviews: {
           include: {
             patient: {
@@ -1725,6 +1834,9 @@ export class SpService {
         about: dto.about ?? undefined,
         description: dto.about ?? undefined,
         address: dto.address ?? undefined,
+        building: dto.building === undefined ? undefined : dto.building?.trim() || null,
+        road: dto.road === undefined ? undefined : dto.road?.trim() || null,
+        directions: dto.directions === undefined ? undefined : dto.directions?.trim() || null,
         phone: phone ?? undefined,
         country: dto.country ?? undefined,
         region:
@@ -2113,6 +2225,7 @@ export class SpService {
         patient: { include: { patientProfile: { include: { beneficiaries: true } } } },
         lineItems: true,
         appointment: true,
+        prescriptionRequest: { select: { reference: true, status: true, fulfillmentMode: true } },
         reviews: {
           include: {
             patient: {
@@ -2295,6 +2408,9 @@ export class SpService {
     description: string | null
     about: string | null
     address: string
+    building?: string | null
+    road?: string | null
+    directions?: string | null
     phone: string
     country: string | null
     region?: string | null
@@ -2324,6 +2440,9 @@ export class SpService {
       }),
       about: provider.about ?? provider.description ?? '',
       address: provider.address,
+      building: provider.building ?? null,
+      road: provider.road ?? null,
+      directions: provider.directions ?? null,
       country: provider.country ?? '',
       region: provider.region ?? null,
       status: provider.status === ProviderOpenStatus.OPEN ? 'open' : 'closed',
@@ -2734,6 +2853,7 @@ export class SpService {
   }
 
   private mapSpInvoice(invoice: {
+      prescriptionRequest?: { reference: string; status: string; fulfillmentMode: string } | null
     id: string
     reference: string
     patientUserId: string
@@ -2811,6 +2931,9 @@ export class SpService {
       id: invoice.reference,
       appointmentId: invoice.appointment?.reference ?? undefined,
       isPrescription: invoice.prescriptionRequestId != null,
+      prescriptionId: invoice.prescriptionRequest?.reference,
+      prescriptionStatus: invoice.prescriptionRequest?.status.toLowerCase(),
+      fulfillmentMode: invoice.prescriptionRequest?.fulfillmentMode.toLowerCase() as 'pickup' | 'delivery' | undefined,
       patient: isBeneficiary
         ? `${invoice.billedToName} (for ${invoice.serviceForName})`
         : invoice.billedToName,

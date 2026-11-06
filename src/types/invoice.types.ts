@@ -88,6 +88,10 @@ export interface SPInvoice {
   id: string
   appointmentId?: string
   isPrescription?: boolean
+  /** The prescription this invoice is for, and its current status and delivery mode. */
+  prescriptionId?: string
+  prescriptionStatus?: string
+  fulfillmentMode?: 'pickup' | 'delivery'
   patient: string
   patientId: string
   phone: string

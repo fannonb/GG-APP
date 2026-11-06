@@ -6,11 +6,12 @@ import { MailService } from './services/mail.service'
 import { StorageService } from './services/storage.service'
 import { ProviderCredentialsService } from './services/provider-credentials.service'
 import { PrescriptionDispatchService } from './services/prescription-dispatch.service'
+import { PrescriptionInvoiceService } from './services/prescription-invoice.service'
 
 @Global()
 @Module({
   imports: [ConfigModule],
-  providers: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService],
-  exports: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService],
+  providers: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService, PrescriptionInvoiceService],
+  exports: [FieldEncryptionService, ReferenceService, MailService, StorageService, ProviderCredentialsService, PrescriptionDispatchService, PrescriptionInvoiceService],
 })
 export class CommonModule {}

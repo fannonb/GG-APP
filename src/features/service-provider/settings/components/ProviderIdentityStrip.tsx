@@ -1,19 +1,18 @@
-import { useNavigate } from 'react-router-dom'
 import { GGBadge, GGButton, GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import type { ProviderSettingsResponse } from '@/api/types'
-import { route } from '@/router/routes'
 import { getSpProfileCompletion } from '@/utils/sp-profile-completion'
 import { formatCategoryList, type ProfileFormState } from '../settings.helpers'
 
 export function ProviderIdentityStrip({
   settings,
   profileForm,
+  onPreview,
 }: {
   settings: ProviderSettingsResponse
   profileForm: ProfileFormState
+  onPreview: () => void
 }) {
-  const navigate = useNavigate()
   const completion = getSpProfileCompletion(settings)
   const categories = formatCategoryList(profileForm.categories)
   const initials = settings.profile.name
@@ -64,11 +63,7 @@ export function ProviderIdentityStrip({
             </div>
           </div>
 
-          <GGButton
-            variant="secondary"
-            size="sm"
-            onClick={() => navigate(route.providerProfile(settings.profile.id))}
-          >
+          <GGButton variant="secondary" size="sm" onClick={onPreview}>
             View public profile
           </GGButton>
         </div>

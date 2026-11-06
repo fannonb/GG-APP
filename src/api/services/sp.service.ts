@@ -861,4 +861,21 @@ export const spService = {
     )
     return data
   },
+
+  /** Pickup: the patient has arrived at the counter, so the invoice goes out now. */
+  async sendPrescriptionInvoice(id: string, _mode: UserMode = 'existing'): Promise<PrescriptionRequest> {
+    if (isMockApi) {
+      await mockDelay(350)
+      const { updateMockPrescriptionRequest } = await import('@/mock/prescription.mock')
+      const updated = updateMockPrescriptionRequest(id, {
+        invoiceId: `INV-${Date.now().toString().slice(-6)}`,
+        invoiceStatus: 'pending_auth',
+      })
+      if (!updated) throw new Error('Prescription request not found')
+      return updated
+    }
+
+    const { data } = await apiClient.post<PrescriptionRequest>(`/sp/prescription-requests/${id}/invoice`)
+    return data
+  },
 }

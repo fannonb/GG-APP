@@ -248,6 +248,16 @@ export class PatientController {
     return this.patientService.getNearbyPharmacies(query.lat, query.lng)
   }
 
+  @Patch('prescription-requests/:id/offers/:offerId/decline')
+  declinePrescriptionOffer(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Param('offerId') offerId: string,
+    @Body() dto: DeclinePrescriptionRequestDto,
+  ) {
+    return this.patientService.declinePrescriptionOffer(user.sub, id, offerId, dto)
+  }
+
   @Patch('prescription-requests/:id/offers/:offerId/select')
   selectPrescriptionOffer(
     @CurrentUser() user: AuthenticatedUser,

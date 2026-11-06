@@ -20,6 +20,12 @@ export interface PrescriptionOffer {
   providerId: number
   provider: string
   address?: string
+  /** Building and road, joined for display, e.g. "Mukuru Plaza, Kenyatta Road". */
+  addressLine?: string
+  /** How to get there, as the pharmacy wrote it. */
+  directions?: string
+  /** Google Maps link to the pharmacy's pin. */
+  mapUrl?: string
   rating?: number
   logoUrl?: string
   distanceKm: number
@@ -50,6 +56,8 @@ export interface PrescriptionRequest {
   id: string
   providerId?: number
   provider?: string
+  /** Google Maps link to the pharmacy's exact pin (or its address). */
+  providerMapUrl?: string
   patient?: string
   patientPhone?: string
   patientEmail?: string
@@ -75,6 +83,9 @@ export interface PrescriptionRequest {
   submittedAt: string
   invoiceId?: string
   invoiceStatus?: string
+  /** Pharmacy's building and road, and how to get there (shown once a pharmacy is chosen). */
+  providerAddressLine?: string
+  providerDirections?: string
   // ── Nearby search (patient view) ──
   searchLat?: number
   searchLng?: number

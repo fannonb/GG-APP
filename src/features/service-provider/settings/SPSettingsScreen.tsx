@@ -13,6 +13,7 @@ import {
 } from '@/hooks/api'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { ProviderIdentityStrip } from './components/ProviderIdentityStrip'
+import { PublicProfilePreview } from './components/PublicProfilePreview'
 import { PublicProfileTab } from './components/PublicProfileTab'
 import { PayoutsTab } from './components/PayoutsTab'
 import { SecurityTab } from './components/SecurityTab'
@@ -52,6 +53,7 @@ export function SPSettingsScreen() {
   const [profileForm, setProfileForm] = useState<ProfileFormState | null>(null)
   const [baselineForm, setBaselineForm] = useState<ProfileFormState | null>(null)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const [previewOpen, setPreviewOpen] = useState(false)
 
   useEffect(() => {
     if (!settings) return
@@ -113,6 +115,9 @@ export function SPSettingsScreen() {
         phone: profileForm.phone,
         country: profileForm.country,
         region: profileForm.region || undefined,
+        building: profileForm.building,
+        road: profileForm.road,
+        directions: profileForm.directions,
         category: profileForm.categories.length > 0 ? profileForm.categories.join(', ') : undefined,
         status: profileForm.status,
         establishedYear: profileForm.establishedYear ? Number(profileForm.establishedYear) : undefined,
@@ -187,7 +192,10 @@ export function SPSettingsScreen() {
           </div>
         )}
 
-        <ProviderIdentityStrip settings={settings} profileForm={profileForm} />
+        <ProviderIdentityStrip settings={settings} profileForm={profileForm} onPreview={() => setPreviewOpen(true)} />
+        {previewOpen && profileForm && (
+          <PublicProfilePreview name={settings.profile.name} form={profileForm} onClose={() => setPreviewOpen(false)} />
+        )}
         <SettingsTabBar tab={tab} onChange={requestTabChange} />
 
         {tab === 'profile' && (

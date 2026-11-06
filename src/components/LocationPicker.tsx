@@ -6,15 +6,35 @@ type NominatimResult = {
   display_name: string
   lat: string
   lon: string
+  address?: Record<string, string | undefined>
 }
 
 type Props = {
   value: string
-  onChange: (location: { address: string; lat: number | null; lng: number | null }) => void
+  onChange: (location: { address: string; lat: number | null; lng: number | null; region?: string }) => void
   disabled?: boolean
+  /** The county / province list for the provider's country. */
+  regions?: string[]
 }
 
-export function LocationPicker({ value, onChange, disabled }: Props) {
+/** Address parts that may name the county or province, most specific first. */
+const REGION_KEYS = ['county', 'state_district', 'state', 'city', 'town', 'municipality', 'village']
+
+/** The list entry that one of the address parts names, or undefined. Mirrors the API's normalizeRegion. */
+function matchRegion(address: Record<string, string | undefined> | undefined, regions: string[] | undefined): string | undefined {
+  if (!address || !regions?.length) return undefined
+  for (const key of REGION_KEYS) {
+    const raw = address[key]
+    if (!raw) continue
+    const wanted = raw.trim().toLowerCase().replace(/\s+(county|province)$/i, '')
+    const hit = regions.find(r => r.toLowerCase() === wanted)
+    if (hit) return hit
+  }
+  return undefined
+}
+
+export function LocationPicker(props: Props) {
+  const { value, onChange, disabled } = props
   const [query, setQuery] = useState(value)
   const [suggestions, setSuggestions] = useState<NominatimResult[]>([])
   const [open, setOpen] = useState(false)
@@ -40,7 +60,7 @@ export function LocationPicker({ value, onChange, disabled }: Props) {
     if (q.trim().length < 3) { setSuggestions([]); setOpen(false); return }
     setFetching(true)
     fetch(
-      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=0`,
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1`,
       { headers: { 'Accept-Language': 'en', 'User-Agent': 'GG-APP/1.0' } }
     )
       .then(r => r.json())
@@ -60,10 +80,12 @@ export function LocationPicker({ value, onChange, disabled }: Props) {
 
   const handleSelect = (place: NominatimResult) => {
     setQuery(place.display_name)
+    // A pick always sets the county: the matched one, or blank so the user chooses it.
     onChange({
       address: place.display_name,
       lat: Number.parseFloat(place.lat),
       lng: Number.parseFloat(place.lon),
+      region: matchRegion(place.address, props.regions) ?? '',
     })
     setSuggestions([])
     setOpen(false)
@@ -80,16 +102,17 @@ export function LocationPicker({ value, onChange, disabled }: Props) {
       pos => {
         const { latitude, longitude } = pos.coords
         fetch(
-          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`,
+          `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
           { headers: { 'Accept-Language': 'en', 'User-Agent': 'GG-APP/1.0' } }
         )
           .then(r => r.json())
-          .then((data: { display_name: string }) => {
+          .then((data: NominatimResult) => {
             setQuery(data.display_name)
             onChange({
               address: data.display_name,
               lat: latitude,
               lng: longitude,
+              region: matchRegion(data.address, props.regions) ?? '',
             })
             setSuggestions([])
             setOpen(false)

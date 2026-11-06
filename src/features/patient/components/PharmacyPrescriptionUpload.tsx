@@ -297,7 +297,7 @@ export function PharmacyPrescriptionUpload() {
         <div role="radiogroup" aria-label="Pickup or delivery" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {([
             { value: 'pickup', label: 'Pick up', hint: 'Collect it from the pharmacy you choose' },
-            { value: 'delivery', label: 'Delivery', hint: 'The pharmacy delivers to you, for a fee' },
+            { value: 'delivery', label: 'Delivery', hint: "Delivered to you. Pay after it arrives, with GG'APP credit." },
           ] as const).map(option => {
             const selected = fulfillmentMode === option.value
             return (

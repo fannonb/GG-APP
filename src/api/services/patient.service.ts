@@ -592,6 +592,27 @@ export const patientService = {
     return data
   },
 
+  async declinePrescriptionOffer(
+    id: string,
+    offerId: string,
+    reason?: string,
+  ): Promise<import('@/types/prescription.types').PrescriptionRequest> {
+    if (isMockApi) {
+      await mockDelay(200)
+      const { getMockPrescriptionRequestsForPatient, updateMockPrescriptionRequest } = await import('@/mock/prescription.mock')
+      const request = getMockPrescriptionRequestsForPatient().find(item => item.id === id)
+      if (!request) throw new Error('Prescription request not found')
+      const updated = updateMockPrescriptionRequest(id, {
+        offers: (request.offers ?? []).filter(item => item.id !== offerId),
+      })
+      if (!updated) throw new Error('Prescription request not found')
+      return updated
+    }
+
+    const { data } = await apiClient.patch(`/patient/prescription-requests/${id}/offers/${offerId}/decline`, { reason })
+    return data
+  },
+
   async selectPrescriptionOffer(
     id: string,
     offerId: string,

@@ -7,6 +7,7 @@ import {
   useDeclinePrescriptionQuoteMutation,
   useMarkPrescriptionQuoteReviewedMutation,
   usePatientPrescriptionRequests,
+  useDeclinePrescriptionOfferMutation,
   useSelectPrescriptionOfferMutation,
 } from '@/hooks/api'
 import { getCountryByCode } from '@/config/countries'
@@ -39,7 +40,7 @@ const STATUS: Record<PrescriptionStage, { label: string; tone: typeof AMBER }> =
   reviewQuote: { label: 'Quote to review', tone: AMBER },
   approvePayment: { label: 'Approve payment', tone: AMBER },
   awaitQuote: { label: 'Waiting for quote', tone: CYAN },
-  awaitInvoice: { label: 'Invoice on its way', tone: CYAN },
+  awaitInvoice: { label: 'Being prepared', tone: CYAN },
   preparing: { label: 'Being prepared', tone: CYAN },
   ready: { label: 'Ready', tone: GREEN },
   done: { label: 'Completed', tone: GREEN },
@@ -47,6 +48,17 @@ const STATUS: Record<PrescriptionStage, { label: string; tone: typeof AMBER }> =
 }
 
 const cardTitle: React.CSSProperties = { fontSize: 15, fontWeight: 800, color: C.text, marginBottom: 12 }
+
+const mapButtonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0 16px', borderRadius: radius.sm, background: CYAN_DEEP, color: '#fff', fontSize: 14, fontWeight: 700, textDecoration: 'none', fontFamily: font.family, boxSizing: 'border-box' }
+
+function HowToGetThere({ text }: { text: string }) {
+  return (
+    <div>
+      <div style={{ fontSize: 11, fontWeight: 700, color: C.textSub, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>How to get there</div>
+      <div style={{ fontSize: 13, color: C.text, lineHeight: 1.5, whiteSpace: 'pre-line' }}>{text}</div>
+    </div>
+  )
+}
 
 function Pill({ tone, children }: { tone: { fg: string; bg: string }; children: ReactNode }) {
   return <span style={{ fontSize: 12, fontWeight: 700, padding: '4px 11px', borderRadius: radius.full, color: tone.fg, background: tone.bg, whiteSpace: 'nowrap' }}>{children}</span>
@@ -140,33 +152,45 @@ function OfferCard({
   delivery,
   money,
   choosing,
+  declining,
   disabled,
   onChoose,
+  onDecline,
 }: {
   offer: PrescriptionOffer
   delivery: boolean
   money: (value: number) => string
   choosing: boolean
+  declining: boolean
   disabled: boolean
   onChoose: () => void
+  onDecline: () => void
 }) {
   const { isMobile } = useResponsive()
+  const [confirmDecline, setConfirmDecline] = useState(false)
   const items = offer.quotedItems ?? []
   const total = (offer.quotedAmount ?? 0) + (delivery ? offer.deliveryFee ?? 0 : 0)
+  const address = offer.addressLine ?? offer.address
   return (
     <div style={{ border: `1px solid ${C.border}`, borderRadius: radius.md, padding: isMobile ? 14 : 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: C.text }}>{offer.provider}</div>
           <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>
-            {offer.distanceKm.toFixed(1)} km away{offer.rating ? ` · ★ ${offer.rating.toFixed(1)}` : ''}{offer.address ? ` · ${offer.address}` : ''}
+            {offer.distanceKm.toFixed(1)} km away{offer.rating ? ` · ★ ${offer.rating.toFixed(1)}` : ''}
           </div>
+          {address && <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>{address}</div>}
+          {offer.mapUrl && (
+            <a href={offer.mapUrl} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-block', marginTop: 6, fontSize: 13, fontWeight: 700, color: CYAN_DEEP, textDecoration: 'none' }}>View on map</a>
+          )}
         </div>
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: C.text }}>{money(total)}</div>
           {delivery && <div style={{ fontSize: 11, color: C.textSub }}>incl. {money(offer.deliveryFee ?? 0)} delivery</div>}
         </div>
       </div>
+      {!delivery && offer.directions && <HowToGetThere text={offer.directions} />}
+      {delivery && <div style={{ fontSize: 12, color: C.textSub }}>Delivery: you pay the invoice after it has been delivered, with your PIN.</div>}
       {items.length > 0 && (
         <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.55 }}>
           {items.map((item, index) => (
@@ -183,6 +207,24 @@ function OfferCard({
       <GGButton variant="primary" size="md" fullWidth loading={choosing} disabled={disabled} onClick={onChoose}>
         Choose {offer.provider} · {money(total)}
       </GGButton>
+      {confirmDecline ? (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, color: C.text }}>Decline this price?</span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <GGButton variant="secondary" size="sm" disabled={declining} onClick={() => setConfirmDecline(false)}>Keep</GGButton>
+            <GGButton variant="danger" size="sm" loading={declining} disabled={disabled} onClick={onDecline}>Decline</GGButton>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => setConfirmDecline(true)}
+          style={{ alignSelf: 'center', background: 'none', border: 'none', padding: '4px 8px', fontSize: 13, fontWeight: 600, color: C.textSub, cursor: disabled ? 'default' : 'pointer', fontFamily: font.family }}
+        >
+          Decline this price
+        </button>
+      )}
     </div>
   )
 }
@@ -198,6 +240,8 @@ export function PrescriptionDetailScreen() {
   const declineQuote = useDeclinePrescriptionQuoteMutation()
   const selectOffer = useSelectPrescriptionOfferMutation()
   const [choosingOfferId, setChoosingOfferId] = useState<string | null>(null)
+  const declineOffer = useDeclinePrescriptionOfferMutation()
+  const [decliningOfferId, setDecliningOfferId] = useState<string | null>(null)
   const request = (data as PrescriptionRequest[]).find(item => item.id === id)
 
   const [showDecline, setShowDecline] = useState(false)
@@ -231,6 +275,7 @@ export function PrescriptionDetailScreen() {
   const money = (value: number) => formatAmount(value, currency)
   const stage = prescriptionStage(request)
   const choosingPharmacy = isChoosingPharmacy(request)
+  const delivery = request.fulfillmentMode === 'delivery'
   const offers = request.offers?.filter(offer => offer.status === 'quoted') ?? []
   const status = stage === 'closed'
     ? { ...STATUS.closed, label: request.status === 'rejected' ? 'Declined' : request.status === 'expired' ? 'No pharmacies' : 'Cancelled' }
@@ -238,8 +283,9 @@ export function PrescriptionDetailScreen() {
       ? { ...STATUS.reviewQuote, label: 'Choose a pharmacy' }
       : choosingPharmacy
         ? { ...STATUS.awaitQuote, label: 'Waiting for prices' }
-        : STATUS[stage]
-  const delivery = request.fulfillmentMode === 'delivery'
+        : stage === 'approvePayment' && !delivery
+          ? { ...STATUS.approvePayment, label: 'Pay at pharmacy' }
+          : STATUS[stage]
   const pharmacy = request.provider ?? 'The pharmacy'
   const radiusKm = request.searchRadiusKm ?? 2
   const stillWaiting = request.pharmaciesPending ?? 0
@@ -280,6 +326,18 @@ export function PrescriptionDetailScreen() {
       setActionError(error instanceof Error ? error.message : 'Unable to choose this pharmacy.')
     } finally {
       setChoosingOfferId(null)
+    }
+  }
+
+  const handleDeclineOffer = async (offerId: string) => {
+    setActionError(null)
+    setDecliningOfferId(offerId)
+    try {
+      await declineOffer.mutateAsync({ id: request.id, offerId })
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Unable to decline this price.')
+    } finally {
+      setDecliningOfferId(null)
     }
   }
 
@@ -338,7 +396,7 @@ export function PrescriptionDetailScreen() {
     case 'choose:reviewQuote':
       next = {
         title: `${offers.length} ${offers.length === 1 ? 'pharmacy has' : 'pharmacies have'} sent a price`,
-        body: `Compare them below and choose one. The pharmacy you choose sends an invoice for you to approve. Nothing is charged until then.${stillWaiting > 0 ? ` ${stillWaiting} more may still reply.` : ''}`,
+        body: `Compare them below and choose one. ${delivery ? 'Choosing one tells them to prepare it. You pay the invoice once it has been delivered.' : 'Choosing one tells them to prepare it. You go to collect and pay there; the invoice is sent when you arrive.'} Nothing is charged until you approve it with your PIN.${stillWaiting > 0 ? ` ${stillWaiting} more may still reply.` : ''}`,
         actions: cancelControls,
       }
       break
@@ -352,7 +410,7 @@ export function PrescriptionDetailScreen() {
     case 'reviewQuote':
       next = {
         title: `${pharmacy} sent a price`,
-        body: 'Check the items and total below. If you accept, the pharmacy sends an invoice for you to approve. Nothing is charged until then.',
+        body: `Check the items and total below. ${delivery ? 'Accepting tells them to prepare it. You pay the invoice once it has been delivered.' : 'Accepting tells them to prepare it. You go to collect and pay there; the invoice is sent when you arrive.'} Nothing is charged until you approve it with your PIN.`,
         actions: showDecline ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             <GGTextarea
@@ -378,21 +436,65 @@ export function PrescriptionDetailScreen() {
       }
       break
     case 'approvePayment':
-      next = {
-        title: 'Approve the invoice',
-        body: `${pharmacy} sent an invoice${total > 0 ? ` for ${money(total)}` : ''}. Approve it to pay with your GG'APP allocation.`,
-        actions: (
-          <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(route.patientInvoice(request.invoiceId!))}>
-            Review &amp; approve{total > 0 ? ` ${money(total)}` : ''}
-          </GGButton>
-        ),
-      }
+      next = delivery
+        ? {
+          title: 'Delivered. Pay the invoice',
+          body: `Approve invoice ${request.invoiceId} with your PIN to pay for your delivery.`,
+          actions: (
+            <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(route.patientInvoice(request.invoiceId!))}>
+              {total > 0 ? `Approve ${money(total)}` : 'Approve'}
+            </GGButton>
+          ),
+        }
+        : {
+          title: 'Pay at the counter',
+          body: `Pay invoice ${request.invoiceId}${total > 0 ? ` (${money(total)})` : ''} with your PIN.`,
+          actions: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {request.providerAddressLine && (
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.5 }}>{request.providerAddressLine}</div>
+              )}
+              <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+                {request.providerMapUrl && (
+                  <a href={request.providerMapUrl} target="_blank" rel="noopener noreferrer" style={mapButtonStyle}>
+                    View on map
+                  </a>
+                )}
+                <GGButton variant="primary" size="md" fullWidth={isMobile} onClick={() => navigate(route.patientInvoice(request.invoiceId!))}>
+                  Pay with PIN
+                </GGButton>
+              </div>
+              {request.providerDirections && <HowToGetThere text={request.providerDirections} />}
+            </div>
+          ),
+        }
       break
     case 'awaitQuote':
       next = { title: `Waiting for ${pharmacy}`, body: 'They are checking stock and will send you a price. We’ll notify you when it arrives.' }
       break
     case 'awaitInvoice':
-      next = { title: 'Quote accepted', body: `${pharmacy} is preparing your invoice. You’ll approve payment from it.` }
+      next = delivery
+        ? {
+          title: 'Being prepared',
+          body: `It will be delivered to ${request.deliveryAddress ?? 'your address'}. You'll be asked to pay the invoice once it has been delivered.`,
+        }
+        : {
+          title: `Being prepared at ${pharmacy}`,
+          body: "Go to the pharmacy when you're ready. The invoice is sent when you arrive, and you pay it there with your PIN.",
+          actions: (request.providerMapUrl || request.providerDirections || request.providerAddressLine) ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {request.providerAddressLine && (
+                <div style={{ fontSize: 14, fontWeight: 700, color: C.text, lineHeight: 1.5 }}>{request.providerAddressLine}</div>
+              )}
+              {request.providerMapUrl && (
+                <a href={request.providerMapUrl} target="_blank" rel="noopener noreferrer" style={{ ...mapButtonStyle, alignSelf: 'flex-start' }}>
+                  View on map
+                </a>
+              )}
+              {request.providerDirections && <HowToGetThere text={request.providerDirections} />}
+            </div>
+          ) : undefined,
+        }
       break
     case 'preparing':
       next = { title: 'Being prepared', body: `${pharmacy} is getting your order ready. We’ll tell you when it’s ready for ${delivery ? 'delivery' : 'pickup'}.` }
@@ -404,9 +506,21 @@ export function PrescriptionDetailScreen() {
           ? `${pharmacy} will deliver to ${request.deliveryAddress ?? 'your address'}.`
           : 'Bring your ID when you collect it.',
         actions: request.providerId != null && !delivery ? (
-          <GGButton variant="secondary" size="md" fullWidth={isMobile} onClick={() => navigate(route.providerProfile(request.providerId!))}>
-            Hours &amp; directions
-          </GGButton>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 10 }}>
+            {request.providerMapUrl && (
+              <a
+                href={request.providerMapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 40, padding: '0 16px', borderRadius: radius.sm, background: CYAN_DEEP, color: '#fff', fontSize: 14, fontWeight: 700, textDecoration: 'none', fontFamily: font.family, boxSizing: 'border-box' }}
+              >
+                View on map
+              </a>
+            )}
+            <GGButton variant="secondary" size="md" fullWidth={isMobile} onClick={() => navigate(route.providerProfile(request.providerId!))}>
+              Hours &amp; directions
+            </GGButton>
+          </div>
         ) : undefined,
       }
       break
@@ -471,7 +585,9 @@ export function PrescriptionDetailScreen() {
               money={money}
               choosing={choosingOfferId === offer.id}
               disabled={selectOffer.isPending}
+              declining={decliningOfferId === offer.id}
               onChoose={() => void handleChooseOffer(offer.id)}
+              onDecline={() => void handleDeclineOffer(offer.id)}
             />
           ))}
       </div>
@@ -507,6 +623,7 @@ export function PrescriptionDetailScreen() {
         <span>Total</span>
         <span>{money(total)}</span>
       </div>
+      {delivery && <div style={{ fontSize: 12, color: C.textSub, marginTop: 6 }}>Delivery: you pay the invoice after it has been delivered, with your PIN.</div>}
       {request.invoiceId && (
         <button
           type="button"
@@ -530,7 +647,14 @@ export function PrescriptionDetailScreen() {
       <div style={{ ...cardTitle, marginBottom: 2 }}>Order details</div>
       <DetailRow label="Sent">{formatDate(request.submittedAt, { month: 'short', day: 'numeric', year: 'numeric' })}</DetailRow>
       <DetailRow label="For">{request.forSelf ? 'You' : request.for}</DetailRow>
-      <DetailRow label={delivery ? 'Delivery to' : 'Pick up at'}>{delivery ? request.deliveryAddress ?? '—' : choosingPharmacy ? 'The pharmacy you choose' : pharmacy}</DetailRow>
+      <DetailRow label={delivery ? 'Delivery to' : 'Pick up at'}>
+        {delivery ? request.deliveryAddress ?? '—' : choosingPharmacy ? 'The pharmacy you choose' : (
+          <>
+            {request.providerMapUrl ? <a href={request.providerMapUrl} target="_blank" rel="noopener noreferrer" style={{ color: CYAN_DEEP, fontWeight: 700, textDecoration: 'none' }}>{pharmacy} · View on map</a> : pharmacy}
+            {request.providerAddressLine && <div style={{ fontSize: 13, color: C.textSub, marginTop: 2 }}>{request.providerAddressLine}</div>}
+          </>
+        )}
+      </DetailRow>
       {choosingPharmacy && <DetailRow label="Sent to">{prescriptionPharmacyLabel({ ...request, offers: [] })} within {radiusKm} km</DetailRow>}
       {request.patientNotes && <DetailRow label="Your note">{request.patientNotes}</DetailRow>}
       {request.pharmacyNotes && <DetailRow label={`Note from ${pharmacy}`}>{request.pharmacyNotes}</DetailRow>}

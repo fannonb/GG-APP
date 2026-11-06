@@ -285,6 +285,21 @@ export function useMarkPrescriptionReadyMutation() {
   })
 }
 
+export function useSendPrescriptionInvoiceMutation() {
+  const { queryClient, spMode, invalidateCore } = useSPInvalidate()
+  const patientMode = useAuthStore(s => s.userMode)
+
+  return useMutation({
+    mutationFn: (id: string) => spService.sendPrescriptionInvoice(id, spMode),
+    onSuccess: request => {
+      invalidateCore()
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sp.prescriptionRequest(request.id) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.patient.notifications(patientMode) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.patient.invoices(patientMode) })
+    },
+  })
+}
+
 export function useFulfillPrescriptionRequestMutation() {
   const { queryClient, spMode, invalidateCore } = useSPInvalidate()
   const patientMode = useAuthStore(s => s.userMode)

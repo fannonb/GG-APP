@@ -285,4 +285,12 @@ export class SpController {
   ) {
     return this.spService.fulfillPrescriptionRequest(user.sub, requestReference)
   }
+
+  @Post('prescription-requests/:id/invoice')
+  sendPrescriptionInvoice(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') requestReference: string,
+  ) {
+    return this.spService.sendPrescriptionInvoice(user.sub, requestReference)
+  }
 }
