@@ -3155,7 +3155,8 @@ export class PatientService {
       providerId: request.provider?.id,
       provider: request.provider?.name,
       providerMapUrl: request.provider ? placeMapsUrl(request.provider) ?? undefined : undefined,
-      providerAddressLine: joinAddressLine(request.provider?.building, request.provider?.road),
+      providerAddressLine:
+        joinAddressLine(request.provider?.building, request.provider?.road) || request.provider?.address?.trim() || undefined,
       providerDirections: request.provider?.directions ?? undefined,
       category: 'pharmacy' as const,
       status: request.status.toLowerCase(),
@@ -3175,7 +3176,7 @@ export class PatientService {
         provider: offer.provider.name,
         address: offer.provider.address,
         mapUrl: placeMapsUrl(offer.provider) ?? undefined,
-        addressLine: joinAddressLine(offer.provider.building, offer.provider.road),
+        addressLine: joinAddressLine(offer.provider.building, offer.provider.road) || offer.provider.address?.trim() || undefined,
         directions: offer.provider.directions ?? undefined,
         rating: Number(offer.provider.rating),
         logoUrl: offer.provider.logoUrl ?? undefined,
