@@ -7,6 +7,14 @@ RUN npm ci
 
 COPY . .
 
+# Bundle the verified Android release even when building from a clean checkout.
+# Mobile source: 12b150045fa7cffe1cad2f3affb887eb4e6562ea.
+ARG ANDROID_APK_URL=https://expo.dev/artifacts/eas/cFwQCZu8TpOu0cSTFKlnRGTN3E_pbKJAfaBEhh7-2-k.apk
+ARG ANDROID_APK_SHA256=a1824a1fdcee552f542c17401869bdb64103675e0dfefca0beab74a68b66750e
+RUN mkdir -p public/downloads \
+  && wget -q -O public/downloads/ggapp.apk "$ANDROID_APK_URL" \
+  && echo "$ANDROID_APK_SHA256  public/downloads/ggapp.apk" | sha256sum -c -
+
 # Production defaults; override with Railway build args when needed.
 # Vite inlines VITE_* vars at build time, so they must exist here.
 ARG VITE_API_BASE_URL=https://api.gatewayglobal.africa/api/v1

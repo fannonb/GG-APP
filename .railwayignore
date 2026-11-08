@@ -1,0 +1,2 @@
+# The Docker build fetches and verifies the pinned Android release.
+public/downloads/*.apk

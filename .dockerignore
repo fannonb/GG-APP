@@ -10,3 +10,4 @@ backend
 security-audit-*.json
 npm-debug.log*
 *.log
+public/downloads/*.apk
