@@ -61,6 +61,14 @@ export function ProviderIdentityStrip({
             <div style={{ fontSize: 13, color: C.textSub, fontFamily: font.family }}>
               {[categories || 'No category set', profileForm.country].filter(Boolean).join(' · ')}
             </div>
+            <div style={{ fontSize: 13, color: C.text, fontFamily: font.family, marginTop: 6 }}>
+              Invoice code: <strong>{settings.profile.invoiceCode || 'Not set'}</strong>
+              <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>
+                {settings.profile.invoiceCode
+                  ? `Your invoice numbers: INV-${settings.profile.invoiceCode}-${new Date().getFullYear()}-0001. Contact GG'APP to change it.`
+                  : `Contact GG'APP to set it.`}
+              </div>
+            </div>
           </div>
 
           <GGButton variant="secondary" size="sm" onClick={onPreview}>

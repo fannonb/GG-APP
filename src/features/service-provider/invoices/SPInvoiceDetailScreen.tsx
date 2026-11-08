@@ -236,7 +236,7 @@ export function SPInvoiceDetailScreen() {
       <GGCard padding={isMobile ? '18px' : '22px'}>
         <SectionLabel>Patient</SectionLabel>
         <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start' }}>
-          <GGAvatar name={inv.patient.replace(/\s*\(.*\)/, '')} size={48} />
+          <GGAvatar name={inv.patient.replace(/\s*\(.*\)/, '')} src={inv.patientAvatarUrl} size={48} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <div style={{ fontSize: '17px', fontWeight: 800, color: C.text, letterSpacing: '-0.01em', fontFamily: font.family }}>{inv.patient}</div>

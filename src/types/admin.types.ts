@@ -159,6 +159,8 @@ export interface AdminProvider {
   payoutAccount?: { method: 'MPESA' | 'BANK' | 'MOBILE_MONEY'; accountName: string; accountNumber: string } | null
   suspendedReason?: string | null
   hasLogin?: boolean
+  /** Two to six letters or digits. Used in invoice numbers: INV-<CODE>-YYYY-NNNN. */
+  invoiceCode?: string | null
 }
 
 export interface AccountHistoryEntry {
@@ -290,8 +292,8 @@ export interface AdBanner {
   id: string
   advertiserName: string    // internal label only — not shown to patients
   ctaUrl: string            // where clicking the banner navigates
-  desktopImageUrl: string   // 1200 × 90 px image (PNG / JPG / WebP)
-  mobileImageUrl: string    // 750 × 150 px image  (PNG / JPG / WebP)
+  desktopImageUrl: string   // 800 × 600 px (4:3) image (PNG / JPG / WebP)
+  mobileImageUrl: string    // 800 × 600 px (4:3) image (PNG / JPG / WebP); optional, falls back to desktop
   status: AdBannerStatus
   frequency: AdFrequency
   startDate: string         // YYYY-MM-DD

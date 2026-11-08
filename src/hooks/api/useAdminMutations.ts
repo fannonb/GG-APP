@@ -71,6 +71,18 @@ export function useDeleteAdminProviderMutation() {
   })
 }
 
+export function useSetAdminProviderInvoiceCodeMutation() {
+  const { queryClient, invalidate } = useAdminInvalidate()
+  return useMutation({
+    mutationFn: ({ id, invoiceCode }: { id: string; invoiceCode: string }) =>
+      adminService.setProviderInvoiceCode(id, invoiceCode),
+    onSuccess: (_data, { id }) => {
+      invalidate()
+      void queryClient.invalidateQueries({ queryKey: queryKeys.admin.provider(id) })
+    },
+  })
+}
+
 export function useSuspendAdminUserMutation() {
   const { invalidate } = useAdminInvalidate()
   return useMutation({

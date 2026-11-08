@@ -5,6 +5,7 @@ import {
   ConflictException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common'
 import {
@@ -30,6 +31,8 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { FieldEncryptionService } from '../../common/services/field-encryption.service'
 import { MailService } from '../../common/services/mail.service'
 import { ProviderCredentialsService } from '../../common/services/provider-credentials.service'
+import { StorageService } from '../../common/services/storage.service'
+import { InvoiceCodeService } from '../../common/services/invoice-code.service'
 import { LedgerService } from '../ledger/ledger.service'
 import { getInvoiceAttachmentDataUrl } from '../../common/utils/invoice-attachment.util'
 import type { CreateNewsArticleDto, UpdateNewsArticleDto } from './dto/news-article.dto'
@@ -110,11 +113,14 @@ const NEWS_STATUS_RANK: Record<NewsStatus, number> = {
 
 @Injectable()
 export class AdminService {
+  private readonly logger = new Logger(AdminService.name)
   private readonly prisma: PrismaService
   private readonly fieldEncryption: FieldEncryptionService
   private readonly ledgerService: LedgerService
   private readonly mailService: MailService
   private readonly providerCredentials: ProviderCredentialsService
+  private readonly storage: StorageService
+  private readonly invoiceCodes: InvoiceCodeService
 
   constructor(
     @Inject(PrismaService) prisma: PrismaService,
@@ -122,12 +128,16 @@ export class AdminService {
     @Inject(LedgerService) ledgerService: LedgerService,
     @Inject(MailService) mailService: MailService,
     @Inject(ProviderCredentialsService) providerCredentials: ProviderCredentialsService,
+    @Inject(StorageService) storage: StorageService,
+    @Inject(InvoiceCodeService) invoiceCodes: InvoiceCodeService,
   ) {
     this.prisma = prisma
     this.fieldEncryption = fieldEncryption
     this.ledgerService = ledgerService
     this.mailService = mailService
     this.providerCredentials = providerCredentials
+    this.storage = storage
+    this.invoiceCodes = invoiceCodes
   }
 
   async getDashboard() {
@@ -496,6 +506,8 @@ export class AdminService {
           categories: providerCategories,
           phone: application.phone,
           address: application.address,
+          // Imported street; null keeps any road the provider already set.
+          road: application.road ?? undefined,
           license: application.licenseNumber,
           country: application.country,
           region: normalizeRegion(normalizeCountry(application.country), application.region),
@@ -522,6 +534,7 @@ export class AdminService {
           description: this.buildProviderDescription(application.serviceTypes),
           phone: application.phone,
           address: application.address,
+          road: application.road,
           license: application.licenseNumber,
           country: application.country,
           region: normalizeRegion(normalizeCountry(application.country), application.region),
@@ -537,6 +550,9 @@ export class AdminService {
           },
         },
       })
+
+      // The provider's invoice code is assigned in the same transaction as the approval.
+      await this.invoiceCodes.ensureForProvider(createdProvider.id, tx)
 
       await tx.providerApplicationMessage.create({
         data: { applicationId: application.id, author: 'ADMIN', kind: 'approved', body: note?.trim() || 'Application approved.' },
@@ -869,17 +885,34 @@ export class AdminService {
       )
     }
 
+    const storageKeys: string[] = []
     await this.prisma.$transaction(async tx => {
-      if (provider.authUserId) {
-        await tx.user.update({
-          where: { id: provider.authUserId },
-          data: { status: UserStatus.SUSPENDED },
-        })
+      const login = provider.authUserId
+        ? await tx.user.findUnique({
+            where: { id: provider.authUserId },
+            select: { id: true, email: true, role: true, providerRecord: { select: { id: true } } },
+          })
+        : null
+      // Only an SP login that has no other provider record is removed with the provider. Any other linked user is
+      // kept; deleting the provider row detaches it.
+      const removeLogin = login?.role === UserRole.SP && (!login.providerRecord || login.providerRecord.id === provider.id)
+      if (login && !removeLogin) {
+        this.logger.warn(`Provider ${provider.id} was linked to user ${login.id} (role ${login.role}); that user was kept.`)
       }
 
       await tx.provider.delete({
         where: { id: provider.id },
       })
+
+      if (login && removeLogin) {
+        const applicationIds = (await tx.providerApplication.findMany({ where: { userId: login.id }, select: { id: true } })).map(app => app.id)
+        const documents = await tx.providerApplicationDocument.findMany({ where: { applicationId: { in: applicationIds } }, select: { storageKey: true } })
+        storageKeys.push(...documents.flatMap(doc => (doc.storageKey ? [doc.storageKey] : [])))
+        // Import leads point at these applications. Removing them lets the same Google place be imported again.
+        await tx.providerImportLead.deleteMany({ where: { applicationId: { in: applicationIds } } })
+        // Cascades to the applications, their documents and credentials, notifications, push devices and the rest.
+        await tx.user.delete({ where: { id: login.id } })
+      }
 
       await tx.auditLog.create({
         data: {
@@ -887,9 +920,13 @@ export class AdminService {
           action: 'admin.provider.deleted',
           entityType: 'Provider',
           entityId: String(provider.id),
+          metadata: { email: login?.email ?? null, accountDeleted: removeLogin },
         },
       })
     })
+
+    // The rows are gone, so their files can go. StorageService logs and ignores its own failures.
+    await Promise.all(storageKeys.map(key => this.storage.deleteObject(key)))
 
     return {
       message: 'Provider deleted successfully.',
@@ -1371,6 +1408,7 @@ export class AdminService {
     return {
       id: String(provider.id),
       name: provider.name,
+      invoiceCode: provider.invoiceCode ?? null,
       type: this.formatProviderCategories(provider.categories, provider.category),
       serviceTypes,
       // Stored as a code or a name; the admin screens always get the name.

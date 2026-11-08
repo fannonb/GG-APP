@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PatientUserProfile } from '@/api/types'
 import { useNavigate } from 'react-router-dom'
 import { C, font } from '@/design-system/tokens'
 import { useNotificationsStore } from '@/store/notifications.store'
@@ -44,9 +45,12 @@ export function AppTopBar({ title, eyebrow, titleIcon, status, back = false, bac
   const storedUser = useUserStore(s => s.user)
   const { data: profile } = usePatientProfile()
   const { data: providers = [] } = useProviders()
-  const user = profile?.user ?? storedUser ?? EMPTY_PATIENT
+  const user: PatientUserProfile = profile?.user ?? storedUser ?? EMPTY_PATIENT
   const displayName = getPatientDisplayName(user)
   const initials = getPatientInitials(user)
+  // Falls back to initials when the (short-lived) photo link fails to load.
+  const [brokenAvatarUrl, setBrokenAvatarUrl] = useState<string | null>(null)
+  const showAvatarPhoto = !!user.avatarUrl && user.avatarUrl !== brokenAvatarUrl
 
   const [searchQuery, setSearchQuery] = useState('')
   const [searchOpen, setSearchOpen] = useState(false)
@@ -623,12 +627,22 @@ export function AppTopBar({ title, eyebrow, titleIcon, status, back = false, bac
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                overflow: 'hidden',
                 boxShadow: '0 2px 6px rgba(9, 28, 68, 0.2)',
               }}
             >
-              <span style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', fontFamily: font.family }}>
-                {initials}
-              </span>
+              {showAvatarPhoto ? (
+                <img
+                  src={user.avatarUrl}
+                  alt=""
+                  onError={() => setBrokenAvatarUrl(user.avatarUrl ?? null)}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                />
+              ) : (
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#FFFFFF', fontFamily: font.family }}>
+                  {initials}
+                </span>
+              )}
             </div>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="m6 9 6 6 6-6" />

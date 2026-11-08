@@ -639,7 +639,7 @@ export function SPAppointmentDetailScreen() {
 
         <GGCard padding={isMobile ? '18px' : '20px 24px'}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
-            <GGAvatar name={!apt.forSelf && apt.beneficiary ? apt.beneficiary.name : apt.patient} size={48} />
+            <GGAvatar name={!apt.forSelf && apt.beneficiary ? apt.beneficiary.name : apt.patient} src={!apt.forSelf && apt.beneficiary ? undefined : apt.patientAvatarUrl} size={48} />
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 19, fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>
                 {!apt.forSelf && apt.beneficiary ? apt.beneficiary.name : apt.patient}

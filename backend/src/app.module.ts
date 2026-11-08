@@ -17,6 +17,7 @@ import { SpModule } from './modules/sp/sp.module'
 import { LedgerModule } from './modules/ledger/ledger.module'
 import { NotificationsModule } from './modules/notifications/notifications.module'
 import { FeedbackModule } from './modules/feedback/feedback.module'
+import { AdsModule } from './modules/ads/ads.module'
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { FeedbackModule } from './modules/feedback/feedback.module'
     LedgerModule,
     NotificationsModule,
     FeedbackModule,
+    AdsModule,
   ],
   providers: [
     {

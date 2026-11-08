@@ -286,11 +286,12 @@ export function useMarkPrescriptionReadyMutation() {
 }
 
 export function useSendPrescriptionInvoiceMutation() {
-  const { queryClient, spMode, invalidateCore } = useSPInvalidate()
+  const { queryClient, invalidateCore } = useSPInvalidate()
   const patientMode = useAuthStore(s => s.userMode)
 
   return useMutation({
-    mutationFn: (id: string) => spService.sendPrescriptionInvoice(id, spMode),
+    mutationFn: ({ id, invoiceNumber }: { id: string; invoiceNumber?: string }) =>
+      spService.sendPrescriptionInvoice(id, invoiceNumber),
     onSuccess: request => {
       invalidateCore()
       void queryClient.invalidateQueries({ queryKey: queryKeys.sp.prescriptionRequest(request.id) })

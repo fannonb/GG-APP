@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer'
+import { Transform, Type } from 'class-transformer'
 import {
   IsArray,
   IsDateString,
@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   MinLength,
@@ -45,6 +46,13 @@ export class UpdateAdminProviderDto {
   @IsOptional() @IsIn(['open', 'closed']) openStatus?: 'open' | 'closed'
   @IsOptional() @ValidateNested() @Type(() => AdminPayoutDto) payout?: AdminPayoutDto
   @IsOptional() @IsString() @MaxLength(300) reason?: string
+}
+
+export class UpdateProviderInvoiceCodeDto {
+  @IsString()
+  @Transform(({ value }) => (typeof value === 'string' ? value.trim().toUpperCase() : value))
+  @Matches(/^[A-Z0-9]{2,6}$/, { message: 'Use 2 to 6 letters or digits' })
+  invoiceCode!: string
 }
 
 export class AdminReasonDto {

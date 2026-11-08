@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Inject, Param, Patch, Post, Put, Query, UseGuards } from '@nestjs/common'
 import { UserRole } from '@prisma/client'
 import { CurrentUser } from '../../common/decorators/current-user.decorator'
 import { Roles } from '../../common/decorators/roles.decorator'
@@ -11,6 +11,7 @@ import { CreateAppointmentDto } from './dto/create-appointment.dto'
 import { SetupPaymentPinDto } from './dto/setup-payment-pin.dto'
 import { ChangePatientPasswordDto } from './dto/change-patient-password.dto'
 import { UpdatePatientProfileDto } from './dto/update-patient-profile.dto'
+import { ProfilePhotoDto } from './dto/profile-photo.dto'
 import { UpsertBeneficiaryDto } from './dto/upsert-beneficiary.dto'
 import { SetBeneficiariesEnabledDto } from './dto/set-beneficiaries-enabled.dto'
 import { RejectInvoiceDto } from './dto/reject-invoice.dto'
@@ -45,6 +46,19 @@ export class PatientController {
     @Body() dto: UpdatePatientProfileDto,
   ) {
     return this.patientService.updateProfile(user.sub, dto)
+  }
+
+  @Put('profile/photo')
+  uploadProfilePhoto(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: ProfilePhotoDto,
+  ) {
+    return this.patientService.uploadProfilePhoto(user.sub, dto)
+  }
+
+  @Delete('profile/photo')
+  removeProfilePhoto(@CurrentUser() user: AuthenticatedUser) {
+    return this.patientService.removeProfilePhoto(user.sub)
   }
 
   @Post('security/payment-pin')

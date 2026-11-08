@@ -9,6 +9,7 @@ import type {
   CreateAppointmentPayload,
   CreateAppointmentResult,
   PatientProfileResponse,
+  PatientUserProfile,
   UpdatePatientProfilePayload,
   SetupPaymentPinPayload,
   SetupPaymentPinResult,
@@ -39,7 +40,7 @@ import {
 const mockReadNotificationIds = new Set<string>()
 
 export interface PatientProfile {
-  user: Patient
+  user: PatientUserProfile
   beneficiaries: Beneficiary[]
 }
 
@@ -103,7 +104,8 @@ function buildAppointments(mode: UserMode): PatientAppointments {
   }
 }
 
-function normalizePatient(user: Patient): Patient {
+// Generic so extra fields such as avatarUrl keep their type (the spread already keeps them at runtime).
+function normalizePatient<T extends Patient>(user: T): T {
   const country = getCountryByCode(user.countryCode)
   const name = user.name
     .trim()
@@ -198,6 +200,57 @@ export const patientService = {
     }
 
     const { data } = await apiClient.patch<PatientProfileResponse>('/patient/profile', payload)
+    return {
+      ...data,
+      user: normalizePatient(data.user),
+    }
+  },
+
+  async uploadProfilePhoto(
+    payload: { dataUrl: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp' },
+    mode: UserMode = 'existing',
+  ): Promise<PatientProfileResponse> {
+    if (isMockApi) {
+      await mockDelay(250)
+      const profile = resolveMockProfile(mode)
+      const nextUser = normalizePatient({ ...profile.user, avatarUrl: payload.dataUrl })
+
+      useUserStore.setState({
+        user: nextUser,
+        beneficiaries: profile.beneficiaries,
+      })
+
+      return {
+        user: nextUser,
+        beneficiaries: profile.beneficiaries,
+      }
+    }
+
+    const { data } = await apiClient.put<PatientProfileResponse>('/patient/profile/photo', payload)
+    return {
+      ...data,
+      user: normalizePatient(data.user),
+    }
+  },
+
+  async removeProfilePhoto(mode: UserMode = 'existing'): Promise<PatientProfileResponse> {
+    if (isMockApi) {
+      await mockDelay(250)
+      const profile = resolveMockProfile(mode)
+      const nextUser = normalizePatient({ ...profile.user, avatarUrl: undefined })
+
+      useUserStore.setState({
+        user: nextUser,
+        beneficiaries: profile.beneficiaries,
+      })
+
+      return {
+        user: nextUser,
+        beneficiaries: profile.beneficiaries,
+      }
+    }
+
+    const { data } = await apiClient.delete<PatientProfileResponse>('/patient/profile/photo')
     return {
       ...data,
       user: normalizePatient(data.user),

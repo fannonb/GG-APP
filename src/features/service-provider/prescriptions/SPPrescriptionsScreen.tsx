@@ -2,7 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
-import { useFulfillPrescriptionRequestMutation, useMarkPrescriptionReadyMutation, useSendPrescriptionInvoiceMutation, useSPPrescriptionRequests } from '@/hooks/api'
+import { useFulfillPrescriptionRequestMutation, useMarkPrescriptionReadyMutation, useSPPrescriptionRequests } from '@/hooks/api'
 import { useResponsive } from '@/hooks/useResponsive'
 import { SPLayout } from '@/layouts/sp/SPLayout'
 import { route } from '@/router/routes'
@@ -113,13 +113,12 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
   const { isMobile } = useResponsive()
   const markReady = useMarkPrescriptionReadyMutation()
   const fulfill = useFulfillPrescriptionRequestMutation()
-  const sendInvoice = useSendPrescriptionInvoiceMutation()
   const [error, setError] = useState<string | null>(null)
   const currency = getCountryByCode(request.countryCode ?? '')?.currencySymbol ?? ''
   const total = (request.quotedAmount ?? 0) + (request.deliveryFee ?? 0)
   const delivery = request.fulfillmentMode === 'delivery'
   const open = () => navigate(route.spPrescription(request.id))
-  const busy = markReady.isPending || fulfill.isPending || sendInvoice.isPending
+  const busy = markReady.isPending || fulfill.isPending
 
   const run = async (fn: () => Promise<unknown>, failMsg: string) => {
     setError(null)
@@ -171,16 +170,7 @@ function PrescriptionRow({ request, stage }: { request: PrescriptionRequest; sta
       } else {
         status = <Pill tone={AMBER}>Ready · waiting for patient</Pill>
         if (!request.invoiceId) {
-          action = (
-            <button
-              type="button"
-              style={{ ...actionBtn, opacity: busy ? 0.6 : 1 }}
-              disabled={busy}
-              onClick={() => void run(() => sendInvoice.mutateAsync(request.id), 'Could not send the invoice.')}
-            >
-              {sendInvoice.isPending ? 'Saving…' : 'Send invoice'}
-            </button>
-          )
+          action = <button type="button" style={actionBtn} onClick={open}>Send invoice</button>
         }
       }
       break

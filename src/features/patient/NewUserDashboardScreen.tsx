@@ -5,7 +5,7 @@ import { AppLayout } from '@/layouts/patient/AppLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { formatAmount } from '@/utils/format'
 import { getCountryByCode } from '@/config/countries'
-import { AdBannerStrip } from '@/components/AdBanner'
+import { DashboardAdCarousel } from '@/features/patient/components/DashboardAdCarousel'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
 import { CountryFlag } from '@/features/admin/AdminShared'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
@@ -16,10 +16,10 @@ import { DashboardFindCareCard } from '@/features/patient/components/DashboardFi
 import { DashboardRecentActivity } from '@/features/patient/components/DashboardRecentActivity'
 import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from '@/features/patient/credit/credit.constants'
 import { ROUTES, route } from '@/router/routes'
-import { useAdsStore } from '@/store/ads.store'
 import { EMPTY_PATIENT, derivePatientOnboardingCompletedSteps, getPatientFirstName } from '@/features/patient/patientAccount'
 import { useMarkPatientNotificationReadMutation, usePatientInvoices, usePatientPrescriptionRequests } from '@/hooks/api'
 import { useNotificationsStore } from '@/store/notifications.store'
+import { useAdSessionStore } from '@/store/ad-session.store'
 import {
   buildPrescriptionQuoteBannerItems,
   isSyntheticPrescriptionBannerId,
@@ -74,8 +74,8 @@ export function NewUserDashboardScreen({
 }: NewUserDashboardScreenProps) {
   const navigate = useNavigate()
   const { isMobile, isDesktop } = useResponsive()
-  const adVersion = useAdsStore(s => s.version)
   const attention = useAttentionDismissals()
+  const adsClosed = useAdSessionStore(s => s.adsClosed)
   const u = user
   const country = getCountryByCode(u.countryCode)
   const currency = country?.currencySymbol ?? ''
@@ -307,7 +307,12 @@ export function NewUserDashboardScreen({
           <DashboardRecentActivity transactions={[]} currency={currency} />
         </div>
 
-        {attention.filterVisible(attentionItems).length === 0 && <AdBannerStrip key={adVersion} countryName={country?.name} />}
+        {/* Not rendered once the ads are closed, so the column gap does not leave an empty slot. */}
+        {!adsClosed && attention.filterVisible(attentionItems).length === 0 && (
+          <div style={{ maxWidth: 520, width: '100%', aspectRatio: isMobile ? undefined : '4 / 3' }}>
+            <DashboardAdCarousel />
+          </div>
+        )}
 
         <HealthNewsSection />
       </div>

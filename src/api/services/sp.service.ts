@@ -150,6 +150,7 @@ function buildMockProfile(mode: UserMode = 'existing'): ProviderProfileResponse 
         Sun: { open: false, from: '', to: '' },
       },
       license: sp.license,
+      invoiceCode: sp.invoiceCode,
     }
   }
 
@@ -181,6 +182,7 @@ function buildMockProfile(mode: UserMode = 'existing'): ProviderProfileResponse 
       Sun: { open: false, from: '', to: '' },
     },
     license: sp.license,
+    invoiceCode: sp.invoiceCode,
   }
 }
 
@@ -863,19 +865,23 @@ export const spService = {
   },
 
   /** Pickup: the patient has arrived at the counter, so the invoice goes out now. */
-  async sendPrescriptionInvoice(id: string, _mode: UserMode = 'existing'): Promise<PrescriptionRequest> {
+  async sendPrescriptionInvoice(id: string, invoiceNumber?: string): Promise<PrescriptionRequest> {
+    const typedNumber = invoiceNumber?.trim() || undefined
     if (isMockApi) {
       await mockDelay(350)
       const { updateMockPrescriptionRequest } = await import('@/mock/prescription.mock')
       const updated = updateMockPrescriptionRequest(id, {
-        invoiceId: `INV-${Date.now().toString().slice(-6)}`,
+        invoiceId: typedNumber ?? `INV-${Date.now().toString().slice(-6)}`,
         invoiceStatus: 'pending_auth',
       })
       if (!updated) throw new Error('Prescription request not found')
       return updated
     }
 
-    const { data } = await apiClient.post<PrescriptionRequest>(`/sp/prescription-requests/${id}/invoice`)
+    const { data } = await apiClient.post<PrescriptionRequest>(
+      `/sp/prescription-requests/${id}/invoice`,
+      typedNumber ? { invoiceNumber: typedNumber } : undefined,
+    )
     return data
   },
 }

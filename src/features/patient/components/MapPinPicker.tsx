@@ -23,6 +23,12 @@ interface MapPinPickerProps {
   hint?: string
 }
 
+/** Status under the map: red for failures, grey for a neutral note. */
+interface LocationNotice {
+  tone: 'error' | 'note'
+  text: string
+}
+
 const DEFAULT_CENTER = { lat: -17.8292, lng: 31.0522 } // Harare
 const PIN_ICON = L.divIcon({
   className: '',
@@ -50,6 +56,11 @@ export function MapPinPicker({ value, onChange, fallbackCenter, hint }: MapPinPi
   useEffect(() => {
     onChangeRef.current = onChange
   }, [onChange])
+  // Read at failure time, so a location that arrives while GPS is still trying is used.
+  const fallbackRef = useRef(fallbackCenter)
+  useEffect(() => {
+    fallbackRef.current = fallbackCenter
+  }, [fallbackCenter])
 
   const [query, setQuery] = useState('')
   const [resolved, setResolved] = useState<{ query: string; results: LocationSuggestion[] }>({ query: '', results: [] })
@@ -58,7 +69,7 @@ export function MapPinPicker({ value, onChange, fallbackCenter, hint }: MapPinPi
   const searching = canSearch && resolved.query !== trimmedQuery
   const results = canSearch && resolved.query === trimmedQuery ? resolved.results : []
   const [locating, setLocating] = useState(false)
-  const [message, setMessage] = useState<string | null>(null)
+  const [notice, setNotice] = useState<LocationNotice | null>(null)
 
   const placePin = async (lat: number, lng: number, label?: string) => {
     onChangeRef.current({ lat, lng, label: label ?? 'Pinned location' })
@@ -148,21 +159,54 @@ export function MapPinPicker({ value, onChange, fallbackCenter, hint }: MapPinPi
 
   const useMyLocation = () => {
     if (!navigator.geolocation) {
-      setMessage('Location is not available in this browser. Search for the address instead.')
+      setNotice({ tone: 'error', text: 'Location is not available in this browser. Search for the address instead.' })
       return
     }
     setLocating(true)
-    setMessage(null)
+    setNotice(null)
+
+    const onFound = (position: GeolocationPosition) => {
+      setLocating(false)
+      setNotice(null)
+      void placePin(position.coords.latitude, position.coords.longitude)
+    }
+
+    // Final failure, after any retry: use the last known location if there is one.
+    const onFailed = (error: GeolocationPositionError) => {
+      setLocating(false)
+      if (error.code === error.PERMISSION_DENIED) {
+        setNotice({
+          tone: 'error',
+          text: window.isSecureContext
+            ? 'Location is blocked for this site. Allow it in your browser settings, or search for the address.'
+            : 'Location needs a secure (https) connection. Search for the address or tap the map.',
+        })
+        return
+      }
+      const fallback = fallbackRef.current
+      if (fallback) {
+        setNotice({ tone: 'note', text: 'Using your approximate location. Drag the pin or tap the map to adjust.' })
+        void placePin(fallback.lat, fallback.lng)
+        return
+      }
+      setNotice({ tone: 'error', text: "Couldn't get your location. Search for the address or tap the map." })
+    }
+
+    // High accuracy first. On timeout or no GPS, retry once with a coarse position that may be cached.
     navigator.geolocation.getCurrentPosition(
-      position => {
-        setLocating(false)
-        void placePin(position.coords.latitude, position.coords.longitude)
+      onFound,
+      error => {
+        if (error.code !== error.TIMEOUT && error.code !== error.POSITION_UNAVAILABLE) {
+          onFailed(error)
+          return
+        }
+        navigator.geolocation.getCurrentPosition(onFound, onFailed, {
+          enableHighAccuracy: false,
+          timeout: 10000,
+          maximumAge: 60000,
+        })
       },
-      () => {
-        setLocating(false)
-        setMessage('Location access was denied. Search for the address or tap the map.')
-      },
-      { enableHighAccuracy: true, timeout: 10000 },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 },
     )
   }
 
@@ -227,7 +271,7 @@ export function MapPinPicker({ value, onChange, fallbackCenter, hint }: MapPinPi
           hint ?? 'Tap the map or search to drop a pin.'
         )}
       </div>
-      {message && <div style={{ fontSize: 12, color: C.error }}>{message}</div>}
+      {notice && <div style={{ fontSize: 12, color: notice.tone === 'error' ? C.error : C.textSub }}>{notice.text}</div>}
     </div>
   )
 }

@@ -251,7 +251,7 @@ export function SPPatientDetailScreen() {
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-            <GGAvatar name={p.name} size={isMobile ? 48 : 56} />
+            <GGAvatar name={p.name} src={p.avatarUrl} size={isMobile ? 48 : 56} />
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
                 <h1 style={{ fontSize: isMobile ? '18px' : '22px', fontWeight: 800, color: C.navy800, margin: 0, fontFamily: font.family, letterSpacing: '-0.01em' }}>

@@ -59,6 +59,8 @@ export interface PrescriptionRequest {
   /** Google Maps link to the pharmacy's exact pin (or its address). */
   providerMapUrl?: string
   patient?: string
+  /** Short-lived link to the patient's profile photo (own patients only). */
+  patientAvatarUrl?: string
   patientPhone?: string
   patientEmail?: string
   countryCode?: string

@@ -160,13 +160,19 @@ self.addEventListener('message', event => {
 })
 
 self.addEventListener('push', event => {
-  const payload = event.data?.json?.() ?? {}
+  let payload: { title?: string; body?: string; data?: Record<string, unknown> } = {}
+  try {
+    const parsed = event.data?.json()
+    if (parsed && typeof parsed === 'object') payload = parsed
+  } catch { /* Still show a fallback alert for malformed payloads. */ }
   const title = payload.title ?? "GG'APP"
   const options: NotificationOptions = {
     body: payload.body ?? '',
     icon: '/icons.svg',
     badge: '/icons.svg',
     data: payload.data ?? {},
+    tag: typeof (payload.data?.notification as { id?: unknown } | undefined)?.id === 'string'
+      ? (payload.data!.notification as { id: string }).id : undefined,
   }
   event.waitUntil(self.registration.showNotification(title, options))
 })
@@ -185,7 +191,6 @@ self.addEventListener('notificationclick', event => {
  */
 function safeNotificationTarget(raw: unknown): string {
   if (typeof raw === 'string') {
-    if (raw.startsWith('/')) return raw
     try {
       const parsed = new URL(raw, self.location.origin)
       if (parsed.origin === self.location.origin) return parsed.pathname + parsed.search + parsed.hash

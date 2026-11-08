@@ -1,12 +1,14 @@
 import { create } from 'zustand'
-import type { Patient, Beneficiary } from '@/types/user.types'
+import type { PatientUserProfile } from '@/api/types'
+import type { Beneficiary } from '@/types/user.types'
 import { EMPTY_BENEFICIARIES, EMPTY_PATIENT } from '@/features/patient/patientAccount'
 
 interface UserStore {
-  user: Patient
+  /** PatientUserProfile (not Patient) so the profile photo `avatarUrl` is typed. */
+  user: PatientUserProfile
   beneficiaries: Beneficiary[]
-  setUser: (u: Patient) => void
-  updateUser: (partial: Partial<Patient>) => void
+  setUser: (u: PatientUserProfile) => void
+  updateUser: (partial: Partial<PatientUserProfile>) => void
   addBeneficiary: (b: Beneficiary) => void
   removeBeneficiary: (id: string) => void
   reset: () => void

@@ -8,6 +8,7 @@ import {
   useQuotePrescriptionRequestMutation,
   useRejectPrescriptionRequestMutation,
   useSendPrescriptionInvoiceMutation,
+  useSPNextInvoiceReference,
   useSPPrescriptionRequest,
   useSPProfile,
 } from '@/hooks/api'
@@ -167,6 +168,49 @@ function ConfirmationModal({
   )
 }
 
+/** Pickup "Send invoice" card. Mounting it fetches the next invoice number, which the pharmacy can keep or replace with their own. */
+function PickupInvoiceCard({ request }: { request: PrescriptionRequest }) {
+  const nextReference = useSPNextInvoiceReference()
+  const sendInvoice = useSendPrescriptionInvoiceMutation()
+  // Stays null until the pharmacy edits the field; until then it follows the suggested number.
+  const [typedNumber, setTypedNumber] = useState<string | null>(null)
+
+  const invoiceNumber = typedNumber ?? nextReference.data?.reference ?? ''
+  const sendDisabled = sendInvoice.isPending || (!invoiceNumber.trim() && nextReference.isLoading)
+
+  return (
+    <GGCard padding="24px">
+      <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Patient at the counter?</div>
+      <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>
+        Send the invoice when they arrive. They pay it with their PIN, and the order completes then.
+      </div>
+      <div style={{ marginBottom: '16px' }}>
+        <GGInput
+          label="Invoice number"
+          value={invoiceNumber}
+          onChange={event => {
+            setTypedNumber(event.target.value)
+            sendInvoice.reset()
+          }}
+          placeholder="Auto-generated"
+          hint="Use your own number if you have one."
+          error={sendInvoice.error?.message}
+        />
+      </div>
+      <GGButton
+        variant="primary"
+        size="md"
+        fullWidth
+        loading={sendInvoice.isPending}
+        disabled={sendDisabled}
+        onClick={() => sendInvoice.mutate({ id: request.id, invoiceNumber })}
+      >
+        Send invoice to patient
+      </GGButton>
+    </GGCard>
+  )
+}
+
 export function SPPrescriptionDetailScreen() {
   const navigate = useNavigate()
   const { id } = useParams<{ id: string }>()
@@ -177,7 +221,6 @@ export function SPPrescriptionDetailScreen() {
   const rejectMutation = useRejectPrescriptionRequestMutation()
   const readyMutation = useMarkPrescriptionReadyMutation()
   const fulfillMutation = useFulfillPrescriptionRequestMutation()
-  const sendInvoice = useSendPrescriptionInvoiceMutation()
 
   const [itemName, setItemName] = useState('')
   const [itemQty, setItemQty] = useState('1')
@@ -322,22 +365,13 @@ export function SPPrescriptionDetailScreen() {
     }
   }
 
-  const handleSendInvoice = async () => {
-    setActionError(null)
-    try {
-      await sendInvoice.mutateAsync(request.id)
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Unable to send the invoice.')
-    }
-  }
-
   return (
     <SPLayout title={request.id} back>
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: '20px', fontFamily: font.family }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <GGCard padding="24px">
             <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', marginBottom: '16px' }}>
-              <GGAvatar name={request.patient ?? 'Patient'} size={52} />
+              <GGAvatar name={request.patient ?? 'Patient'} src={request.patientAvatarUrl} size={52} />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: '16px', fontWeight: 800, color: C.text, marginBottom: '4px' }}>
                   {request.patient ?? 'Patient'}
@@ -534,17 +568,7 @@ export function SPPrescriptionDetailScreen() {
             </GGCard>
           )}
 
-          {canSendPickupInvoice && (
-            <GGCard padding="24px">
-              <div style={{ fontSize: '15px', fontWeight: 700, color: C.text, marginBottom: '8px' }}>Patient at the counter?</div>
-              <div style={{ fontSize: '13px', color: C.textSub, lineHeight: 1.6, marginBottom: '16px' }}>
-                Send the invoice when they arrive. They pay it with their PIN, and the order completes then.
-              </div>
-              <GGButton variant="primary" size="md" fullWidth loading={sendInvoice.isPending} onClick={() => void handleSendInvoice()}>
-                Send invoice to patient
-              </GGButton>
-            </GGCard>
-          )}
+          {canSendPickupInvoice && <PickupInvoiceCard request={request} />}
 
           {awaitingPatientApproval && (
             <GGCard padding="24px">

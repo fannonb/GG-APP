@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { GGCard } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import {
   getPushPermission,
+  isPushEnabled,
   requestNotificationPermission,
   subscribeToPushNotifications,
   unsubscribeFromPushNotifications,
@@ -19,9 +20,29 @@ const isStandalone = () =>
  */
 export function PushNotificationsCard() {
   const [permission, setPermission] = useState(getPushPermission)
-  const [enabled, setEnabled] = useState(permission === 'granted')
+  const [enabled, setEnabled] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [checking, setChecking] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let active = true
+    const refresh = () => {
+      setPermission(getPushPermission())
+      void isPushEnabled().then(value => { if (active) setEnabled(value) })
+        .catch(() => {}).finally(() => { if (active) setChecking(false) })
+    }
+    refresh()
+    window.addEventListener('focus', refresh)
+    window.addEventListener('storage', refresh)
+    window.addEventListener('gg:push-changed', refresh)
+    return () => {
+      active = false
+      window.removeEventListener('focus', refresh)
+      window.removeEventListener('storage', refresh)
+      window.removeEventListener('gg:push-changed', refresh)
+    }
+  }, [])
 
   const turnOn = async () => {
     setBusy(true)
@@ -88,7 +109,7 @@ export function PushNotificationsCard() {
         {canToggle && (
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || checking}
             onClick={() => void (enabled ? turnOff() : turnOn())}
             style={{
               height: 38,
@@ -105,7 +126,7 @@ export function PushNotificationsCard() {
               whiteSpace: 'nowrap',
             }}
           >
-            {busy ? 'Please wait…' : enabled ? 'Turn off' : 'Turn on notifications'}
+            {busy || checking ? 'Please wait…' : enabled ? 'Turn off' : 'Turn on notifications'}
           </button>
         )}
       </div>

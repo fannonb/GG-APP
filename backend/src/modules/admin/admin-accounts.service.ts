@@ -14,6 +14,7 @@ import { PrismaService } from '../../prisma/prisma.service'
 import { MailService } from '../../common/services/mail.service'
 import { AuthService } from '../auth/auth.service'
 import { AdminService } from './admin.service'
+import { InvoiceCodeService } from '../../common/services/invoice-code.service'
 import type { UpdateAdminPatientDto, UpdateAdminProviderDto } from './dto/admin-accounts.dto'
 
 const PROVIDER_CATEGORIES = new Set<string>(Object.values(ProviderCategory))
@@ -30,6 +31,7 @@ export class AdminAccountsService {
     @Inject(MailService) private readonly mail: MailService,
     @Inject(AuthService) private readonly auth: AuthService,
     @Inject(AdminService) private readonly admin: AdminService,
+    @Inject(InvoiceCodeService) private readonly invoiceCodes: InvoiceCodeService,
   ) {}
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -218,6 +220,50 @@ export class AdminAccountsService {
       }
     }
     return this.admin.getProvider(String(provider.id))
+  }
+
+  /**
+   * Changes the code in the provider's invoice numbers. Existing invoices keep their numbers.
+   * The new code's counter continues from the highest number already issued under that code,
+   * which is 0001 for a code no invoice has used yet.
+   */
+  async updateProviderInvoiceCode(actorUserId: string, providerId: string, invoiceCode: string) {
+    const provider = await this.providerOrThrow(providerId)
+    const code = invoiceCode.trim().toUpperCase()
+    const problem = this.invoiceCodes.validate(code)
+    if (problem) throw new BadRequestException(problem)
+
+    const from = provider.invoiceCode
+    if (from === code) return { invoiceCode: code }
+
+    const taken = await this.prisma.provider.findFirst({
+      where: { invoiceCode: code, id: { not: provider.id } },
+      select: { id: true },
+    })
+    if (taken) throw new BadRequestException('Another provider already uses that code')
+
+    try {
+      await this.prisma.$transaction(async tx => {
+        await tx.provider.update({ where: { id: provider.id }, data: { invoiceCode: code } })
+        await tx.auditLog.create({
+          data: {
+            actorUserId,
+            action: 'admin.provider.invoice_code_changed',
+            entityType: 'Provider',
+            entityId: String(provider.id),
+            metadata: { from, to: code } as Prisma.JsonObject,
+          },
+        })
+      })
+    } catch (error) {
+      // Two admins saving the same code at once: the unique column rejects the second.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('Another provider already uses that code')
+      }
+      throw error
+    }
+
+    return { invoiceCode: code }
   }
 
   async suspendProvider(actorUserId: string, providerId: string, reason?: string) {

@@ -86,6 +86,8 @@ export interface SPInvoiceReview {
 
 export interface SPInvoice {
   id: string
+  /** Short-lived link to the patient's profile photo (own patients only). */
+  patientAvatarUrl?: string
   appointmentId?: string
   isPrescription?: boolean
   /** The prescription this invoice is for, and its current status and delivery mode. */
@@ -124,6 +126,8 @@ export type PaymentType = 'appointment' | 'prescription'
 export interface Payment {
   id: string
   patient: string
+  /** Short-lived link to the patient's profile photo (own patients only). */
+  patientAvatarUrl?: string
   amount: number
   date: string
   status: 'paid' | 'pending' | 'authorized'

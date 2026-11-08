@@ -10,21 +10,19 @@ import { usePatientDashboard, usePatientInvoices, usePatientPrescriptionRequests
 import { useMarkPatientNotificationReadMutation } from '@/hooks/api/usePatientMutations'
 import { useNotificationsStore } from '@/store/notifications.store'
 import { useAuthStore } from '@/store/auth.store'
+import { useAdSessionStore } from '@/store/ad-session.store'
 import { useUserStore } from '@/store/user.store'
 import { isMockApi } from '@/api/config'
 import { getCountryByCode } from '@/config/countries'
 import { CountryFlag } from '@/features/admin/AdminShared'
 import { NewUserDashboardScreen } from './NewUserDashboardScreen'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
-import { useAttentionDismissals } from '@/utils/attention-dismissals'
 import { DashboardWalletCard } from '@/features/patient/components/DashboardWalletCard'
 import { DashboardNextAppointmentCard } from '@/features/patient/components/DashboardNextAppointmentCard'
-import { DashboardRecentActivity } from '@/features/patient/components/DashboardRecentActivity'
+import { DashboardAdCarousel } from '@/features/patient/components/DashboardAdCarousel'
 import { DashboardFindCareCard } from '@/features/patient/components/DashboardFindCareCard'
 import { getAppointmentDisplayStatus } from '@/utils/appointments'
-import { AdBannerStrip } from '@/components/AdBanner'
 import { HealthNewsSection } from '@/components/HealthNewsSection'
-import { useAdsStore } from '@/store/ads.store'
 import { EMPTY_APPOINTMENTS, EMPTY_NEWS, EMPTY_TRANSACTIONS, getPatientFirstName, isLivePatientAccountNew } from '@/features/patient/patientAccount'
 import { getFinancePartnerIdForCountry, getFinancePartnerSummary } from '@/features/patient/credit/credit.constants'
 import { ROUTES } from '@/router/routes'
@@ -144,6 +142,7 @@ export function DashboardScreen() {
   const storedUser = useUserStore(s => s.user)
   const navigate = useNavigate()
   const { isMobile, isDesktop } = useResponsive()
+  const adsClosed = useAdSessionStore(s => s.adsClosed)
   const { data, isLoading, isPending } = usePatientDashboard()
   const { data: profile } = usePatientProfile()
   const { data: invoices = [], isLoading: invoicesLoading } = usePatientInvoices()
@@ -175,12 +174,6 @@ export function DashboardScreen() {
     if (typeof window === 'undefined') return ''
     return window.sessionStorage.getItem(DISMISSED_LEDGER_ACCESS_KEY) ?? ''
   })
-
-  // Remount the banner strip every time the admin saves — version increments on every updateBanner call.
-  const adVersion = useAdsStore(s => s.version)
-
-  // Must run before the early returns below; dismissed attention items count as absent for the ad-strip gate.
-  const attention = useAttentionDismissals()
 
   const dashboardLoading = (isLoading || isPending) && !data
   const accountContextLoading = dashboardLoading || invoicesLoading
@@ -609,19 +602,6 @@ export function DashboardScreen() {
     })
   }
 
-  // The ad strip shows only when nothing needing action is visible, so a dismissed card counts as absent.
-  // A condition blocks only while its card is visible; conditions with no card keep their original meaning.
-  const visibleAttentionIds = new Set(attention.filterVisible(attentionItems).map(item => item.id))
-  const hasUnresolvedAction = Boolean(
-    (pendingInvoice && visibleAttentionIds.has(`invoice-${pendingInvoice.id}`)) ||
-    (rescheduledAppointment && (!rescheduledAppointmentDate || visibleAttentionIds.has(`reschedule-${rescheduledAppointment.id}`))) ||
-    (pendingAppointment && (!pendingAppointmentDate || visibleAttentionIds.has(`pending-${pendingAppointment.id}`))) ||
-    (prescriptionQuoteItems.length > 0 && visibleAttentionIds.has('rx-quote')) ||
-    (prescriptionInvoiceItems.length > 0 && visibleAttentionIds.has('rx-invoice')) ||
-    (prescriptionReadyItems.length > 0 && visibleAttentionIds.has('rx-ready')) ||
-    (creditUnderReview && visibleAttentionIds.has('credit-review')),
-  )
-
   const greetingLine = `${greeting}, ${getPatientFirstName(u)}`
   const countryFlag = (size: number) =>
     country && (
@@ -648,13 +628,15 @@ export function DashboardScreen() {
 
         <DashboardAttention items={attentionItems} />
 
-        {/* Allocation + next appointment */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1.5fr 1fr', gap: isMobile ? '12px' : '20px' }}>
+        {/* Fixed layout. Top row: wallet + ad slot (GG'APP sample ad when no real ad is eligible).
+            Desktop shows the ad beside the wallet; on mobile the wallet comes first and the ad sits right under it.
+            Once the patient closes the ads the slot is not rendered and the wallet takes the full row. */}
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile || adsClosed ? '1fr' : '1.5fr 1fr', gap: isMobile ? '12px' : '20px', alignItems: 'stretch' }}>
           <DashboardWalletCard user={u} currency={currency} partnerId={getFinancePartnerIdForCountry(u.countryCode)} partnerName={creditPartnerName} />
-          <DashboardNextAppointmentCard appointments={appointments} />
+          {!adsClosed && <DashboardAdCarousel />}
         </div>
 
-        {/* Find care + recent activity */}
+        {/* Second row: find care + next appointment */}
         <div
           style={{
             display: 'grid',
@@ -665,11 +647,8 @@ export function DashboardScreen() {
           }}
         >
           <DashboardFindCareCard />
-
-          <DashboardRecentActivity transactions={transactions} currency={currency} />
+          <DashboardNextAppointmentCard appointments={appointments} />
         </div>
-
-        {!hasUnresolvedAction && <AdBannerStrip key={adVersion} countryName={country?.name} />}
 
         <HealthNewsSection articles={healthNews ?? dashboard.news} />
       </div>

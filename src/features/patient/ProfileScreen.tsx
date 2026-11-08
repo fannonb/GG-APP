@@ -1,6 +1,6 @@
 import { BENEFICIARY_GENDERS } from '@/config/dataCapture'
 import type { UpsertBeneficiaryPayload } from '@/api/types'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { GGCard, GGButton, GGInput, GGBadge, GGAvatar, GGDatePicker, PhonePrefixInput } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
@@ -11,9 +11,11 @@ import {
   useChangePatientPasswordMutation,
   useDeleteBeneficiaryMutation,
   usePatientProfile,
+  useRemoveProfilePhotoMutation,
   useSetBeneficiariesEnabledMutation,
   useUpdateBeneficiaryMutation,
   useUpdatePatientProfileMutation,
+  useUploadProfilePhotoMutation,
 } from '@/hooks/api'
 import type { Beneficiary } from '@/types/user.types'
 import { FlagImg } from '@/components/FlagImg'
@@ -29,6 +31,7 @@ import {
 } from '@/config/countries'
 import type { CountryCode } from '@/config/countries'
 import { formatPhone } from '@/utils/format'
+import { squareResize } from '@/utils/image-resize'
 import { useUserStore } from '@/store/user.store'
 import { getPatientDisplayName, isBeneficiariesActive } from './patientAccount'
 import { ROUTES } from '@/router/routes'
@@ -84,6 +87,8 @@ export function ProfileScreen() {
   const addBeneficiary = useAddBeneficiaryMutation()
   const updateBeneficiary = useUpdateBeneficiaryMutation()
   const deleteBeneficiary = useDeleteBeneficiaryMutation()
+  const uploadPhoto = useUploadProfilePhotoMutation()
+  const removePhoto = useRemoveProfilePhotoMutation()
   const u = profile?.user ?? storedUser
   const beneficiaries = profile?.beneficiaries ?? storedBeneficiaries
   const beneficiariesActive = isBeneficiariesActive(u.beneficiariesEnabled, beneficiaries.length)
@@ -135,6 +140,10 @@ export function ProfileScreen() {
   })
   const [passwordError, setPasswordError] = useState('')
   const [passwordSuccess, setPasswordSuccess] = useState('')
+  const photoInputRef = useRef<HTMLInputElement>(null)
+  const [photoPick, setPhotoPick] = useState<{ dataUrl: string; mimeType: 'image/jpeg' } | null>(null)
+  const [photoError, setPhotoError] = useState('')
+  const [confirmRemovePhoto, setConfirmRemovePhoto] = useState(false)
   const setF = <K extends keyof typeof form>(k: K, v: string) => setForm(f => ({ ...f, [k]: v }))
   const setPasswordField = <K extends keyof typeof passwordForm>(k: K, v: string) =>
     setPasswordForm(f => ({ ...f, [k]: v }))
@@ -293,6 +302,48 @@ export function ProfileScreen() {
     }
   }
 
+  const handlePhotoPicked = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    // Clear the input so picking the same file again still fires onChange.
+    event.target.value = ''
+    if (!file) return
+    setPhotoError('')
+    setConfirmRemovePhoto(false)
+    try {
+      setPhotoPick(await squareResize(file))
+    } catch (error) {
+      setPhotoPick(null)
+      setPhotoError(error instanceof Error ? error.message : 'Unable to use this photo. Try another image.')
+    }
+  }
+
+  const cancelPhotoPick = () => {
+    setPhotoPick(null)
+    setPhotoError('')
+  }
+
+  const handleSavePhoto = async () => {
+    if (!photoPick) return
+    setPhotoError('')
+    try {
+      await uploadPhoto.mutateAsync(photoPick)
+      setPhotoPick(null)
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'Unable to save your photo. Please try again.')
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    setPhotoError('')
+    try {
+      await removePhoto.mutateAsync()
+      setConfirmRemovePhoto(false)
+    } catch (error) {
+      setConfirmRemovePhoto(false)
+      setPhotoError(error instanceof Error ? error.message : 'Unable to remove your photo. Please try again.')
+    }
+  }
+
   return (
     <AppLayout title="Settings" notifCount={1}>
       <div style={{ maxWidth: 860, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '20px', fontFamily: font.family }}>
@@ -306,7 +357,47 @@ export function ProfileScreen() {
 
         <GGCard padding={isMobile ? '18px 16px' : '20px 22px'}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>
-            <GGAvatar name={getPatientDisplayName(u)} size={56} />
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <button
+                type="button"
+                aria-label="Change profile photo"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={uploadPhoto.isPending || removePhoto.isPending}
+                style={{ display: 'block', padding: 0, border: 'none', background: 'none', borderRadius: '50%', cursor: 'pointer' }}
+              >
+                <GGAvatar name={getPatientDisplayName(u)} size={56} src={u.avatarUrl} />
+              </button>
+              <span
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  right: -2,
+                  bottom: -2,
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  background: '#FFFFFF',
+                  border: `1px solid ${C.border}`,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.12)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  pointerEvents: 'none',
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={C.navy800} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                  <circle cx="12" cy="13" r="4" />
+                </svg>
+              </span>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                hidden
+                onChange={event => { void handlePhotoPicked(event) }}
+              />
+            </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: isMobile ? 20 : 22, fontWeight: 800, color: C.text, letterSpacing: '-0.015em' }}>
                 {getPatientDisplayName(u)}
@@ -328,6 +419,49 @@ export function ProfileScreen() {
               </div>
             </div>
           </div>
+          {(photoPick || photoError || u.avatarUrl) && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 16, paddingTop: 16, borderTop: `1px solid ${C.border}` }}>
+              {photoPick ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
+                  <img
+                    src={photoPick.dataUrl}
+                    alt="Photo preview"
+                    style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', flexShrink: 0, border: `1px solid ${C.border}` }}
+                  />
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                    <GGButton variant="primary" size="sm" loading={uploadPhoto.isPending} onClick={() => { void handleSavePhoto() }}>
+                      Save photo
+                    </GGButton>
+                    <GGButton variant="secondary" size="sm" disabled={uploadPhoto.isPending} onClick={cancelPhotoPick}>
+                      Cancel
+                    </GGButton>
+                  </div>
+                </div>
+              ) : confirmRemovePhoto ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Remove your photo?</span>
+                  <GGButton variant="secondary" size="sm" disabled={removePhoto.isPending} onClick={() => setConfirmRemovePhoto(false)}>
+                    Keep
+                  </GGButton>
+                  <GGButton variant="danger" size="sm" loading={removePhoto.isPending} onClick={() => { void handleRemovePhoto() }}>
+                    Remove
+                  </GGButton>
+                </div>
+              ) : u.avatarUrl ? (
+                <button
+                  type="button"
+                  onClick={() => setConfirmRemovePhoto(true)}
+                  disabled={uploadPhoto.isPending || removePhoto.isPending}
+                  style={{ alignSelf: 'flex-start', background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: font.family, fontSize: 13, fontWeight: 600, color: C.error }}
+                >
+                  Remove photo
+                </button>
+              ) : null}
+              {photoError && (
+                <div style={{ fontSize: 12.5, color: C.error, fontWeight: 600, lineHeight: 1.5 }}>{photoError}</div>
+              )}
+            </div>
+          )}
         </GGCard>
 
         <UnderlineTabs

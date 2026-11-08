@@ -31,6 +31,7 @@ export const queryKeys = {
     patients: (mode: string) => ['sp', 'patients', mode] as const,
     payments: (mode: string) => ['sp', 'payments', mode] as const,
     invoices: (mode: string) => ['sp', 'invoices', mode] as const,
+    nextInvoiceReference: (mode: string) => ['sp', 'invoices', mode, 'next-reference'] as const,
     notifications: (mode: string) => ['sp', 'notifications', mode] as const,
     settings: (mode: string) => ['sp', 'settings', mode] as const,
     sessions: (mode: string) => ['sp', 'sessions', mode] as const,

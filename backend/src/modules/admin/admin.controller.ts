@@ -1,6 +1,6 @@
 import { PROVIDER_CSV_HEADERS } from './provider-import/csv'
 import { ProviderImportService } from './provider-import/provider-import.service'
-import { ProviderImportDto } from './dto/provider-import.dto'
+import { ImportProviderLeadDto, ProviderImportDto } from './dto/provider-import.dto'
 import { ProviderInviteBatchDto } from './dto/provider-invite-batch.dto'
 import { AuthService } from '../auth/auth.service'
 import { Body, Controller, Delete, Get, Header, Inject, Param, Patch, Post, Query, UseGuards } from '@nestjs/common'
@@ -13,7 +13,7 @@ import type { AuthenticatedUser } from '../../common/types/authenticated-user.ty
 import { AdminService } from './admin.service'
 import { AdminMetricsService } from './admin-metrics.service'
 import { AdminAccountsService } from './admin-accounts.service'
-import { AdminCreditLimitDto, AdminDecisionDto, AdminReasonDto, RecordPayoutDto, UpdateAdminPatientDto, UpdateAdminProviderDto } from './dto/admin-accounts.dto'
+import { AdminCreditLimitDto, AdminDecisionDto, AdminReasonDto, RecordPayoutDto, UpdateAdminPatientDto, UpdateAdminProviderDto, UpdateProviderInvoiceCodeDto } from './dto/admin-accounts.dto'
 import { AdminPayoutsService } from './admin-payouts.service'
 import { GetAdminActivityQueryDto } from './dto/get-admin-activity-query.dto'
 import { GetAdminPaymentsQueryDto } from './dto/get-admin-payments-query.dto'
@@ -138,7 +138,28 @@ export class AdminController {
 
   @Post('providers/import')
   importProviders(@CurrentUser() user: AuthenticatedUser, @Body() dto: ProviderImportDto) {
-    return this.providerImport.run(user.sub, dto.csv, dto.commit)
+    return this.providerImport.run(user.sub, dto)
+  }
+
+  // Leads from Outscraper rows that have no email. `leads/count` is declared before any `:id` route.
+  @Get('provider-import/leads/count')
+  countProviderImportLeads() {
+    return this.providerImport.countLeads()
+  }
+
+  @Get('provider-import/leads')
+  listProviderImportLeads() {
+    return this.providerImport.listLeads()
+  }
+
+  @Post('provider-import/leads/:id/import')
+  importProviderImportLead(@CurrentUser() user: AuthenticatedUser, @Param('id') leadId: string, @Body() dto: ImportProviderLeadDto) {
+    return this.providerImport.importLead(user.sub, leadId, dto)
+  }
+
+  @Delete('provider-import/leads/:id')
+  dismissProviderImportLead(@CurrentUser() user: AuthenticatedUser, @Param('id') leadId: string) {
+    return this.providerImport.dismissLead(user.sub, leadId)
   }
 
   // One request per chunk of up to 50 ids, so a 500-provider import stays well inside the
@@ -297,6 +318,11 @@ export class AdminController {
   @Patch('providers/:id')
   updateProvider(@CurrentUser() user: AuthenticatedUser, @Param('id') providerId: string, @Body() dto: UpdateAdminProviderDto) {
     return this.accounts.updateProvider(user.sub, providerId, dto)
+  }
+
+  @Patch('providers/:id/invoice-code')
+  updateProviderInvoiceCode(@CurrentUser() user: AuthenticatedUser, @Param('id') providerId: string, @Body() dto: UpdateProviderInvoiceCodeDto) {
+    return this.accounts.updateProviderInvoiceCode(user.sub, providerId, dto.invoiceCode)
   }
 
   @Post('providers/:id/suspend')

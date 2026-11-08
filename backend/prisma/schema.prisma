@@ -182,6 +182,20 @@ enum ServiceForType {
   BENEFICIARY
 }
 
+enum ProviderImportLeadStatus {
+  NEEDS_EMAIL
+  IMPORTED
+  DISMISSED
+}
+
+enum AdBannerStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  EXPIRED
+}
+
 enum NewsStatus {
   DRAFT
   PUBLISHED
@@ -240,6 +254,8 @@ model PatientProfile {
   residenceCountry     String?
   /// True when residence is outside Kenya, Zimbabwe, or Zambia
   residesAbroad        Boolean       @default(false)
+  /// Profile photo: storage metadata ({ storageKey, mimeType, sizeBytes } or a local-dev dataUrl). Shown to the patient and to providers the patient has seen.
+  avatar               Json?
   nationalIdEncrypted  String
   nationalIdLast4      String
   creditLimit          Decimal       @default(0) @db.Decimal(12, 2)
@@ -309,6 +325,9 @@ model Provider {
   applicationId          String?                         @unique
   slug                   String                          @unique
   name                   String
+  /// Short code in this provider's system invoice numbers, e.g. "PHP" in INV-PHP-2026-0007.
+  /// 2-6 uppercase letters/digits, generated from the name; admins can change it.
+  invoiceCode            String?                         @unique
   category               ProviderCategory
   categories             String[]                        @default([])
   description            String?
@@ -377,6 +396,11 @@ model ProviderApplication {
   address             String
   city                String?
   region              String?
+  /// Street/road (e.g. from an Outscraper import); copied to Provider.road on approval.
+  road                String?
+  website             String?
+  /// Google Maps place id from an Outscraper import; stops the same place being imported twice.
+  googlePlaceId       String?                       @unique
   serviceTypes        Json
   licenseNumber       String
   /// Company / business registration (BRS, Zimbabwe companies registry, PACRA). Optional for an individual doctor.
@@ -399,6 +423,29 @@ model ProviderApplication {
   documents           ProviderApplicationDocument[]
   messages            ProviderApplicationMessage[]
   credentials         ProviderCredential[]
+}
+
+/// A provider from a bulk import (e.g. Outscraper) that has no email yet. An admin adds the
+/// email, which creates the account and application exactly like a normal import row.
+model ProviderImportLead {
+  id            String                   @id @default(cuid())
+  googlePlaceId String?                  @unique
+  practiceName  String
+  phone         String?
+  website       String?
+  address       String
+  city          String?
+  region        String?
+  serviceTypes  Json
+  /// Everything else mapped for registration (country, location, hours, road, maps link...), minus the email.
+  payload       Json
+  status        ProviderImportLeadStatus @default(NEEDS_EMAIL)
+  applicationId String?                  @unique
+  importedById  String
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  @@index([status, createdAt])
 }
 
 model ProviderApplicationDocument {
@@ -652,7 +699,12 @@ model Notification {
   screen    String
   readAt    DateTime?
   createdAt DateTime         @default(now())
+  /// Persisted delivery state; pending rows are visible only after commit.
+  pushProcessedAt DateTime?
+  pushClaimedAt   DateTime?
   user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([pushProcessedAt, createdAt])
 }
 
 model NewsArticle {
@@ -666,6 +718,32 @@ model NewsArticle {
   status      NewsStatus @default(PUBLISHED)
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+}
+
+/// Pre-designed ad images shown to patients (dashboard ad slot), managed in the admin portal.
+model AdBanner {
+  id             String         @id @default(cuid())
+  /// Internal label only; never shown to patients.
+  advertiserName String
+  /// Where tapping the ad goes (https link, or an in-app path starting with "/app/").
+  ctaUrl         String
+  /// Storage metadata ({ storageKey, mimeType, sizeBytes } or a local-dev dataUrl). 800x600 (4:3).
+  desktopImage   Json?
+  /// Optional phone artwork; falls back to desktopImage.
+  mobileImage    Json?
+  status         AdBannerStatus @default(DRAFT)
+  frequency      String         @default("always")
+  /// Inclusive date range (YYYY-MM-DD, compared as dates).
+  startDate      DateTime       @db.Date
+  expiresAt      DateTime       @db.Date
+  /// Country names; empty = every country.
+  countries      String[]       @default([])
+  impressions    Int            @default(0)
+  clicks         Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([status, startDate, expiresAt])
 }
 
 model NewsCategory {
@@ -919,8 +997,20 @@ model PushDevice {
   lastSeenAt DateTime    @default(now())
   createdAt  DateTime    @default(now())
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  receipts   PushReceipt[]
 
   @@index([userId])
+}
+
+/// Expo tickets must be checked later: ticket acceptance is not FCM/APNs delivery.
+model PushReceipt {
+  id          String     @id
+  deviceId    String
+  checkAt     DateTime
+  createdAt   DateTime   @default(now())
+  device      PushDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([checkAt])
 }
 
 /// A quick rating of GG'APP itself (not a provider), asked after key moments such as paying.

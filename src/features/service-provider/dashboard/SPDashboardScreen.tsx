@@ -6,7 +6,7 @@ import { HealthNewsSection } from '@/components/HealthNewsSection'
 import { DashboardAttention, type AttentionItem } from '@/components/DashboardAttention'
 import { FlagImg } from '@/components/FlagImg'
 import { getCountryByName } from '@/config/countries'
-import { useHealthNews, useSendPrescriptionInvoiceMutation, useSPDashboard } from '@/hooks/api'
+import { useHealthNews, useSPDashboard } from '@/hooks/api'
 import { useMarkSPNotificationReadMutation } from '@/hooks/api/useSPMutations'
 import { getUnreadPaymentBannerItems } from '@/utils/payment-notifications'
 import {
@@ -85,7 +85,6 @@ export function SPDashboardScreen() {
   const { data: healthNews } = useHealthNews()
   const { buildSetupSteps, onboardingComplete, profileSettingsTab } = useSpOnboardingProgress()
   const markNotificationRead = useMarkSPNotificationReadMutation()
-  const sendInvoice = useSendPrescriptionInvoiceMutation()
   const [seenCancelledApptIds, setSeenCancelledApptIds] = useState<Set<string>>(
     () => loadSeenCancelledAppts(),
   )
@@ -406,14 +405,7 @@ export function SPDashboardScreen() {
       title: n > 1 ? `${n} orders ready · send invoices` : 'Order ready · send the invoice',
       detail: andMore(`${primary.patient ?? 'Patient'} · ${primary.id}. Send the invoice when they arrive. They pay it with their PIN.`, n),
       actionLabel: n > 1 ? 'View orders' : 'Send invoice',
-      onAction: async () => {
-        if (n > 1) { navigate(ROUTES.SP_PRESCRIPTIONS); return }
-        try {
-          await sendInvoice.mutateAsync(primary.id)
-        } catch {
-          navigate(route.spPrescription(primary.id))
-        }
-      },
+      onAction: () => navigate(n > 1 ? ROUTES.SP_PRESCRIPTIONS : route.spPrescription(primary.id)),
       secondaryAction: { label: 'View order', onAction: () => navigate(route.spPrescription(primary.id)) },
     })
   }

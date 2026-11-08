@@ -10,6 +10,18 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 }
 
 let cachedPublicKey: string | null = null
+const DISABLED_KEY = 'gg-push-disabled'
+let disabledInMemory = false
+
+function isDisabled(): boolean {
+  try { return localStorage.getItem(DISABLED_KEY) === 'true' } catch { return disabledInMemory }
+}
+
+function setDisabled(disabled: boolean) {
+  disabledInMemory = disabled
+  try { localStorage.setItem(DISABLED_KEY, String(disabled)) } catch { /* Storage may be unavailable. */ }
+  window.dispatchEvent(new Event('gg:push-changed'))
+}
 
 /** The build-time key when set, otherwise the API's (so keys can change without a rebuild). */
 async function getVapidPublicKey(): Promise<string> {
@@ -17,11 +29,12 @@ async function getVapidPublicKey(): Promise<string> {
   if (cachedPublicKey !== null) return cachedPublicKey
   try {
     const { data } = await apiClient.get<{ publicKey: string }>('/notifications/push/public-key')
-    cachedPublicKey = data.publicKey ?? ''
+    cachedPublicKey = data.publicKey || null
   } catch {
-    cachedPublicKey = ''
+    // A temporary failure must not disable push until the next page reload.
+    return ''
   }
-  return cachedPublicKey
+  return cachedPublicKey ?? ''
 }
 
 /** The active service worker, or null within a few seconds if there isn't one. */
@@ -37,6 +50,13 @@ export function isPushSupported(): boolean {
 
 export function getPushPermission(): NotificationPermission | 'unsupported' {
   return isPushSupported() ? Notification.permission : 'unsupported'
+}
+
+/** Permission alone does not mean this browser has a live subscription. */
+export async function isPushEnabled(): Promise<boolean> {
+  if (getPushPermission() !== 'granted' || isDisabled() || isMockApi || import.meta.env.DEV) return false
+  const registration = await getRegistration()
+  return Boolean(await registration?.pushManager.getSubscription())
 }
 
 export async function requestNotificationPermission(): Promise<NotificationPermission> {
@@ -65,20 +85,27 @@ export async function subscribeToPushNotifications(): Promise<PushSubscription |
   const registration = await getRegistration()
   if (!registration) return null
 
-  const subscription =
-    (await registration.pushManager.getSubscription()) ??
+  const existing = await registration.pushManager.getSubscription()
+  const subscription = existing ??
     (await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource,
     }))
 
-  await apiClient.post('/notifications/push/subscribe', subscription.toJSON())
+  try {
+    const { data } = await apiClient.post<{ success: boolean }>('/notifications/push/subscribe', subscription.toJSON())
+    if (!data.success) throw new Error('Push registration was rejected')
+  } catch (error) {
+    if (!existing) await subscription.unsubscribe().catch(() => {})
+    throw error
+  }
+  setDisabled(false)
   return subscription
 }
 
 /** Re-registers silently after sign-in when the user has already allowed notifications. */
 export async function syncPushSubscription(): Promise<void> {
-  if (getPushPermission() !== 'granted') return
+  if (getPushPermission() !== 'granted' || isDisabled()) return
   try {
     await subscribeToPushNotifications()
   } catch {
@@ -87,15 +114,19 @@ export async function syncPushSubscription(): Promise<void> {
 }
 
 /** Removes this browser from the signed-in account. Call before the session ends. */
-export async function unsubscribeFromPushNotifications(): Promise<void> {
+export async function unsubscribeFromPushNotifications({ disable = true }: { disable?: boolean } = {}): Promise<void> {
+  if (disable) setDisabled(true)
   if (!isPushSupported() || import.meta.env.DEV) return
 
   const registration = await getRegistration()
   const subscription = await registration?.pushManager.getSubscription()
   if (!subscription) return
 
-  if (!isMockApi) {
-    await apiClient.post('/notifications/push/unsubscribe', { endpoint: subscription.endpoint })
-  }
   await subscription.unsubscribe()
+  window.dispatchEvent(new Event('gg:push-changed'))
+  if (!isMockApi) {
+    // The browser is already unsubscribed, so even an unreachable API cannot
+    // keep alerts arriving. The server removes stale endpoints on 404/410.
+    await apiClient.post('/notifications/push/unsubscribe', { endpoint: subscription.endpoint }).catch(() => {})
+  }
 }

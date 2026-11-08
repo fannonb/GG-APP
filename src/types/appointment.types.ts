@@ -49,6 +49,8 @@ export interface Appointment {
   id: string
   patientId?: string
   patient: string
+  /** Short-lived link to the patient's profile photo (own patients only). */
+  patientAvatarUrl?: string
   phone: string
   countryCode?: CountryCode
   service: string
@@ -75,6 +77,8 @@ export interface Appointment {
 export interface SPPatient {
   id: string
   name: string
+  /** Short-lived link to the patient's profile photo. */
+  avatarUrl?: string
   phone: string
   countryCode?: CountryCode
   email: string

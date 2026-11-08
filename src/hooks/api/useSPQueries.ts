@@ -60,6 +60,17 @@ export function useSPInvoices() {
   })
 }
 
+/** Preview of the next invoice number. Always fetched fresh, because another invoice may have taken the number. */
+export function useSPNextInvoiceReference() {
+  const spMode = useAuthStore(s => s.spMode)
+  return useQuery({
+    queryKey: queryKeys.sp.nextInvoiceReference(spMode),
+    queryFn: () => spService.getNextInvoiceReference(spMode),
+    staleTime: 0,
+    refetchOnMount: 'always',
+  })
+}
+
 export function useSPInvoice(id: string | undefined) {
   const spMode = useAuthStore(s => s.spMode)
   return useQuery({

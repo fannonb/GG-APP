@@ -30,6 +30,7 @@ import {
 import { UpsertInvoiceDto } from './dto/upsert-invoice.dto'
 import { QuotePrescriptionRequestDto } from './dto/quote-prescription-request.dto'
 import { RejectPrescriptionRequestDto } from './dto/reject-prescription-request.dto'
+import { SendPrescriptionInvoiceDto } from './dto/send-prescription-invoice.dto'
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.SP)
 @Controller('sp')
@@ -290,7 +291,8 @@ export class SpController {
   sendPrescriptionInvoice(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id') requestReference: string,
+    @Body() dto: SendPrescriptionInvoiceDto,
   ) {
-    return this.spService.sendPrescriptionInvoice(user.sub, requestReference)
+    return this.spService.sendPrescriptionInvoice(user.sub, requestReference, dto.invoiceNumber)
   }
 }

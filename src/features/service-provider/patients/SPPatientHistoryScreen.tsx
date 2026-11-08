@@ -286,7 +286,7 @@ export function SPPatientHistoryScreen() {
                   {/* Header Row */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <GGAvatar name={patient.name} size={38} />
+                      <GGAvatar name={patient.name} src={patient.avatarUrl} size={38} />
                       <div>
                         <div style={{ fontSize: '15px', fontWeight: 700, color: C.navy800, fontFamily: font.family }}>
                           {patient.name}
@@ -404,7 +404,7 @@ export function SPPatientHistoryScreen() {
                     >
                       <td style={{ padding: '14px 18px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                          <GGAvatar name={patient.name} size={38} />
+                          <GGAvatar name={patient.name} src={patient.avatarUrl} size={38} />
                           <div>
                             <div style={{ fontSize: '14px', fontWeight: 700, color: C.navy800 }}>
                               {patient.name}

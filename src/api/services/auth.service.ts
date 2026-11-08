@@ -181,7 +181,7 @@ export const authService = {
     // Stop this browser receiving the account's notifications. Runs first, while
     // the session can still authenticate the request; never blocks sign-out.
     await Promise.race([
-      unsubscribeFromPushNotifications().catch(() => undefined),
+      unsubscribeFromPushNotifications({ disable: false }).catch(() => undefined),
       new Promise(resolve => setTimeout(resolve, 3000)),
     ])
 

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
 import { GGButton } from '@/design-system'
 import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
@@ -12,8 +13,10 @@ import { Initials, PlainHeader, SearchBox, SidePanel, StatusTabs } from '@/featu
 import { CountryBadge, countryCode } from '@/features/admin/AdminShared'
 import type { SPApplication } from '@/types/admin.types'
 import { ApplicationReviewPanel } from './ApplicationReviewPanel'
+import { ImportLeadsList } from './ImportLeadsList'
 import { ProviderImportPanel } from './ProviderImportPanel'
 import { SetupLinksList } from './SetupLinksList'
+import { fetchNeedsEmailCount, providerImportKeys } from './providerImport.api'
 import { applicationStatus, daysWaiting } from './applicationStatus'
 
 type Tab = 'review' | 'links' | 'approved' | 'rejected'
@@ -44,6 +47,8 @@ export function AdminSPAppsScreen() {
   const [search, setSearch] = useState('')
   const [openId, setOpenId] = useState<string | null>(null)
   const [importing, setImporting] = useState(false)
+  const [leadsOpen, setLeadsOpen] = useState(false)
+  const { data: leadCount } = useQuery({ queryKey: providerImportKeys.leadsCount, queryFn: fetchNeedsEmailCount })
   // Decisions made here show straight away, before the refetch lands.
   const [overrides, setOverrides] = useState<Record<string, SPApplication>>({})
   const [justApproved, setJustApproved] = useState<SPApplication | null>(null)
@@ -104,14 +109,20 @@ export function AdminSPAppsScreen() {
         )}
 
         {importing && <ProviderImportPanel onClose={() => setImporting(false)} />}
+        {leadsOpen && <ImportLeadsList onClose={() => setLeadsOpen(false)} />}
 
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' }}>
           <div style={{ flex: '1 1 420px', minWidth: 0 }}>
             <StatusTabs<Tab> tabs={tabs} value={tab} onChange={value => { setTab(value); setJustApproved(prev => (value === 'links' ? prev : null)) }} />
           </div>
-          {!importing && (
-            <GGButton variant="secondary" size="sm" onClick={() => setImporting(true)} style={{ marginBottom: 6 }}>Import CSV</GGButton>
-          )}
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
+            {!importing && (
+              <GGButton variant="secondary" size="sm" onClick={() => setImporting(true)}>Import providers</GGButton>
+            )}
+            {!leadsOpen && (
+              <GGButton variant="secondary" size="sm" onClick={() => setLeadsOpen(true)}>Needs email ({leadCount?.needsEmail ?? 0})</GGButton>
+            )}
+          </div>
         </div>
 
         <div style={{ display: 'flex' }}>

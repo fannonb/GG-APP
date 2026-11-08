@@ -27,7 +27,7 @@ export interface StoreAttachmentInput {
   mimeType?: string
   sizeBytes?: number
   displaySize?: string
-  prefix: 'invoices' | 'prescriptions' | 'appointments' | 'provider-documents'
+  prefix: 'invoices' | 'prescriptions' | 'appointments' | 'provider-documents' | 'avatars' | 'ads'
 }
 
 export interface ResolvedAttachment {

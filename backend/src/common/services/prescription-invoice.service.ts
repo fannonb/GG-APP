@@ -18,10 +18,14 @@ type QuotedItem = { name: string; quantity?: string; unitPrice?: number }
 export class PrescriptionInvoiceService {
   constructor(@Inject(ReferenceService) private readonly referenceService: ReferenceService) {}
 
-  /** Creates the invoice for a prescription whose quote the patient just approved. Idempotent: returns the existing live invoice if there is one. */
+  /**
+   * Creates the invoice for a prescription whose quote the patient just approved. Idempotent: returns the existing live invoice if there is one.
+   * Uses `options.reference` as the invoice number when given (the sequence is not consumed), otherwise issues the next number.
+   */
   async createForPrescription(
     tx: Prisma.TransactionClient,
     requestId: string,
+    options?: { reference?: string },
   ): Promise<{ id: string; reference: string; amount: number }> {
     const request = await tx.prescriptionRequest.findUnique({
       where: { id: requestId },
@@ -66,7 +70,7 @@ export class PrescriptionInvoiceService {
       }
     }
 
-    const reference = await this.referenceService.next('INV', tx)
+    const reference = options?.reference || (await this.referenceService.nextInvoice(providerId, tx))
 
     const quotedItems = Array.isArray(request.quotedItems)
       ? (request.quotedItems as QuotedItem[])

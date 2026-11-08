@@ -40,6 +40,21 @@ const secondaryBtn: React.CSSProperties = {
   color: CYAN_DEEP,
 }
 
+/** Small translucent pill used for the header and bottom-row links. */
+const pillBtn: React.CSSProperties = {
+  height: 34,
+  padding: '0 14px',
+  borderRadius: radius.full,
+  border: 'none',
+  background: 'rgba(255,255,255,0.75)',
+  color: CYAN_DEEP,
+  fontSize: 13,
+  fontWeight: 700,
+  fontFamily: font.family,
+  cursor: 'pointer',
+  flexShrink: 0,
+}
+
 /**
  * Credit at a glance: what's available, how much of the limit is used,
  * and who issued it. Falls back to application state when there's no line yet.
@@ -81,23 +96,34 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
         <button
           type="button"
           onClick={() => navigate(ROUTES.CREDIT_WALLET)}
-          style={{
-            height: 34,
-            padding: '0 14px',
-            borderRadius: radius.full,
-            border: 'none',
-            background: 'rgba(255,255,255,0.75)',
-            color: CYAN_DEEP,
-            fontSize: 13,
-            fontWeight: 700,
-            fontFamily: font.family,
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
+          style={pillBtn}
         >
           View allocation →
         </button>
       )}
+    </div>
+  )
+
+  // Bottom row in every state: the state's own action on the left, Recent activity on the right.
+  const bottomRow = (action: React.ReactNode) => (
+    <div
+      style={{
+        marginTop: 'auto',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 10,
+      }}
+    >
+      {action}
+      <button
+        type="button"
+        onClick={() => navigate(ROUTES.TRANSACTIONS)}
+        style={{ ...pillBtn, marginLeft: 'auto' }}
+      >
+        Recent activity →
+      </button>
     </div>
   )
 
@@ -137,13 +163,11 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={() => navigate(ROUTES.FIND_SERVICE)}
-          style={{ ...primaryBtn, marginTop: 'auto', alignSelf: isMobile ? 'stretch' : 'flex-start' }}
-        >
-          Find care
-        </button>
+        {bottomRow(
+          <button type="button" onClick={() => navigate(ROUTES.FIND_SERVICE)} style={primaryBtn}>
+            Find care
+          </button>,
+        )}
       </>
     )
   } else if (user.creditStatus === 'pending') {
@@ -155,9 +179,11 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
             {partnerName} is reviewing your request. Your credit will appear here once approved.
           </div>
         </div>
-        <button type="button" onClick={() => navigate(ROUTES.CREDIT_STATUS)} style={{ ...secondaryBtn, marginTop: 'auto', alignSelf: 'flex-start' }}>
-          View status
-        </button>
+        {bottomRow(
+          <button type="button" onClick={() => navigate(ROUTES.CREDIT_STATUS)} style={secondaryBtn}>
+            View status
+          </button>,
+        )}
       </>
     )
   } else {
@@ -174,13 +200,15 @@ export function DashboardWalletCard({ user, currency, partnerId, partnerName }: 
               : 'Apply for a healthcare allocation to pay verified providers without paying at the counter.'}
           </div>
         </div>
-        <button
-          type="button"
-          onClick={() => navigate(declined ? ROUTES.CREDIT_STATUS : ROUTES.CREDIT_DISCLAIMER)}
-          style={{ ...(declined ? secondaryBtn : primaryBtn), marginTop: 'auto', alignSelf: 'flex-start' }}
-        >
-          {declined ? 'View decision' : 'Apply for an allocation'}
-        </button>
+        {bottomRow(
+          <button
+            type="button"
+            onClick={() => navigate(declined ? ROUTES.CREDIT_STATUS : ROUTES.CREDIT_DISCLAIMER)}
+            style={declined ? secondaryBtn : primaryBtn}
+          >
+            {declined ? 'View decision' : 'Apply for an allocation'}
+          </button>,
+        )}
       </>
     )
   }

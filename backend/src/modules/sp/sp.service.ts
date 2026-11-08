@@ -163,14 +163,16 @@ export class SpService {
       appointments: await Promise.all(appointments.map(appointment => this.mapAppointment(appointment))),
       prescriptionRequests: await Promise.all(prescriptionRequests.map(request => this.mapPrescriptionRequest(request, provider.id))),
       patients,
-      payments: invoices
-        .filter(
-          invoice =>
-            invoice.status === InvoiceStatus.AUTHORIZED ||
-            invoice.status === InvoiceStatus.PAID,
-        )
-        .map(invoice => this.mapPayment(invoice)),
-      invoices: invoices.map(invoice => this.mapSpInvoice(invoice)),
+      payments: await Promise.all(
+        invoices
+          .filter(
+            invoice =>
+              invoice.status === InvoiceStatus.AUTHORIZED ||
+              invoice.status === InvoiceStatus.PAID,
+          )
+          .map(invoice => this.mapPayment(invoice)),
+      ),
+      invoices: await Promise.all(invoices.map(invoice => this.mapSpInvoice(invoice))),
       notifications: notifications.map(notification => ({
         id: notification.id,
         type: notification.type.toLowerCase(),
@@ -564,8 +566,9 @@ export class SpService {
   /**
    * Pickup only. The pharmacy sends the invoice when the patient arrives; the patient approves it with
    * their PIN at the counter, and that payment completes the order. Calling again returns the same invoice.
+   * A pharmacy-entered invoice number is used when given; otherwise one is issued.
    */
-  async sendPrescriptionInvoice(userId: string, requestReference: string) {
+  async sendPrescriptionInvoice(userId: string, requestReference: string, invoiceNumber?: string) {
     const provider = await this.resolveProvider(userId)
     const request = await this.resolvePharmacyPrescriptionRequest(provider, requestReference)
 
@@ -581,6 +584,8 @@ export class SpService {
       throw new BadRequestException('The invoice can only be sent once the patient has chosen your quote')
     }
 
+    const providedReference = invoiceNumber?.trim() || undefined
+
     const { invoice, created } = await this.prisma.$transaction(async tx => {
       const alreadyInvoiced = await tx.invoice.findFirst({
         where: {
@@ -590,7 +595,24 @@ export class SpService {
         select: { id: true },
       })
 
-      const invoice = await this.prescriptionInvoice.createForPrescription(tx, request.id)
+      // A pharmacy-entered number is checked and synced only when this call issues the invoice.
+      const customReference = alreadyInvoiced ? undefined : providedReference
+      if (customReference) {
+        const duplicateReference = await tx.invoice.findFirst({
+          where: { reference: customReference },
+          select: { id: true },
+        })
+        if (duplicateReference) {
+          throw new BadRequestException('That invoice number is already in use. Choose a different one.')
+        }
+      }
+
+      const invoice = await this.prescriptionInvoice.createForPrescription(tx, request.id, {
+        reference: customReference,
+      })
+      if (customReference) {
+        await this.referenceService.syncInvoiceReference(provider.id, customReference, tx)
+      }
 
       // A repeat call returns the live invoice; only a newly issued one is logged and announced.
       if (!alreadyInvoiced) {
@@ -609,6 +631,12 @@ export class SpService {
       }
 
       return { invoice, created: !alreadyInvoiced }
+    }).catch((error: unknown) => {
+      // Two requests can pass the duplicate check at once; the unique reference column rejects the second.
+      if (providedReference && error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new BadRequestException('That invoice number is already in use. Choose a different one.')
+      }
+      throw error
     })
 
     if (created) {
@@ -1173,12 +1201,12 @@ export class SpService {
   async getInvoices(userId: string) {
     const provider = await this.resolveProvider(userId)
     const invoices = await this.getInvoiceRecords(provider.id)
-    return invoices.map(invoice => this.mapSpInvoice(invoice))
+    return Promise.all(invoices.map(invoice => this.mapSpInvoice(invoice)))
   }
 
   async getNextInvoiceReference(userId: string) {
-    await this.resolveProvider(userId)
-    const reference = await this.referenceService.preview('INV')
+    const provider = await this.resolveProvider(userId)
+    const reference = await this.referenceService.previewInvoice(provider.id)
     return { reference }
   }
 
@@ -1320,7 +1348,7 @@ export class SpService {
 
     const storedFile = await this.storage.externalize(dto.attachment, 'invoices')
     const invoice = await this.prisma.$transaction(async tx => {
-      await this.referenceService.syncFromReference('INV', reference, tx)
+      await this.referenceService.syncInvoiceReference(provider.id, reference, tx)
 
       const createdInvoice = await tx.invoice.create({
         data: {
@@ -1500,7 +1528,7 @@ export class SpService {
 
     const storedFile = await this.storage.externalize(dto.attachment, 'invoices')
     const invoice = await this.prisma.$transaction(async tx => {
-      await this.referenceService.syncFromReference('INV', reference, tx)
+      await this.referenceService.syncInvoiceReference(provider.id, reference, tx)
 
       const lineItems = [
         ...quotedItems.map(item => {
@@ -1759,13 +1787,15 @@ export class SpService {
   async getPayments(userId: string) {
     const provider = await this.resolveProvider(userId)
     const invoices = await this.getInvoiceRecords(provider.id)
-    return invoices
-      .filter(
-        invoice =>
-          invoice.status === InvoiceStatus.AUTHORIZED ||
-          invoice.status === InvoiceStatus.PAID,
-      )
-      .map(invoice => this.mapPayment(invoice))
+    return Promise.all(
+      invoices
+        .filter(
+          invoice =>
+            invoice.status === InvoiceStatus.AUTHORIZED ||
+            invoice.status === InvoiceStatus.PAID,
+        )
+        .map(invoice => this.mapPayment(invoice)),
+    )
   }
 
   async getNotifications(userId: string) {
@@ -2297,9 +2327,11 @@ export class SpService {
       orderBy: { createdAt: 'desc' },
     })
 
-    return patients
-      .filter(patient => !!patient.patientProfile)
-      .map(patient => this.mapPatient(patient))
+    return Promise.all(
+      patients
+        .filter(patient => !!patient.patientProfile)
+        .map(patient => this.mapPatient(patient)),
+    )
   }
 
   private async getOrCreateNotificationPreferences(providerId: number) {
@@ -2425,12 +2457,14 @@ export class SpService {
     authUser?: { email: string } | null
     license: string | null
     logoUrl?: string | null
+    invoiceCode?: string | null
     services?: Array<{ name: string }>
   }) {
     const lifecycleStatus = provider.lifecycleStatus ?? ProviderLifecycleStatus.ACTIVE
     return {
       id: provider.id,
       name: provider.name,
+      invoiceCode: provider.invoiceCode ?? null,
       email: provider.authUser?.email ?? '',
       phone: provider.phone,
       category: this.formatProviderCategories(provider.categories, provider.category),
@@ -2544,6 +2578,12 @@ export class SpService {
     }
   }
 
+  /** Resolved, downloadable URL for a patient's profile photo. Raw storage keys are never returned. */
+  private async avatarUrl(avatar: Prisma.JsonValue | null | undefined): Promise<string | undefined> {
+    const resolved = await this.storage.resolveAttachmentUrl(avatar as unknown as AttachmentMetadata, 'avatar')
+    return resolved?.url
+  }
+
   private async mapAppointment(appointment: {
     id: string
     reference: string
@@ -2569,6 +2609,7 @@ export class SpService {
         firstName: string
         lastName: string
         countryCode?: string | null
+        avatar?: Prisma.JsonValue | null
       } | null
     }
     beneficiary: {
@@ -2589,6 +2630,10 @@ export class SpService {
     const effectiveStatus = appointment.invoices.length > 0
       ? AppointmentStatus.COMPLETED
       : appointment.status
+    // The photo goes only with the account holder's own appointments, never a beneficiary's.
+    const patientAvatarUrl = appointment.forSelf
+      ? await this.avatarUrl(appointment.patient.patientProfile?.avatar)
+      : undefined
 
     return {
       id: appointment.reference,
@@ -2606,6 +2651,7 @@ export class SpService {
       visitId: appointment.visits?.[0]?.id,
       hasVisit: (appointment.visits?.length ?? 0) > 0,
       forSelf: appointment.forSelf,
+      patientAvatarUrl,
       beneficiary: appointment.beneficiary
         ? {
             name: appointment.beneficiary.name,
@@ -2626,7 +2672,7 @@ export class SpService {
     }
   }
 
-  private mapPatient(patient: {
+  private async mapPatient(patient: {
     id: string
     email: string
     phone: string | null
@@ -2636,6 +2682,7 @@ export class SpService {
       dateOfBirth: Date
       gender?: string | null
       countryCode?: string | null
+      avatar?: Prisma.JsonValue | null
       beneficiaries: Array<{
         name: string
         relation: string
@@ -2774,10 +2821,11 @@ export class SpService {
         age: this.getAge(beneficiary.dateOfBirth),
       })),
       visitHistory,
+      avatarUrl: await this.avatarUrl(patient.patientProfile.avatar),
     }
   }
 
-  private mapPayment(invoice: {
+  private async mapPayment(invoice: {
     reference: string
     billedToName: string
     amount: Prisma.Decimal
@@ -2790,6 +2838,12 @@ export class SpService {
     prescriptionRequestId?: string | null
     appointment?: { service: string } | null
     lineItems?: Array<{ name: string }>
+    serviceForType?: 'SELF' | 'BENEFICIARY'
+    patient?: {
+      patientProfile?: {
+        avatar?: Prisma.JsonValue | null
+      } | null
+    } | null
   }) {
     const status = 'authorized' as const
 
@@ -2808,6 +2862,10 @@ export class SpService {
       invoice.prescriptionRequestId != null ? 'prescription' : 'appointment'
     // Appointment service name, else the first line item (medication or service name).
     const service = invoice.appointment?.service || invoice.lineItems?.[0]?.name || null
+    // Payments for a beneficiary's service never carry the account holder's photo.
+    const patientAvatarUrl = invoice.serviceForType === 'SELF'
+      ? await this.avatarUrl(invoice.patient?.patientProfile?.avatar)
+      : undefined
 
     return {
       id: invoice.paymentRef ?? `PAY-${invoice.reference}`,
@@ -2820,6 +2878,7 @@ export class SpService {
       isPrescription: invoice.prescriptionRequestId != null,
       type,
       service,
+      patientAvatarUrl,
     }
   }
 
@@ -2852,7 +2911,7 @@ export class SpService {
     }
   }
 
-  private mapSpInvoice(invoice: {
+  private async mapSpInvoice(invoice: {
       prescriptionRequest?: { reference: string; status: string; fulfillmentMode: string } | null
     id: string
     reference: string
@@ -2888,6 +2947,7 @@ export class SpService {
       email: string
       patientProfile?: {
         countryCode?: string | null
+        avatar?: Prisma.JsonValue | null
       } | null
     }
     lineItems?: Array<{ name: string; amount?: Prisma.Decimal | number }>
@@ -2927,6 +2987,11 @@ export class SpService {
             },
           ]
 
+    // Only the account holder's own invoices carry their photo; a beneficiary's invoice never does.
+    const patientAvatarUrl = invoice.serviceForType === 'SELF'
+      ? await this.avatarUrl(invoice.patient?.patientProfile?.avatar)
+      : undefined
+
     return {
       id: invoice.reference,
       appointmentId: invoice.appointment?.reference ?? undefined,
@@ -2941,6 +3006,7 @@ export class SpService {
       phone: invoice.patient?.phone ?? '',
       countryCode: invoice.patient?.patientProfile?.countryCode ?? '',
       email: invoice.patient?.email ?? '',
+      patientAvatarUrl,
       beneficiary: isBeneficiary
         ? {
             name: invoice.serviceForName ?? 'Beneficiary',
@@ -3313,7 +3379,7 @@ export class SpService {
       fulfilledAt: Date | null
       forSelf: boolean
       createdAt: Date
-      patient: { phone: string | null; email: string; patientProfile: { firstName: string; lastName: string; countryCode?: string | null } | null }
+      patient: { phone: string | null; email: string; patientProfile: { firstName: string; lastName: string; countryCode?: string | null; avatar?: Prisma.JsonValue | null } | null }
       beneficiary: { name: string; relation?: string } | null
       invoice?: { reference: string; status: InvoiceStatus } | null
       offers?: Array<{
@@ -3354,6 +3420,11 @@ export class SpService {
         patient: profile ? `${profile.firstName} ${profile.lastName}`.trim() : 'Patient',
         patientPhone: request.patient.phone ?? undefined,
         patientEmail: request.patient.email,
+        // Only the pharmacy the patient chose, and only for the patient's own request.
+        patientAvatarUrl:
+          request.forSelf && request.providerId != null
+            ? await this.avatarUrl(profile?.avatar)
+            : undefined,
         status: request.status.toLowerCase(),
         deliveryAddress: request.deliveryAddress ?? undefined,
         deliveryLat: request.searchLat != null && request.fulfillmentMode === 'DELIVERY' ? Number(request.searchLat) : undefined,

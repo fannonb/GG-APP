@@ -5,9 +5,10 @@ import { C, font, radius } from '@/design-system/tokens'
 import { AdminLayout } from '@/layouts/admin/AdminLayout'
 import { useResponsive } from '@/hooks/useResponsive'
 import { useAdminProviders } from '@/hooks/api/useAdminQueries'
+import { useSetAdminProviderInvoiceCodeMutation } from '@/hooks/api/useAdminMutations'
 import { useAdminCountry } from '@/features/admin/AdminCountryContext'
 import { CountryBadge, countryCode, COUNTRY_CURRENCIES } from '@/features/admin/AdminShared'
-import { AccountHistory, ProviderAccountActions } from '@/features/admin/accounts/AccountManagement'
+import { AccountHistory, ErrorLine, ProviderAccountActions } from '@/features/admin/accounts/AccountManagement'
 import {
   DefList, Initials, PanelSection, PanelTabs, Pager, PlainHeader, SearchBox, SidePanel, SortHeader, StatusPill, StatusTabs, type SortDir,
 } from '@/features/admin/accounts/AccountListKit'
@@ -30,6 +31,63 @@ const payoutLabel = { MPESA: 'M-Pesa', BANK: 'Bank', MOBILE_MONEY: 'Mobile money
 function Rating({ value }: { value?: number }) {
   if (!value) return <span style={{ color: C.textLight }}>No reviews</span>
   return <span style={{ whiteSpace: 'nowrap' }}><span style={{ color: '#F59E0B' }}>★</span> {value.toFixed(1)}</span>
+}
+
+/** Invoice code row: shows the code, or edits it inline. Server errors show under the input. */
+function InvoiceCodeRow({ provider, onUpdated }: { provider: AdminProvider; onUpdated: (p: AdminProvider) => void }) {
+  const setCode = useSetAdminProviderInvoiceCodeMutation()
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const code = provider.invoiceCode
+  const example = `Invoices: INV-${code || '<CODE>'}-${new Date().getFullYear()}-0001`
+
+  const save = async () => {
+    setError(null)
+    try {
+      const saved = await setCode.mutateAsync({ id: provider.id, invoiceCode: draft })
+      onUpdated({ ...provider, invoiceCode: saved.invoiceCode })
+      setEditing(false)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Couldn’t save the invoice code.')
+    }
+  }
+
+  if (!editing) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontWeight: 700, color: code ? C.text : C.textLight }}>{code || 'Not set'}</span>
+          <button type="button" onClick={() => { setDraft(code ?? ''); setEditing(true) }} style={{ background: 'none', border: 'none', padding: 0, fontSize: 13, fontWeight: 700, color: '#0B7BC0', cursor: 'pointer', fontFamily: font.family }}>Edit</button>
+        </div>
+        <div style={{ fontSize: 12, color: C.textSub, marginTop: 2 }}>{example}</div>
+      </div>
+    )
+  }
+
+  const blocked = setCode.isPending || draft.length === 0
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <input
+          autoFocus
+          aria-label="Invoice code"
+          placeholder="e.g. PHP"
+          maxLength={6}
+          value={draft}
+          onChange={e => { setDraft(e.target.value.toUpperCase()); setError(null) }}
+          onKeyDown={e => { if (e.key === 'Enter' && !blocked) void save(); if (e.key === 'Escape') setEditing(false) }}
+          style={{ width: 140, height: 36, padding: '0 10px', border: `1px solid ${C.border}`, borderRadius: radius.sm, fontSize: 14, fontWeight: 700, fontFamily: font.family, color: C.text, background: '#fff', outline: 'none' }}
+        />
+        <button type="button" disabled={blocked} onClick={() => void save()} style={{ height: 36, padding: '0 14px', borderRadius: radius.sm, border: 'none', background: 'linear-gradient(135deg, #1A9BE6, #0B7BC0)', color: '#fff', fontSize: 13.5, fontWeight: 700, fontFamily: font.family, cursor: 'pointer', opacity: blocked ? 0.6 : 1 }}>
+          {setCode.isPending ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" onClick={() => setEditing(false)} style={{ height: 36, padding: '0 14px', borderRadius: radius.sm, border: `1px solid ${C.border}`, background: '#fff', color: C.text, fontSize: 13.5, fontWeight: 700, fontFamily: font.family, cursor: 'pointer' }}>Cancel</button>
+      </div>
+      <div style={{ fontSize: 12, color: C.textSub }}>Existing invoices keep their numbers.</div>
+      <ErrorLine text={error} />
+    </div>
+  )
 }
 
 function ProviderPanel({ provider, onUpdated, onDeleted }: { provider: AdminProvider; onUpdated: (p: AdminProvider) => void; onDeleted: () => void }) {
@@ -78,6 +136,7 @@ function ProviderPanel({ provider, onUpdated, onDeleted }: { provider: AdminProv
                 { label: 'Address', value: provider.address, wide: true },
                 { label: 'Licence number', value: provider.license },
                 { label: 'Joined', value: formatDate(provider.joinedDate) },
+                { label: 'Invoice code', value: <InvoiceCodeRow provider={provider} onUpdated={onUpdated} />, wide: true },
                 { label: 'Services', value: (provider.serviceTypes ?? []).join(', '), wide: true },
                 ...(provider.about || provider.description ? [{ label: 'About', value: provider.about || provider.description, wide: true }] : []),
               ]} />

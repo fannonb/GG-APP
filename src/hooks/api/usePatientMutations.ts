@@ -425,6 +425,51 @@ export function useDeclinePrescriptionQuoteMutation() {
   })
 }
 
+export function useUploadProfilePhotoMutation() {
+  const queryClient = useQueryClient()
+  const userMode = useAuthStore(s => s.userMode)
+
+  return useMutation({
+    mutationFn: (payload: { dataUrl: string; mimeType: 'image/jpeg' | 'image/png' | 'image/webp' }) =>
+      patientService.uploadProfilePhoto(payload, userMode),
+    onSuccess: profile => {
+      useUserStore.setState({
+        user: profile.user,
+        beneficiaries: profile.beneficiaries,
+      })
+      queryClient.setQueryData(queryKeys.patient.profile(userMode), profile)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.patient.profile(userMode),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.patient.dashboard(userMode),
+      })
+    },
+  })
+}
+
+export function useRemoveProfilePhotoMutation() {
+  const queryClient = useQueryClient()
+  const userMode = useAuthStore(s => s.userMode)
+
+  return useMutation({
+    mutationFn: () => patientService.removeProfilePhoto(userMode),
+    onSuccess: profile => {
+      useUserStore.setState({
+        user: profile.user,
+        beneficiaries: profile.beneficiaries,
+      })
+      queryClient.setQueryData(queryKeys.patient.profile(userMode), profile)
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.patient.profile(userMode),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.patient.dashboard(userMode),
+      })
+    },
+  })
+}
+
 export function useChangePatientPasswordMutation() {
   return useMutation({
     mutationFn: (payload: ChangePatientPasswordPayload) =>

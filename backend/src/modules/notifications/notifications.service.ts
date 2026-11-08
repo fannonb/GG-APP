@@ -1,9 +1,9 @@
-import { Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common'
+import { BadRequestException, Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import { PushChannel } from '@prisma/client'
 import webpush from 'web-push'
 import { Expo, type ExpoPushMessage } from 'expo-server-sdk'
-import { PrismaService, type CreatedNotification } from '../../prisma/prisma.service'
+import { PrismaService } from '../../prisma/prisma.service'
 import type { PushSubscribeDto } from './dto/push-subscribe.dto'
 import { validatePushDestination, validatePushKeys } from './push-destination'
 
@@ -13,27 +13,28 @@ export interface PushPayload {
   data?: Record<string, unknown>
 }
 
-/**
- * Notifications are often written inside a transaction. Waiting this long and
- * then confirming the row exists means a rolled-back write never sends a push.
- */
-const PUSH_DELAY_MS = 1500
+const PUSH_TTL_MS = 60 * 60 * 1000
+const CLAIM_LEASE_MS = 10 * 60 * 1000
+const RECEIPT_DELAY_MS = 15 * 60 * 1000
 
 /**
  * Push delivery for the PWA (Web Push / VAPID) and the mobile app (Expo push
  * tokens -> FCM/APNs). Every browser and phone a user registers is stored as a
  * PushDevice, so a user receives on all of them.
  *
- * Every in-app notification is pushed automatically (see onModuleInit).
- * Delivery is fire-and-forget: failures are logged, and devices that are gone
+ * Committed notifications are polled using persisted delivery state, including
+ * nested writes and createMany. Failed attempts survive API restarts.
+ * Delivery is best-effort: failures are logged, and devices that are gone
  * (Web Push 404/410, Expo DeviceNotRegistered) are removed.
  */
 @Injectable()
-export class NotificationsService implements OnModuleInit {
+export class NotificationsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(NotificationsService.name)
   private readonly expo: Expo
   private readonly vapidConfigured: boolean
   private readonly vapidPublicKey: string
+  private timer?: ReturnType<typeof setInterval>
+  private pending?: Promise<void>
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -56,9 +57,20 @@ export class NotificationsService implements OnModuleInit {
   }
 
   onModuleInit() {
-    this.prisma.onNotificationsCreated((rows, at) => {
-      setTimeout(() => void this.pushCreated(rows, at), PUSH_DELAY_MS)
-    })
+    const tick = () => {
+      if (this.pending) return
+      this.pending = this.deliverPending().catch(error => {
+        this.logger.warn(`Push worker failed: ${(error as Error).message}`)
+      }).finally(() => { this.pending = undefined })
+    }
+    this.timer = setInterval(tick, 5000)
+    this.timer.unref()
+    tick()
+  }
+
+  async onModuleDestroy() {
+    clearInterval(this.timer)
+    await this.pending
   }
 
   /** The VAPID public key browsers need to subscribe; empty when Web Push is off. */
@@ -71,13 +83,13 @@ export class NotificationsService implements OnModuleInit {
     const address = isExpo ? subscription.token : subscription.endpoint
 
     if (!address) {
-      return { success: false, message: isExpo ? 'Expo push token is required' : 'Web push endpoint is required' }
+      throw new BadRequestException(isExpo ? 'Expo push token is required' : 'Web push endpoint is required')
     }
     if (isExpo && !Expo.isExpoPushToken(address)) {
-      return { success: false, message: 'Invalid Expo push token' }
+      throw new BadRequestException('Invalid Expo push token')
     }
     if (!isExpo && (!subscription.keys?.p256dh || !subscription.keys?.auth)) {
-      return { success: false, message: 'Web push subscription keys are required' }
+      throw new BadRequestException('Web push subscription keys are required')
     }
 
     if (!isExpo) {
@@ -117,31 +129,47 @@ export class NotificationsService implements OnModuleInit {
    * Fans a notification out to every device the user has registered.
    * Never throws: callers must not fail business logic when push fails.
    */
-  async sendPushToUser(userId: string, payload: PushPayload): Promise<void> {
+  async sendPushToUser(userId: string, payload: PushPayload): Promise<boolean> {
     try {
       const devices = await this.prisma.pushDevice.findMany({ where: { userId } })
-      if (devices.length === 0) return
-      await Promise.allSettled([
+      if (devices.length === 0) return true
+      const results = await Promise.all([
         ...devices
           .filter(d => d.channel === PushChannel.WEB)
           .map(d => this.sendWebPush(d.id, d.address, d.keys, payload)),
         this.sendExpoPush(devices.filter(d => d.channel === PushChannel.EXPO), payload),
       ])
+      return results.every(Boolean)
     } catch (error) {
       this.logger.warn(`Push delivery failed for user ${userId}: ${(error as Error).message}`)
+      return false
     }
   }
 
-  /** Pushes freshly written in-app notifications once their rows are confirmed saved. */
-  private async pushCreated(rows: CreatedNotification[], at: Date) {
-    for (const row of rows) {
+  private async deliverPending() {
+    await this.checkExpoReceipts()
+    const cutoff = new Date(Date.now() - PUSH_TTL_MS)
+    await this.prisma.notification.updateMany({
+      where: { pushProcessedAt: null, createdAt: { lt: cutoff } },
+      data: { pushProcessedAt: new Date() },
+    })
+    const claimable = () => ({
+      pushProcessedAt: null,
+      OR: [{ pushClaimedAt: null }, { pushClaimedAt: { lt: new Date(Date.now() - CLAIM_LEASE_MS) } }],
+    })
+    const rows = await this.prisma.notification.findMany({
+      where: { ...claimable(), createdAt: { gte: cutoff } },
+      orderBy: { createdAt: 'asc' }, take: 25,
+    })
+    for (const saved of rows) {
       try {
-        const saved = await this.prisma.notification.findFirst({
-          where: { userId: row.userId, title: row.title, createdAt: { gte: new Date(at.getTime() - 5000) } },
-          orderBy: { createdAt: 'desc' },
+        const claimedAt = new Date()
+        // Conditional update keeps separate API instances from claiming a row together.
+        const claimed = await this.prisma.notification.updateMany({
+          where: { id: saved.id, ...claimable() }, data: { pushClaimedAt: claimedAt },
         })
-        if (!saved) continue // rolled back, or already deleted
-        await this.sendPushToUser(row.userId, {
+        if (!claimed.count) continue
+        const delivered = await this.sendPushToUser(saved.userId, {
           title: saved.title,
           body: saved.body,
           data: {
@@ -159,14 +187,17 @@ export class NotificationsService implements OnModuleInit {
             },
           },
         })
+        if (delivered) await this.prisma.notification.updateMany({
+          where: { id: saved.id, pushClaimedAt: claimedAt }, data: { pushProcessedAt: new Date() },
+        })
       } catch (error) {
-        this.logger.warn(`Could not push notification to user ${row.userId}: ${(error as Error).message}`)
+        this.logger.warn(`Could not push notification ${saved.id}: ${(error as Error).message}`)
       }
     }
   }
 
   private async sendWebPush(deviceId: string, endpoint: string, keys: unknown, payload: PushPayload) {
-    if (!this.vapidConfigured) return
+    if (!this.vapidConfigured) return false
     try {
       // Revalidate legacy records too; rejecting new subscriptions alone is insufficient.
       validatePushDestination(endpoint)
@@ -176,39 +207,85 @@ export class NotificationsService implements OnModuleInit {
         JSON.stringify({ title: payload.title, body: payload.body ?? '', data: payload.data ?? {} }),
         { timeout: 10_000, TTL: 60 * 60 },
       )
+      return true
     } catch (error) {
       const statusCode = (error as { statusCode?: number }).statusCode
       if (statusCode === 404 || statusCode === 410) {
         await this.prisma.pushDevice.delete({ where: { id: deviceId } }).catch(() => undefined)
+        return true
       } else {
         this.logger.warn(`Web push delivery failed (${statusCode ?? 'no status'}): ${(error as Error).message}`)
       }
+      return false
     }
   }
 
   private async sendExpoPush(devices: { id: string; address: string }[], payload: PushPayload) {
-    if (devices.length === 0) return
+    if (devices.length === 0) return true
     const messages: ExpoPushMessage[] = devices.map(d => ({
       to: d.address,
       title: payload.title,
       body: payload.body ?? '',
       data: payload.data ?? {},
       sound: 'default',
+      channelId: 'ggapp-alerts',
+      ttl: PUSH_TTL_MS / 1000,
+      tag: typeof (payload.data?.notification as { id?: unknown } | undefined)?.id === 'string'
+        ? (payload.data!.notification as { id: string }).id : undefined,
     }))
-    try {
-      const tickets = await this.expo.sendPushNotificationsAsync(messages)
-      await Promise.all(
-        tickets.map(async (ticket, i) => {
-          if (ticket.status !== 'error') return
-          if (ticket.details?.error === 'DeviceNotRegistered') {
-            await this.prisma.pushDevice.delete({ where: { id: devices[i].id } }).catch(() => undefined)
+    const deviceByToken = new Map(devices.map(device => [device.address, device]))
+    let delivered = true
+    for (const chunk of this.expo.chunkPushNotifications(messages)) {
+      try {
+        const tickets = await this.expo.sendPushNotificationsAsync(chunk)
+        for (const [i, ticket] of tickets.entries()) {
+          const device = deviceByToken.get(chunk[i].to as string)!
+          if (ticket.status === 'ok') {
+            await this.prisma.pushReceipt.upsert({
+              where: { id: ticket.id },
+              create: { id: ticket.id, deviceId: device.id, checkAt: new Date(Date.now() + RECEIPT_DELAY_MS) },
+              update: {},
+            })
+          } else if (ticket.details?.error === 'DeviceNotRegistered') {
+            await this.prisma.pushDevice.deleteMany({ where: { id: device.id } })
           } else {
+            delivered = false
             this.logger.warn(`Expo push ticket error: ${ticket.message ?? 'unknown'}`)
           }
-        }),
-      )
+        }
+      } catch (error) {
+        delivered = false
+        this.logger.warn(`Expo push delivery failed: ${(error as Error).message}`)
+      }
+    }
+    return delivered
+  }
+
+  private async checkExpoReceipts() {
+    // Receipts expire after 24h. Bound storage even during an extended outage.
+    await this.prisma.pushReceipt.deleteMany({ where: { createdAt: { lt: new Date(Date.now() - 24 * PUSH_TTL_MS) } } })
+    const pending = await this.prisma.pushReceipt.findMany({ where: { checkAt: { lte: new Date() } }, take: 1000 })
+    if (!pending.length) return
+    try {
+      const receipts = await this.expo.getPushNotificationReceiptsAsync(pending.map(item => item.id))
+      for (const item of pending) {
+        const receipt = receipts[item.id]
+        if (receipt?.status === 'error') {
+          this.logger.warn(`Expo push receipt error: ${receipt.details?.error ?? receipt.message}`)
+          if (receipt.details?.error === 'DeviceNotRegistered') {
+            await this.prisma.pushDevice.deleteMany({ where: { id: item.deviceId } })
+          }
+        }
+        if (receipt) await this.prisma.pushReceipt.deleteMany({ where: { id: item.id } })
+        else await this.prisma.pushReceipt.updateMany({
+          where: { id: item.id }, data: { checkAt: new Date(Date.now() + RECEIPT_DELAY_MS) },
+        })
+      }
     } catch (error) {
-      this.logger.warn(`Expo push delivery failed: ${(error as Error).message}`)
+      await this.prisma.pushReceipt.updateMany({
+        where: { id: { in: pending.map(item => item.id) } }, data: { checkAt: new Date(Date.now() + RECEIPT_DELAY_MS) },
+      })
+      this.logger.warn(`Expo receipt check failed: ${(error as Error).message}`)
     }
   }
 }

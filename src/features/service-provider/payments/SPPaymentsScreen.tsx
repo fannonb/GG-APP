@@ -26,7 +26,7 @@ const PAYMENT_COLUMNS = (currency: string): InvoiceTableColumn<Payment>[] => [
     header: 'Patient',
     render: payment => (
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-        <GGAvatar name={payment.patient} size={34} />
+        <GGAvatar name={payment.patient} src={payment.patientAvatarUrl} size={34} />
         <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{payment.patient}</span>
       </div>
     ),
@@ -146,7 +146,7 @@ export function SPPaymentsScreen() {
                 <div key={payment.id} style={{ padding: '16px 22px', borderBottom: `1px solid ${C.border}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                      <GGAvatar name={payment.patient} size={34} />
+                      <GGAvatar name={payment.patient} src={payment.patientAvatarUrl} size={34} />
                       <div>
                         <div style={{ fontSize: '14px', fontWeight: 700, color: C.text, fontFamily: font.family }}>
                           {payment.patient}

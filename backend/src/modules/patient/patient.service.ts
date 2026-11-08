@@ -53,6 +53,7 @@ import type { CreateAppointmentDto } from './dto/create-appointment.dto'
 import type { SetupPaymentPinDto } from './dto/setup-payment-pin.dto'
 import type { ChangePatientPasswordDto } from './dto/change-patient-password.dto'
 import type { UpdatePatientProfileDto } from './dto/update-patient-profile.dto'
+import type { ProfilePhotoDto } from './dto/profile-photo.dto'
 import type { UpsertBeneficiaryDto } from './dto/upsert-beneficiary.dto'
 import type { SetBeneficiariesEnabledDto } from './dto/set-beneficiaries-enabled.dto'
 import type { RejectInvoiceDto } from './dto/reject-invoice.dto'
@@ -68,6 +69,22 @@ const REVIEW_RATING_LABELS: Record<number, string> = {
   3: 'Good',
   4: 'Very Good',
   5: 'Excellent',
+}
+
+const PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024
+const PROFILE_PHOTO_EXTENSIONS: Record<string, string> = {
+  'image/jpeg': 'jpg',
+  'image/png': 'png',
+  'image/webp': 'webp',
+}
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+/** Identify the image from its leading bytes; the client-declared MIME type is never trusted on its own. */
+function detectImageMimeType(bytes: Buffer): string | null {
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg'
+  if (PNG_SIGNATURE.equals(bytes.subarray(0, PNG_SIGNATURE.length))) return 'image/png'
+  if (bytes.toString('latin1', 0, 4) === 'RIFF' && bytes.toString('latin1', 8, 12) === 'WEBP') return 'image/webp'
+  return null
 }
 
 @Injectable()
@@ -208,6 +225,98 @@ export class PatientService {
     ])
 
     return this.getProfile(userId)
+  }
+
+  async uploadProfilePhoto(userId: string, dto: ProfilePhotoDto) {
+    const prefix = `data:${dto.mimeType};base64,`
+    if (!dto.dataUrl.startsWith(prefix)) {
+      throw new BadRequestException('Upload a JPEG, PNG or WebP image')
+    }
+
+    const bytes = Buffer.from(dto.dataUrl.slice(prefix.length), 'base64')
+    if (bytes.length === 0) {
+      throw new BadRequestException('Upload a JPEG, PNG or WebP image')
+    }
+    if (bytes.length > PROFILE_PHOTO_MAX_BYTES) {
+      throw new BadRequestException('Photo must be smaller than 2 MB')
+    }
+    if (detectImageMimeType(bytes) !== dto.mimeType) {
+      throw new BadRequestException('Upload a JPEG, PNG or WebP image')
+    }
+
+    const profile = await this.prisma.patientProfile.findUnique({
+      where: { userId },
+      select: { avatar: true },
+    })
+    if (!profile) {
+      throw new NotFoundException('Patient profile not found')
+    }
+
+    const stored = await this.storage.storeAttachment({
+      dataUrl: dto.dataUrl,
+      originalName: `avatar.${PROFILE_PHOTO_EXTENSIONS[dto.mimeType]}`,
+      mimeType: dto.mimeType,
+      sizeBytes: bytes.length,
+      displaySize: `${Math.max(1, Math.round(bytes.length / 1024))} KB`,
+      prefix: 'avatars',
+    })
+
+    await this.prisma.$transaction([
+      this.prisma.patientProfile.update({
+        where: { userId },
+        data: { avatar: stored as unknown as Prisma.InputJsonValue },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'patient.profile.photo_updated',
+          entityType: 'PatientProfile',
+          entityId: userId,
+          metadata: { mimeType: dto.mimeType, sizeBytes: bytes.length } as Prisma.JsonObject,
+        },
+      }),
+    ]).catch(error => this.storage.discardOnFailure([stored.storageKey], error))
+
+    // The replaced file is no longer referenced. deleteObject logs and ignores its own failures.
+    await this.storage.deleteObject((profile.avatar as unknown as AttachmentMetadata | null)?.storageKey)
+
+    return this.getProfile(userId)
+  }
+
+  async removeProfilePhoto(userId: string) {
+    const profile = await this.prisma.patientProfile.findUnique({
+      where: { userId },
+      select: { avatar: true },
+    })
+    if (!profile) {
+      throw new NotFoundException('Patient profile not found')
+    }
+
+    await this.prisma.$transaction([
+      this.prisma.patientProfile.update({
+        where: { userId },
+        data: { avatar: Prisma.JsonNull },
+      }),
+      this.prisma.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'patient.profile.photo_removed',
+          entityType: 'PatientProfile',
+          entityId: userId,
+          metadata: { hadPhoto: profile.avatar != null } as Prisma.JsonObject,
+        },
+      }),
+    ])
+
+    await this.storage.deleteObject((profile.avatar as unknown as AttachmentMetadata | null)?.storageKey)
+
+    return this.getProfile(userId)
+  }
+
+  /** Resolved, downloadable URL for a stored profile photo. Raw storage keys are never returned. */
+  private async avatarUrl(avatar: Prisma.JsonValue | null | undefined): Promise<string | undefined> {
+    const resolved = await this.storage.resolveAttachmentUrl(avatar as unknown as AttachmentMetadata, 'avatar')
+    return resolved?.url
   }
 
   async setBeneficiariesEnabled(userId: string, dto: SetBeneficiariesEnabledDto) {
@@ -376,7 +485,7 @@ export class PatientService {
     return this.getProfile(userId)
   }
 
-  private buildProfileResponse(profile: {
+  private async buildProfileResponse(profile: {
     user: {
       email: string
       phone: string | null
@@ -398,6 +507,7 @@ export class PatientService {
     financePartnerId: string | null
     creditAccountRef: string | null
     beneficiariesEnabled: boolean
+    avatar: Prisma.JsonValue | null
     beneficiaries: Array<{
       id: string
       name: string
@@ -431,6 +541,7 @@ export class PatientService {
         hasPaymentPin: !!profile.user.paymentPinHash,
         beneficiariesEnabled:
           profile.beneficiariesEnabled || profile.beneficiaries.length > 0,
+        avatarUrl: await this.avatarUrl(profile.avatar),
       },
       beneficiaries: profile.beneficiaries.map(beneficiary => this.mapBeneficiary(beneficiary)),
     }

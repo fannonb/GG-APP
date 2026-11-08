@@ -190,6 +190,8 @@ export interface AppointmentAttachmentPayload {
 
 export interface PatientUserProfile extends Omit<Patient, 'dateOfBirth'> {
   dateOfBirth?: string
+  /** Short-lived link to the patient's profile photo; absent when none is set. */
+  avatarUrl?: string
   countryCode: CountryCode
   country: string
   residenceCountry?: string
@@ -314,6 +316,8 @@ export interface ProviderProfileResponse {
   openingHours: Record<string, { open: boolean; from: string; to: string }>
   license: string
   logoUrl?: string
+  /** Set by GG'APP, read-only for the provider. Used in invoice numbers: INV-<CODE>-YYYY-NNNN. */
+  invoiceCode?: string | null
 }
 
 export interface ProviderNotificationPreferences {

@@ -1,4 +1,6 @@
 import { apiClient } from '@/api/client'
+import { isMockApi } from '@/api/config'
+import { mockDelay } from '@/api/mock/delay'
 import type {
   AdminApplicationActionPayload,
   DeleteAdminProviderResponse,
@@ -200,6 +202,15 @@ export const adminService = {
 
   async reactivateProvider(id: string): Promise<AdminProvider> {
     const { data } = await apiClient.post<AdminProvider>(`/admin/providers/${id}/reactivate`)
+    return data
+  },
+
+  async setProviderInvoiceCode(id: string, invoiceCode: string): Promise<{ invoiceCode: string }> {
+    if (isMockApi) {
+      await mockDelay(250)
+      return { invoiceCode }
+    }
+    const { data } = await apiClient.patch<{ invoiceCode: string }>(`/admin/providers/${id}/invoice-code`, { invoiceCode })
     return data
   },
 
